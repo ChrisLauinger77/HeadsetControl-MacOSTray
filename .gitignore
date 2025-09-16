@@ -1,0 +1,80 @@
+# macOS / Xcode / Swift typical .gitignore
+
+# User-specific files
+*.swp
+*.swo
+*.swn
+*.tmp
+*.DS_Store
+
+# Xcode
+build/
+DerivedData/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+xcuserdata/
+
+# Swift Package Manager
+/.build
+/Packages
+Package.resolved
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/Build/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
+
+# Archives
+*.xcarchive
+
+# AppCode
+.idea/
+*.iml
+
+# Playground
+timeline.xctimeline
+playground.xcworkspace
+
+# Other
+*.moved-aside
+*.xcuserstate
+
+# Asset catalog generated files
+*.xcassets
+
+# Temporary files
+*.orig
+*.bak
+
+# Crash reports
+*.crash
+
+# Log files
+*.log
+
+# Environment files
+.env
+.env.*
+
+# Ignore local configuration
+config.local.*
+
+# Ignore system files
+Thumbs.db
+Desktop.ini
+
+# Ignore test result files
+*.testresult
+
+# Ignore Xcode Preview files
+*.preview-thumbnails
+*.preview
