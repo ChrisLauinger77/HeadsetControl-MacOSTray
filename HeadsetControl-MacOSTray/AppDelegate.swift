@@ -22,7 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem?.button {
-            if let sfImage = NSImage(systemSymbolName: "headphones", accessibilityDescription: "Headset") {
+            if let sfImage = NSImage(systemSymbolName: "headset", accessibilityDescription: "Headset") {
                 button.image = sfImage
                 button.image?.isTemplate = true
             }
