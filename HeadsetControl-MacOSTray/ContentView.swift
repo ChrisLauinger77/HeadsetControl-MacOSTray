@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  JustTheMenuApp
+//  HeadsetControl_MacOSTray
 //
 //  Created by Christian Lauinger on 16.09.25.
 //

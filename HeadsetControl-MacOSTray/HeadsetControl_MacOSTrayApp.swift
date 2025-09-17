@@ -8,7 +8,7 @@
 import SwiftUI
 
 @main struct
-JustTheMenuApp: App {
+HeadsetControl_MacOSTray: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
   var body: some Scene {
     Settings {
