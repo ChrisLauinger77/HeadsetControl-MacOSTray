@@ -22,6 +22,11 @@ Settings
 - Automatic periodic updates
 - Error handling for missing or misconfigured headsetcontrol binary
 
+## Preconditions
+
+1. MacOS 14 or later
+2. [homebrew](https://brew.sh/) to install headsetcontrol binary
+
 ## Installation
 
 1. Install [headsetcontrol](https://github.com/Sapd/HeadsetControl) via Homebrew:
