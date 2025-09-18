@@ -10,22 +10,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
         let high = UserDefaults.standard.integer(forKey: "sidetoneHigh")
         let max = UserDefaults.standard.integer(forKey: "sidetoneMax")
         return [
-            ("Off", off),
-            ("Low", low),
-            ("Mid", mid),
-            ("High", high),
-            ("Max", max)
+            (NSLocalizedString("Off", comment: "Sidetone level Off"), off),
+            (NSLocalizedString("Low", comment: "Sidetone level Low"), low),
+            (NSLocalizedString("Medium", comment: "Sidetone level Medium"), mid),
+            (NSLocalizedString("High", comment: "Sidetone level High"), high),
+            (NSLocalizedString("Maximum", comment: "Sidetone level Maximum"), max)
         ]
     }
     // Handle Equalizer Preset selection
     @objc func setEqualizerPreset(_ sender: NSMenuItem) {
         guard let index = sender.representedObject as? Int else { return }
         let path = UserDefaults.standard.string(forKey: "headsetcontrolPath") ?? "/opt/homebrew/bin/headsetcontrol"
-        let testMode = UserDefaults.standard.bool(forKey: "testMode")
-        var arguments = ["-p", String(index)]
-        if testMode {
-            arguments.append("--test-device")
-        }
+        let arguments = ["-p", String(index)]
         let task = Process()
         task.launchPath = path
         task.arguments = arguments
@@ -41,11 +37,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
     @objc func setRotateToMute(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? Int else { return }
         let path = UserDefaults.standard.string(forKey: "headsetcontrolPath") ?? "/opt/homebrew/bin/headsetcontrol"
-        let testMode = UserDefaults.standard.bool(forKey: "testMode")
-        var arguments = ["-r", String(value)]
-        if testMode {
-            arguments.append("--test-device")
-        }
+        let arguments = ["-r", String(value)]
         let task = Process()
         task.launchPath = path
         task.arguments = arguments
@@ -61,11 +53,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
     @objc func setVoicePrompts(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? Int else { return }
         let path = UserDefaults.standard.string(forKey: "headsetcontrolPath") ?? "/opt/homebrew/bin/headsetcontrol"
-        let testMode = UserDefaults.standard.bool(forKey: "testMode")
-        var arguments = ["-v", String(value)]
-        if testMode {
-            arguments.append("--test-device")
-        }
+        let arguments = ["-v", String(value)]
         let task = Process()
         task.launchPath = path
         task.arguments = arguments
@@ -81,11 +69,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
     @objc func setInactiveTime(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? Int else { return }
         let path = UserDefaults.standard.string(forKey: "headsetcontrolPath") ?? "/opt/homebrew/bin/headsetcontrol"
-        let testMode = UserDefaults.standard.bool(forKey: "testMode")
-        var arguments = ["-i", String(value)]
-        if testMode {
-            arguments.append("--test-device")
-        }
+        let arguments = ["-i", String(value)]
         let task = Process()
         task.launchPath = path
         task.arguments = arguments
@@ -101,11 +85,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
     @objc func setLights(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? Int else { return }
         let path = UserDefaults.standard.string(forKey: "headsetcontrolPath") ?? "/opt/homebrew/bin/headsetcontrol"
-        let testMode = UserDefaults.standard.bool(forKey: "testMode")
-        var arguments = ["-l", String(value)]
-        if testMode {
-            arguments.append("--test-device")
-        }
+        let arguments = ["-l", String(value)]
         let task = Process()
         task.launchPath = path
         task.arguments = arguments
@@ -121,11 +101,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
     @objc func setSidetoneLevel(_ sender: NSMenuItem) {
         guard let level = sender.representedObject as? Int else { return }
         let path = UserDefaults.standard.string(forKey: "headsetcontrolPath") ?? "/opt/homebrew/bin/headsetcontrol"
-        let testMode = UserDefaults.standard.bool(forKey: "testMode")
-        var arguments = ["-s", String(level)]
-        if testMode {
-            arguments.append("--test-device")
-        }
+        let arguments = ["-s", String(level)]
         let task = Process()
         task.launchPath = path
         task.arguments = arguments
@@ -232,41 +208,41 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         guard let devices = latestDevices, !devices.isEmpty else {
-            menu.addItem(withTitle: "No devices found", action: nil, keyEquivalent: "")
+            menu.addItem(withTitle: NSLocalizedString("No devices found", comment: "No devices found message"), action: nil, keyEquivalent: "")
             menu.addItem(NSMenuItem.separator())
-            menu.addItem(withTitle: "Open Settings", action: #selector(openSettings), keyEquivalent: "s")
-            menu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+            menu.addItem(withTitle: NSLocalizedString("Settings...", comment: "Settings menu item"), action: #selector(openSettings), keyEquivalent: "s")
+            menu.addItem(withTitle: NSLocalizedString("Quit", comment: "Quit menu item"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
             return
         }
         for (idx, device) in devices.enumerated() {
             let deviceName = device["device"] as? String ?? "Unknown Device"
             let vendor = device["vendor"] as? String ?? "Unknown Vendor"
             let product = device["product"] as? String ?? "Unknown Product"
-            menu.addItem(withTitle: "Device: \(deviceName)", action: nil, keyEquivalent: "")
-            menu.addItem(withTitle: "Vendor: \(vendor)", action: nil, keyEquivalent: "")
-            menu.addItem(withTitle: "Product: \(product)", action: nil, keyEquivalent: "")
+            menu.addItem(withTitle: String(format: "%@: %@", NSLocalizedString("Device", comment: "Device label"), deviceName), action: nil, keyEquivalent: "")
+            menu.addItem(withTitle: String(format: "%@: %@", NSLocalizedString("Vendor", comment: "Vendor label"), vendor), action: nil, keyEquivalent: "")
+            menu.addItem(withTitle: String(format: "%@: %@", NSLocalizedString("Product", comment: "Product label"), product), action: nil, keyEquivalent: "")
             if let battery = device["battery"] as? [String: Any], let level = battery["level"] as? Int {
-                menu.addItem(withTitle: "Battery: \(level)%", action: nil, keyEquivalent: "")
+                menu.addItem(withTitle: String(format: "%@: %d%%", NSLocalizedString("Battery", comment: "Battery label"), level), action: nil, keyEquivalent: "")
             }
             if let chatmix = device["chatmix"] {
-                menu.addItem(withTitle: "Chatmix: \(chatmix)", action: nil, keyEquivalent: "")
+                menu.addItem(withTitle: String(format: "%@: %@", NSLocalizedString("Chatmix", comment: "Chatmix label"), String(describing: chatmix)), action: nil, keyEquivalent: "")
             }
             // Add menu items for selected capabilities
             if let capabilities = device["capabilities"] as? [String] {
                 let capabilityMap: [(String, String)] = [
-                    ("CAP_SIDETONE", "Sidetone"),
-                    ("CAP_LIGHTS", "Lights"),
-                    ("CAP_INACTIVE_TIME", "Inactive Time"),
-                    ("CAP_VOICE_PROMPTS", "Voice Prompts"),
-                    ("CAP_ROTATE_TO_MUTE", "Rotate to Mute"),
-                    ("CAP_EQUALIZER_PRESET", "Equalizer Preset"),
-                    ("CAP_EQUALIZER", "Equalizer")
+                    ("CAP_SIDETONE", NSLocalizedString("Sidetone", comment: "Sidetone capability")),
+                    ("CAP_LIGHTS", NSLocalizedString("Lights", comment: "Lights capability")),
+                    ("CAP_INACTIVE_TIME", NSLocalizedString("Inactive Time", comment: "Inactive Time capability")),
+                    ("CAP_VOICE_PROMPTS", NSLocalizedString("Voice Prompts", comment: "Voice Prompts capability")),
+                    ("CAP_ROTATE_TO_MUTE", NSLocalizedString("Rotate to Mute", comment: "Rotate to Mute capability")),
+                    ("CAP_EQUALIZER_PRESET", NSLocalizedString("Equalizer Preset", comment: "Equalizer Preset capability")),
+                    ("CAP_EQUALIZER", NSLocalizedString("Equalizer", comment: "Equalizer capability"))
                 ]
                 for (cap, title) in capabilityMap {
                     if capabilities.contains(cap) {
                         switch cap {
                         case "CAP_SIDETONE":
-                            let sidetoneMenu = NSMenu(title: "Sidetone")
+                            let sidetoneMenu = NSMenu(title: NSLocalizedString("Sidetone", comment: "Sidetone capability"))
                             for (levelTitle, levelValue) in sidetoneLevelsFromSettings {
                                 if levelValue == -1 { continue }
                                 let item = NSMenuItem(title: levelTitle, action: #selector(setSidetoneLevel(_:)), keyEquivalent: "")
@@ -278,10 +254,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                             menu.addItem(sidetoneMenuItem)
                             menu.setSubmenu(sidetoneMenu, for: sidetoneMenuItem)
                         case "CAP_LIGHTS":
-                            let lightsMenu = NSMenu(title: "Lights")
+                            let lightsMenu = NSMenu(title: NSLocalizedString("Lights", comment: "Lights capability"))
                             let lightsOptions = [
-                                ("Off", 0),
-                                ("On", 1)
+                                (NSLocalizedString("Off", comment: "Lights off option"), 0),
+                                (NSLocalizedString("On", comment: "Lights on option"), 1)
                             ]
                             for (optionTitle, optionValue) in lightsOptions {
                                 let item = NSMenuItem(title: optionTitle, action: #selector(setLights(_:)), keyEquivalent: "")
@@ -293,10 +269,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                             menu.addItem(lightsMenuItem)
                             menu.setSubmenu(lightsMenu, for: lightsMenuItem)
                         case "CAP_VOICE_PROMPTS":
-                            let voicePromptsMenu = NSMenu(title: "Voice Prompts")
+                            let voicePromptsMenu = NSMenu(title: NSLocalizedString("Voice Prompts", comment: "Voice Prompts capability"))
                             let voicePromptsOptions = [
-                                ("Off", 0),
-                                ("On", 1)
+                                (NSLocalizedString("Off", comment: "Voice Prompts off option"), 0),
+                                (NSLocalizedString("On", comment: "Voice Prompts on option"), 1)
                             ]
                             for (optionTitle, optionValue) in voicePromptsOptions {
                                 let item = NSMenuItem(title: optionTitle, action: #selector(setVoicePrompts(_:)), keyEquivalent: "")
@@ -308,10 +284,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                             menu.addItem(voicePromptsMenuItem)
                             menu.setSubmenu(voicePromptsMenu, for: voicePromptsMenuItem)
                         case "CAP_ROTATE_TO_MUTE":
-                            let rotateToMuteMenu = NSMenu(title: "Rotate to Mute")
+                            let rotateToMuteMenu = NSMenu(title: NSLocalizedString("Rotate to Mute", comment: "Rotate to Mute capability"))
                             let rotateToMuteOptions = [
-                                ("Off", 0),
-                                ("On", 1)
+                                (NSLocalizedString("Off", comment: "Rotate to Mute off option"), 0),
+                                (NSLocalizedString("On", comment: "Rotate to Mute on option"), 1)
                             ]
                             for (optionTitle, optionValue) in rotateToMuteOptions {
                                 let item = NSMenuItem(title: optionTitle, action: #selector(setRotateToMute(_:)), keyEquivalent: "")
@@ -323,16 +299,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                             menu.addItem(rotateToMuteMenuItem)
                             menu.setSubmenu(rotateToMuteMenu, for: rotateToMuteMenuItem)
                         case "CAP_INACTIVE_TIME":
-                            let inactiveTimeMenu = NSMenu(title: "Inactive Time")
+                            let inactiveTimeMenu = NSMenu(title: NSLocalizedString("Inactive Time", comment: "Inactive Time capability"))
                             let inactiveOptions = [
-                                ("Off", 0),
-                                ("5 Minutes", 5),
-                                ("15 Minutes", 15),
-                                ("30 Minutes", 30),
-                                ("45 Minutes", 45),
-                                ("60 Minutes", 60),
-                                ("75 Minutes", 75),
-                                ("90 Minutes", 90)
+                                (NSLocalizedString("Off", comment: "Inactive Time off option"), 0),
+                                (NSLocalizedString("5 Minutes", comment: "Inactive Time 5 min option"), 5),
+                                (NSLocalizedString("15 Minutes", comment: "Inactive Time 15 min option"), 15),
+                                (NSLocalizedString("30 Minutes", comment: "Inactive Time 30 min option"), 30),
+                                (NSLocalizedString("45 Minutes", comment: "Inactive Time 45 min option"), 45),
+                                (NSLocalizedString("60 Minutes", comment: "Inactive Time 60 min option"), 60),
+                                (NSLocalizedString("75 Minutes", comment: "Inactive Time 75 min option"), 75),
+                                (NSLocalizedString("90 Minutes", comment: "Inactive Time 90 min option"), 90)
                             ]
                             for (optionTitle, optionValue) in inactiveOptions {
                                 let item = NSMenuItem(title: optionTitle, action: #selector(setInactiveTime(_:)), keyEquivalent: "")
@@ -344,7 +320,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                             menu.addItem(inactiveTimeMenuItem)
                             menu.setSubmenu(inactiveTimeMenu, for: inactiveTimeMenuItem)
                         case "CAP_EQUALIZER_PRESET":
-                            let eqPresetMenu = NSMenu(title: "Equalizer Preset")
+                            let eqPresetMenu = NSMenu(title: NSLocalizedString("Equalizer Preset", comment: "Equalizer Preset capability"))
                             var presetNames: [String] = []
                             if let count = device["equalizer_presets_count"] as? Int,
                                let presets = device["equalizer_presets"] as? [String: Any],
@@ -352,7 +328,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                                 presetNames = Array(presets.keys)
                                 presetNames.sort()
                             } else {
-                                presetNames = ["Preset 1", "Preset 2", "Preset 3", "Preset 4"]
+                                presetNames = [
+                                    NSLocalizedString("Preset 1", comment: "Equalizer preset 1"),
+                                    NSLocalizedString("Preset 2", comment: "Equalizer preset 2"),
+                                    NSLocalizedString("Preset 3", comment: "Equalizer preset 3"),
+                                    NSLocalizedString("Preset 4", comment: "Equalizer preset 4")
+                                ]
                             }
                             for (idx, name) in presetNames.enumerated() {
                                 let item = NSMenuItem(title: name, action: #selector(setEqualizerPreset(_:)), keyEquivalent: "")
@@ -375,8 +356,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
             }
         }
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(withTitle: "Settings...", action: #selector(openSettings), keyEquivalent: "s")
-        menu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: NSLocalizedString("Settings...", comment: "Settings menu item"), action: #selector(openSettings), keyEquivalent: "s")
+        menu.addItem(withTitle: NSLocalizedString("Quit", comment: "Quit menu item"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
 
     @objc func openSettings() {

@@ -13,7 +13,7 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            Text("HeadsetControl-MacOSTray")
+            Text(NSLocalizedString("HeadsetControl-MacOSTray", comment: "App title"))
                 .font(.largeTitle)
                 .bold()
                 .padding(.top, 16)
@@ -21,22 +21,24 @@ struct SettingsView: View {
 
             // General Settings Section
             VStack(alignment: .leading, spacing: 12) {
-                Text("General Settings")
+                Text(NSLocalizedString("General Settings", comment: "General settings section header"))
                     .font(.headline)
                 HStack(alignment: .center) {
-                    Text("Test Mode:")
+                    Text(NSLocalizedString("Test Mode:", comment: "Test mode label"))
                     Picker("", selection: $testMode) {
-                        Text("Enabled").tag(true)
-                        Text("Disabled").tag(false)
+                        Text(NSLocalizedString("Enabled", comment: "Test mode enabled"))
+                            .tag(true)
+                        Text(NSLocalizedString("Disabled", comment: "Test mode disabled"))
+                            .tag(false)
                     }
                     .pickerStyle(.menu)
                 }
                 HStack(alignment: .center) {
-                    Text("Update Interval (seconds):")
+                    Text(NSLocalizedString("Update Interval (seconds):", comment: "Update interval label"))
                     Slider(value: $updateInterval, in: 60...3600, step: 30)
                     Text("\(Int(updateInterval)) s")
                 }
-                TextField("Binary Path:", text: $headsetcontrolPath)
+                TextField(NSLocalizedString("Binary Path:", comment: "Binary path label"), text: $headsetcontrolPath)
                     .textFieldStyle(.roundedBorder)
                     .disabled(false)
             }
@@ -44,29 +46,29 @@ struct SettingsView: View {
 
             // Sidetone Section
             VStack(alignment: .leading, spacing: 12) {
-                Text("Sidetone")
+                Text(NSLocalizedString("Sidetone", comment: "Sidetone section header"))
                     .font(.headline)
-                Text("Sidetone Level Values (set -1 to hide)")
+                Text(NSLocalizedString("Sidetone Level Values (set -1 to hide)", comment: "Sidetone level info"))
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("Off:")
-                        TextField("Off", value: $sidetoneOff, formatter: NumberFormatter())
+                        Text(NSLocalizedString("Off:", comment: "Sidetone off label"))
+                        TextField(NSLocalizedString("Off", comment: "Sidetone off field"), value: $sidetoneOff, formatter: NumberFormatter())
                     }
                     HStack {
-                        Text("Low:")
-                        TextField("Low", value: $sidetoneLow, formatter: NumberFormatter())
+                        Text(NSLocalizedString("Low:", comment: "Sidetone low label"))
+                        TextField(NSLocalizedString("Low", comment: "Sidetone low field"), value: $sidetoneLow, formatter: NumberFormatter())
                     }
                     HStack {
-                        Text("Mid:")
-                        TextField("Mid", value: $sidetoneMid, formatter: NumberFormatter())
+                        Text(NSLocalizedString("Medium:", comment: "Sidetone medium label"))
+                        TextField(NSLocalizedString("Medium", comment: "Sidetone medium field"), value: $sidetoneMid, formatter: NumberFormatter())
                     }
                     HStack {
-                        Text("High:")
-                        TextField("High", value: $sidetoneHigh, formatter: NumberFormatter())
+                        Text(NSLocalizedString("High:", comment: "Sidetone high label"))
+                        TextField(NSLocalizedString("High", comment: "Sidetone high field"), value: $sidetoneHigh, formatter: NumberFormatter())
                     }
                     HStack {
-                        Text("Max:")
-                        TextField("Max", value: $sidetoneMax, formatter: NumberFormatter())
+                        Text(NSLocalizedString("Maximum:", comment: "Sidetone maximum label"))
+                        TextField(NSLocalizedString("Maximum", comment: "Sidetone maximum field"), value: $sidetoneMax, formatter: NumberFormatter())
                     }
                 }
             }
@@ -75,10 +77,10 @@ struct SettingsView: View {
             // Buttons Section
             HStack(spacing: 8) {
                 Spacer()
-                Button("Refresh") {
+                Button(NSLocalizedString("Refresh", comment: "Refresh button")) {
                     NotificationCenter.default.post(name: .refreshHeadsetStatus, object: nil)
                 }
-                Button("Close") {
+                Button(NSLocalizedString("Close", comment: "Close button")) {
                     onClose?()
                 }
                 Spacer()
