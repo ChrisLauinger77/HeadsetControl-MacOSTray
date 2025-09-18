@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "HeadsetControl-MacOSTray",
+    defaultLocalization: "en",
     platforms: [
         .macOS(.v14)
     ],
