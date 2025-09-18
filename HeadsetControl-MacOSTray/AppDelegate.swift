@@ -2,6 +2,21 @@ import Cocoa
 import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
+    // Sidetone level values from UserDefaults
+    var sidetoneLevelsFromSettings: [(String, Int)] {
+        let off = UserDefaults.standard.integer(forKey: "sidetoneOff")
+        let low = UserDefaults.standard.integer(forKey: "sidetoneLow")
+        let mid = UserDefaults.standard.integer(forKey: "sidetoneMid")
+        let high = UserDefaults.standard.integer(forKey: "sidetoneHigh")
+        let max = UserDefaults.standard.integer(forKey: "sidetoneMax")
+        return [
+            ("Off", off),
+            ("Low", low),
+            ("Mid", mid),
+            ("High", high),
+            ("Max", max)
+        ]
+    }
     // Handle Equalizer Preset selection
     @objc func setEqualizerPreset(_ sender: NSMenuItem) {
         guard let index = sender.representedObject as? Int else { return }
@@ -252,14 +267,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                         switch cap {
                         case "CAP_SIDETONE":
                             let sidetoneMenu = NSMenu(title: "Sidetone")
-                            let sidetoneLevels = [
-                                ("Off", 0),
-                                ("Low", 32),
-                                ("Mid", 64),
-                                ("High", 96),
-                                ("Max", 128)
-                            ]
-                            for (levelTitle, levelValue) in sidetoneLevels {
+                            for (levelTitle, levelValue) in sidetoneLevelsFromSettings {
+                                if levelValue == -1 { continue }
                                 let item = NSMenuItem(title: levelTitle, action: #selector(setSidetoneLevel(_:)), keyEquivalent: "")
                                 item.target = self
                                 item.representedObject = levelValue

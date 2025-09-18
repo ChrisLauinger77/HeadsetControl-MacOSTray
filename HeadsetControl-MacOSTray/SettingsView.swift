@@ -1,62 +1,90 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @AppStorage("sidetoneOff") var sidetoneOff: Int = 0
+    @AppStorage("sidetoneLow") var sidetoneLow: Int = 32
+    @AppStorage("sidetoneMid") var sidetoneMid: Int = 64
+    @AppStorage("sidetoneHigh") var sidetoneHigh: Int = 96
+    @AppStorage("sidetoneMax") var sidetoneMax: Int = 128
     var onClose: (() -> Void)? = nil
     @AppStorage("updateInterval") var updateInterval: Double = 600
     @AppStorage("headsetcontrolPath") var headsetcontrolPath: String = "/opt/homebrew/bin/headsetcontrol"
     @AppStorage("testMode") var testMode: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Overall header with app name
+        VStack(alignment: .leading, spacing: 24) {
             Text("HeadsetControl-MacOSTray")
                 .font(.largeTitle)
                 .bold()
                 .padding(.top, 16)
                 .padding(.bottom, 8)
-                .frame(maxWidth: .infinity, alignment: .center)
-            Form {
-                Section(header: Text("General Settings").font(.headline)) {
-                    Picker("Test Mode:", selection: $testMode) {
+
+            // General Settings Section
+            VStack(alignment: .leading, spacing: 12) {
+                Text("General Settings")
+                    .font(.headline)
+                HStack(alignment: .center) {
+                    Text("Test Mode:")
+                    Picker("", selection: $testMode) {
                         Text("Enabled").tag(true)
                         Text("Disabled").tag(false)
                     }
                     .pickerStyle(.menu)
-                    .frame(width: 240)
+                }
+                HStack(alignment: .center) {
+                    Text("Update Interval (seconds):")
+                    Slider(value: $updateInterval, in: 60...3600, step: 30)
+                    Text("\(Int(updateInterval)) s")
+                }
+                TextField("Binary Path:", text: $headsetcontrolPath)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(false)
+            }
+            Divider()
+
+            // Sidetone Section
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Sidetone")
+                    .font(.headline)
+                Text("Sidetone Level Values (set -1 to hide)")
+                VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("Update Interval (seconds):")
-                        Slider(value: $updateInterval, in: 60...3600, step: 30)
-                            .frame(width: 200)
-                        Text("\(Int(updateInterval)) s")
-                            .frame(width: 60, alignment: .leading)
+                        Text("Off:")
+                        TextField("Off", value: $sidetoneOff, formatter: NumberFormatter())
                     }
                     HStack {
-                        Text("binary Path:")
-                        TextField("Path", text: $headsetcontrolPath)
-                            .frame(width: 300)
-                            .textFieldStyle(.roundedBorder)
-                            .disabled(false)
+                        Text("Low:")
+                        TextField("Low", value: $sidetoneLow, formatter: NumberFormatter())
                     }
-                }
-                Section(header: Text("Other Settings").font(.headline)) {
-                    // Placeholder for future settings group
-                    Text("More settings coming soon...")
-                }
-                Section {
                     HStack {
-                        Spacer()
-                        Button("Refresh") {
-                            NotificationCenter.default.post(name: .refreshHeadsetStatus, object: nil)
-                        }
-                        Button("Close") {
-                            onClose?()
-                        }
+                        Text("Mid:")
+                        TextField("Mid", value: $sidetoneMid, formatter: NumberFormatter())
+                    }
+                    HStack {
+                        Text("High:")
+                        TextField("High", value: $sidetoneHigh, formatter: NumberFormatter())
+                    }
+                    HStack {
+                        Text("Max:")
+                        TextField("Max", value: $sidetoneMax, formatter: NumberFormatter())
                     }
                 }
             }
+            Divider()
+
+            // Buttons Section
+            HStack(spacing: 8) {
+                Spacer()
+                Button("Refresh") {
+                    NotificationCenter.default.post(name: .refreshHeadsetStatus, object: nil)
+                }
+                Button("Close") {
+                    onClose?()
+                }
+                Spacer()
+            }
         }
         .padding()
-        .frame(minWidth: 500, minHeight: 400)
     }
 }
 
