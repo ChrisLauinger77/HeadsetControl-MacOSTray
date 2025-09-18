@@ -22,6 +22,19 @@ Settings
 - Automatic periodic updates
 - Error handling for missing or misconfigured headsetcontrol binary
 
+## Dynamic Capability Menu
+
+- The tray menu now dynamically displays controls based on the capabilities reported by your headset. If a capability is available, a corresponding submenu or action is shown:
+
+- **Sidetone**: Choose from Off, Low, Mid, High, Max. Sets sidetone level via `headsetcontrol -s <level>`.
+- **Lights**: Toggle On/Off. Sets lights via `headsetcontrol -l <0|1>`.
+- **Inactive Time**: Choose from Off, 5, 15, 30, 45, 60, 75, 90 minutes. Sets timeout via `headsetcontrol -i <minutes>`.
+- **Voice Prompts**: Toggle On/Off. Sets voice prompts via `headsetcontrol -v <0|1>`.
+- **Rotate to Mute**: Toggle On/Off. Sets rotate-to-mute via `headsetcontrol -r <0|1>`.
+- **Equalizer Preset**: If available, shows preset names from the device; otherwise, shows four generic presets. Sets preset via `headsetcontrol -p <index>`.
+
+These menu items only appear if the headset reports the corresponding capability in its JSON output. Selecting an option will immediately apply the setting using the `headsetcontrol` binary.
+
 ## Preconditions
 
 1. MacOS 14 or later
