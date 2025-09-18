@@ -1,0 +1,26 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="blue-shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5caaff"/>
+      <stop offset="100%" stop-color="#1656a7"/>
+    </linearGradient>
+  </defs>
+  <!-- Blue shaded background -->
+  <rect width="1024" height="1024" rx="220" fill="url(#blue-shade)"/>
+  <!-- Headset GNOME symbolic style -->
+  <g>
+    <!-- Headband -->
+    <path d="M256 580c0-160 132-290 290-290s290 130 290 290" stroke="#fff" stroke-width="56" stroke-linecap="round" fill="none"/>
+    <!-- Left earcup -->
+    <rect x="196" y="630" width="100" height="160" rx="50" fill="#fff"/>
+    <!-- Right earcup -->
+    <rect x="728" y="630" width="100" height="160" rx="50" fill="#fff"/>
+    <!-- Microphone boom (right side) -->
+    <path d="M828 770 Q920 860 800 920" stroke="#fff" stroke-width="28" stroke-linecap="round" fill="none"/>
+    <circle cx="800" cy="920" r="20" fill="#fff"/>
+  </g>
+  <!-- Text "Control" underneath -->
+  <text x="50%" y="990" text-anchor="middle" fill="#fff" font-size="100" font-family="sans-serif" font-weight="bold" letter-spacing="2" alignment-baseline="bottom">
+    Control
+  </text>
+</svg>
