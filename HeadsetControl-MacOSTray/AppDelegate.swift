@@ -325,15 +325,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                             if let count = device["equalizer_presets_count"] as? Int,
                                let presets = device["equalizer_presets"] as? [String: Any],
                                count > 0 {
-                                presetNames = Array(presets.keys)
+                                // Localize preset names from device
+                                presetNames = Array(presets.keys).map { NSLocalizedString($0, comment: "Equalizer preset from device") }
                                 presetNames.sort()
                             } else {
-                                presetNames = [
+                                // Use user-defined preset names from settings, fallback to defaults if empty
+                                let stored = UserDefaults.standard.string(forKey: "equalizerPresets") ?? "Preset 1,Preset 2,Preset 3,Preset 4"
+                                let names = stored.split(separator: ",").map { NSLocalizedString($0.trimmingCharacters(in: .whitespacesAndNewlines), comment: "User-defined equalizer preset") }.filter { !$0.isEmpty }
+                                presetNames = names.isEmpty ? [
                                     NSLocalizedString("Preset 1", comment: "Equalizer preset 1"),
                                     NSLocalizedString("Preset 2", comment: "Equalizer preset 2"),
                                     NSLocalizedString("Preset 3", comment: "Equalizer preset 3"),
                                     NSLocalizedString("Preset 4", comment: "Equalizer preset 4")
-                                ]
+                                ] : names
                             }
                             for (idx, name) in presetNames.enumerated() {
                                 let item = NSMenuItem(title: name, action: #selector(setEqualizerPreset(_:)), keyEquivalent: "")

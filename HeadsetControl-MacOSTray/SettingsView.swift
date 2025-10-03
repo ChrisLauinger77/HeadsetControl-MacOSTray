@@ -10,6 +10,7 @@ struct SettingsView: View {
     @AppStorage("updateInterval") var updateInterval: Double = 600
     @AppStorage("headsetcontrolPath") var headsetcontrolPath: String = "/opt/homebrew/bin/headsetcontrol"
     @AppStorage("testMode") var testMode: Bool = false
+    @AppStorage("equalizerPresets") var equalizerPresets: String = "Preset 1,Preset 2,Preset 3,Preset 4"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -38,10 +39,14 @@ struct SettingsView: View {
                     Slider(value: $updateInterval, in: 60...3600, step: 30)
                     Text("\(Int(updateInterval)) s")
                 }
-                TextField(NSLocalizedString("Binary Path:", comment: "Binary path label"), text: $headsetcontrolPath)
-                    .textFieldStyle(.roundedBorder)
-                    .disabled(false)
+                HStack(alignment: .center) {
+                    Text(NSLocalizedString("Binary Path:", comment: "Binary path label"))
+                    TextField(NSLocalizedString("Binary Path:", comment: "Binary path label"), text: $headsetcontrolPath)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(false)
+                }
             }
+                
             Divider()
 
             // Sidetone Section
@@ -71,6 +76,18 @@ struct SettingsView: View {
                         TextField(NSLocalizedString("Maximum", comment: "Sidetone maximum field"), value: $sidetoneMax, formatter: NumberFormatter())
                     }
                 }
+            }
+            Divider()
+
+            // Equalizer Presets Section
+            VStack(alignment: .leading, spacing: 12) {
+                Text(NSLocalizedString("Equalizer Presets", comment: "Equalizer presets section header"))
+                    .font(.headline)
+                Text(NSLocalizedString("Comma-separated list of preset names.", comment: "Equalizer presets help text"))
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                TextField(NSLocalizedString("Preset names", comment: "Equalizer presets text field label"), text: $equalizerPresets)
+                    .textFieldStyle(.roundedBorder)
             }
             Divider()
 
