@@ -52,6 +52,7 @@ These menu items only appear if the headset reports the corresponding capability
    ```
 3. Verify the headsetcontrol binary works in a terminal (headsetcontrol -o json)
 4. Check/change settings of the app when the headsetcontrol binary is not found
+5. You need to allow the execution of the app in MacOS security settings.
 
 ## Build with Xcode
 

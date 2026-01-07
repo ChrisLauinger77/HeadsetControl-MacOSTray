@@ -1,4 +1,19 @@
 import SwiftUI
+import AppKit
+
+// SwiftUI wrapper for NSImage
+struct AppIconImage: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSImageView {
+        let imageView = NSImageView()
+        imageView.image = NSApplication.shared.applicationIconImage
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.wantsLayer = true
+        imageView.layer?.cornerRadius = 12
+        imageView.layer?.masksToBounds = true
+        return imageView
+    }
+    func updateNSView(_ nsView: NSImageView, context: Context) {}
+}
 
 struct SettingsView: View {
     @AppStorage("sidetoneOff") var sidetoneOff: Int = 0
@@ -14,10 +29,20 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
+            // App Icon at the top
+            HStack {
+                Spacer()
+                AppIconImage()
+                    .frame(width: 64, height: 64)
+                    .shadow(radius: 4)
+                    .padding(.top, 16)
+                Spacer()
+            }
+
             Text(NSLocalizedString("HeadsetControl-MacOSTray", comment: "App title"))
                 .font(.largeTitle)
                 .bold()
-                .padding(.top, 16)
+                .padding(.top, 8)
                 .padding(.bottom, 8)
 
             // General Settings Section
