@@ -42,11 +42,14 @@ These menu items only appear if the headset reports the corresponding capability
 
 ## Installation
 
-1. Install [headsetcontrol](https://github.com/Sapd/HeadsetControl) via Homebrew:
+1. Install [headsetcontrol](https://github.com/Sapd/HeadsetControl) via [Homebrew](https://brew.sh/):
    ```sh
    brew install sapd/headsetcontrol/headsetcontrol --HEAD
    ```
-2. Download the release zip and install it
+2. Install headsetcontrol-macostray via [Homebrew](https://brew.sh/)
+   ```sh
+   brew install --cask chrislauinger77/cask/headsetcontrol-macostray --no-quarantine
+   ```
 3. Verify the headsetcontrol binary works in a terminal (headsetcontrol -o json)
 4. Check/change settings of the app when the headsetcontrol binary is not found
 
