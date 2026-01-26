@@ -1,7 +1,8 @@
 import Cocoa
 import SwiftUI
+import UserNotifications
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate, UNUserNotificationCenterDelegate {
     // Sidetone level values from UserDefaults
     var sidetoneLevelsFromSettings: [(String, Int)] {
         let off = UserDefaults.standard.integer(forKey: "sidetoneOff")
@@ -129,8 +130,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
 
     var statusUpdateTimer: Timer?
     var latestDevices: [[String: Any]]? = nil
+    var lowBatteryNotificationShown = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Request notification authorization and set delegate
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            // Optionally handle granted/error
+        }
+        UNUserNotificationCenter.current().delegate = self
+
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem?.button {
             if let sfImage = NSImage(systemSymbolName: "headset", accessibilityDescription: "Headset") {
@@ -186,6 +194,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                     devicesResult = devices
                     if let battery = devices[0]["battery"] as? [String: Any], let level = battery["level"] as? Int {
                         batteryLevelText = "\(level)%"
+                        let status = battery["status"] as? String ?? ""
+                        let notifyOnLowBattery = UserDefaults.standard.bool(forKey: "notifyOnLowBattery")
+                        // Send notification if (battery is low and available) OR testMode is enabled
+                        if notifyOnLowBattery && ((status == "BATTERY_AVAILABLE" && level <= 25) || testMode) && !lowBatteryNotificationShown {
+                            showLowBatteryNotification(level: level)
+                            lowBatteryNotificationShown = true
+                        }
+                        if status == "BATTERY_AVAILABLE" && level > 25 && !testMode {
+                            lowBatteryNotificationShown = false // Reset if battery recovers and not in test mode
+                        }
                     }
                 }
             }
@@ -389,5 +407,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
         } else {
             settingsWindow?.makeKeyAndOrderFront(nil)
         }
+    }
+    
+    func showLowBatteryNotification(level: Int) {
+        let content = UNMutableNotificationContent()
+        content.title = "HeadsetControl-MacOSTray"
+        content.body = String(format: NSLocalizedString("Low battery notification message", comment: "Low battery notification message"), level)
+        content.sound = UNNotificationSound.default
+        // App icon is shown by default in notification banner
+        let request = UNNotificationRequest(identifier: "lowBatteryNotification", content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+    }
+
+    // UNUserNotificationCenterDelegate: Show notifications when app is in foreground
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound, .badge, .list])
     }
 }

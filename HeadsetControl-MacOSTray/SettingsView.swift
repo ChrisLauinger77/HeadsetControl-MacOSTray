@@ -26,6 +26,7 @@ struct SettingsView: View {
     @AppStorage("headsetcontrolPath") var headsetcontrolPath: String = "/opt/homebrew/bin/headsetcontrol"
     @AppStorage("testMode") var testMode: Bool = false
     @AppStorage("equalizerPresets") var equalizerPresets: String = "Preset 1,Preset 2,Preset 3,Preset 4"
+    @AppStorage("notifyOnLowBattery") var notifyOnLowBattery: Bool = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -70,6 +71,7 @@ struct SettingsView: View {
                         .textFieldStyle(.roundedBorder)
                         .disabled(false)
                 }
+                Toggle(NSLocalizedString("Notification on low battery", comment: "Low battery notification toggle label"), isOn: $notifyOnLowBattery)
             }
                 
             Divider()

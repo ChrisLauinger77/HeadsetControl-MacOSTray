@@ -47,3 +47,5 @@
 "Preset 3" = "Preset 3";
 "Preset 4" = "Preset 4";
 "Comma-separated list of preset names." = "Comma-separated list of preset names.";
+"Notification on low battery" = "Notification on low battery";
+"Low battery notification message" = "Battery level is low (≤25%). Please charge your headset.";
