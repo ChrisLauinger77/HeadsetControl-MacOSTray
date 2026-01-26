@@ -47,3 +47,5 @@
 "Preset 3" = "Voreinstellung 3";
 "Preset 4" = "Voreinstellung 4";
 "Comma-separated list of preset names." = "Kommagetrennte Liste von Preset-Namen.";
+"Notification on low battery" = "Benachrichtigung bei niedrigem Batteriestand";
+"Low battery notification message" = "Batteriestand ist niedrig (≤25%). Bitte laden Sie Ihr Headset auf.";
