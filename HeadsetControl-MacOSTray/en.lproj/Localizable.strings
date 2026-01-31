@@ -34,8 +34,10 @@
 "Equalizer Preset" = "Equalizer Preset";
 "Equalizer" = "Equalizer";
 "On" = "On";
-"Off" = "Off";
+"1 Minute" = "1 Minute";
+"2 Minutes" = "2 Minutes";
 "5 Minutes" = "5 Minutes";
+"10 Minutes" = "10 Minutes";
 "15 Minutes" = "15 Minutes";
 "30 Minutes" = "30 Minutes";
 "45 Minutes" = "45 Minutes";
@@ -46,6 +48,7 @@
 "Preset 2" = "Preset 2";
 "Preset 3" = "Preset 3";
 "Preset 4" = "Preset 4";
+"Preset names" = "Preset names";
 "Comma-separated list of preset names." = "Comma-separated list of preset names.";
 "Notification on low battery" = "Notification on low battery";
 "Low battery notification message" = "Battery level is low (≤25%). Please charge your headset.";

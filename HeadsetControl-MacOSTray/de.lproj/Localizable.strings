@@ -4,7 +4,7 @@
 "Enabled" = "Aktiviert";
 "Disabled" = "Deaktiviert";
 "Update Interval (seconds):" = "Aktualisierungsintervall (Sekunden):";
-"Binary Path:" = "Pfad zur Binary:";
+"Binary Path:" = "Pfad zur Binärdatei:";
 "Sidetone" = "Mithörton";
 "Sidetone Level Values (set -1 to hide)" = "Sidetone-Level-Werte (setze -1 zum Ausblenden)";
 "Off:" = "Aus:";
@@ -34,8 +34,10 @@
 "Equalizer Preset" = "Equalizer-Voreinstellung";
 "Equalizer" = "Equalizer";
 "On" = "An";
-"Off" = "Aus";
+"1 Minute" = "1 Minute";
+"2 Minutes" = "2 Minuten";
 "5 Minutes" = "5 Minuten";
+"10 Minutes" = "10 Minuten";
 "15 Minutes" = "15 Minuten";
 "30 Minutes" = "30 Minuten";
 "45 Minutes" = "45 Minuten";
@@ -46,6 +48,7 @@
 "Preset 2" = "Voreinstellung 2";
 "Preset 3" = "Voreinstellung 3";
 "Preset 4" = "Voreinstellung 4";
-"Comma-separated list of preset names." = "Kommagetrennte Liste von Preset-Namen.";
+"Preset names" = "Voreinstellungsnamen";
+"Comma-separated list of preset names." = "Kommagetrennte Liste von Voreinstellungsnamen.";
 "Notification on low battery" = "Benachrichtigung bei niedrigem Batteriestand";
 "Low battery notification message" = "Batteriestand ist niedrig (≤25%). Bitte laden Sie Ihr Headset auf.";
