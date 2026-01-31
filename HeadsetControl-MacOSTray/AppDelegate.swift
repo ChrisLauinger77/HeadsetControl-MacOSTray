@@ -158,6 +158,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
         startStatusUpdateTimer()
         // Initial update
         updateStatusItem()
+
+        // Normalize stored equalizer preset names to comma-only (no spaces) for consistency
+        let storedRaw = UserDefaults.standard.string(forKey: "equalizerPresets") ?? "Preset 1,Preset 2,Preset 3,Preset 4"
+        let storedParts = storedRaw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let normalizedStored = storedParts.joined(separator: ",")
+        if normalizedStored != storedRaw {
+            UserDefaults.standard.set(normalizedStored, forKey: "equalizerPresets")
+            #if DEBUG
+            NSLog("HeadsetControl: normalized equalizerPresets in UserDefaults to '%@'", normalizedStored)
+            #endif
+        }
     }
 
     func startStatusUpdateTimer() {
@@ -371,9 +382,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                             if let count = device["equalizer_presets_count"] as? Int,
                                let presets = device["equalizer_presets"] as? [String: Any],
                                count > 0 {
-                                // Localize preset names from device
-                                presetNames = Array(presets.keys).map { NSLocalizedString($0, comment: "Equalizer preset from device") }
-                                presetNames.sort()
+                                // Preserve device-reported preset order (do not sort)
+                                let reportedKeys = Array(presets.keys).map { String($0) }
+
+                                // Read stored presets (support both comma and comma+space formats) and normalize
+                                let storedRaw = UserDefaults.standard.string(forKey: "equalizerPresets") ?? "Preset 1,Preset 2,Preset 3,Preset 4"
+                                let storedParts = storedRaw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                                let normalizedStored = storedParts.joined(separator: ",")
+                                if normalizedStored != storedRaw {
+                                    UserDefaults.standard.set(normalizedStored, forKey: "equalizerPresets")
+                                    #if DEBUG
+                                    NSLog("HeadsetControl: normalized equalizerPresets in UserDefaults to '%@'", normalizedStored)
+                                    #endif
+                                }
+
+                                // Localize preset names from device (preserve device order)
+                                presetNames = reportedKeys.map { NSLocalizedString($0, comment: "Equalizer preset from device") }
                             } else {
                                 // Use user-defined preset names from settings, fallback to defaults if empty
                                 let stored = UserDefaults.standard.string(forKey: "equalizerPresets") ?? "Preset 1,Preset 2,Preset 3,Preset 4"
