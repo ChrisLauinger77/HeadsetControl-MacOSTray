@@ -223,6 +223,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
         }
     }
 
+    // Helper to format time_to_empty_min into a submenu suffix like " (5h)" or " (<1h)".
+    // - Accepts Int/Double/String values from JSON and returns an optional suffix with a leading space.
+    private func formatTimeToEmpty(minutesAny: Any?) -> String? {
+        guard let value = minutesAny else { return nil }
+        var minutes: Int?
+        if let m = value as? Int {
+            minutes = m
+        } else if let m = value as? Double {
+            minutes = Int(m)
+        } else if let m = value as? String, let mi = Int(m) {
+            minutes = mi
+        } else {
+            return nil
+        }
+        guard let mins = minutes, mins > 0 else { return nil }
+        if mins < 60 {
+            return " (<1h)"
+        }
+        let hours = mins / 60 // floor division as requested
+        return " (\(hours)h)"
+    }
+
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         guard let devices = latestDevices, !devices.isEmpty else {
@@ -240,7 +262,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
             menu.addItem(withTitle: String(format: "%@: %@", NSLocalizedString("Vendor", comment: "Vendor label"), vendor), action: nil, keyEquivalent: "")
             menu.addItem(withTitle: String(format: "%@: %@", NSLocalizedString("Product", comment: "Product label"), product), action: nil, keyEquivalent: "")
             if let battery = device["battery"] as? [String: Any], let level = battery["level"] as? Int {
-                menu.addItem(withTitle: String(format: "%@: %d%%", NSLocalizedString("Battery", comment: "Battery label"), level), action: nil, keyEquivalent: "")
+                // Append time-to-empty in hours (submenu only) when available. Use floor rounding and "h" suffix; show "<1h" for under 60 minutes.
+                let suffix = formatTimeToEmpty(minutesAny: battery["time_to_empty_min"])
+                let title = String(format: "%@: %d%%%@", NSLocalizedString("Battery", comment: "Battery label"), level, suffix ?? "")
+                menu.addItem(withTitle: title, action: nil, keyEquivalent: "")
             }
             if let chatmix = device["chatmix"] {
                 menu.addItem(withTitle: String(format: "%@: %@", NSLocalizedString("Chatmix", comment: "Chatmix label"), String(describing: chatmix)), action: nil, keyEquivalent: "")
@@ -320,7 +345,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                             let inactiveTimeMenu = NSMenu(title: NSLocalizedString("Inactive Time", comment: "Inactive Time capability"))
                             let inactiveOptions = [
                                 (NSLocalizedString("Off", comment: "Inactive Time off option"), 0),
+                                (NSLocalizedString("1 Minute", comment: "Inactive Time 5 min option"), 1),
+                                (NSLocalizedString("2 Minutes", comment: "Inactive Time 5 min option"), 2),
                                 (NSLocalizedString("5 Minutes", comment: "Inactive Time 5 min option"), 5),
+                                (NSLocalizedString("10 Minutes", comment: "Inactive Time 5 min option"), 10),
                                 (NSLocalizedString("15 Minutes", comment: "Inactive Time 15 min option"), 15),
                                 (NSLocalizedString("30 Minutes", comment: "Inactive Time 30 min option"), 30),
                                 (NSLocalizedString("45 Minutes", comment: "Inactive Time 45 min option"), 45),
