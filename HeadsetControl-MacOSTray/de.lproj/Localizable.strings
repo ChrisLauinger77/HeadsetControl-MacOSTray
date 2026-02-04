@@ -52,3 +52,12 @@
 "Comma-separated list of preset names." = "Kommagetrennte Liste von Voreinstellungsnamen.";
 "Notification on low battery" = "Benachrichtigung bei niedrigem Batteriestand";
 "Low battery notification message" = "Batteriestand ist niedrig (≤25%). Bitte laden Sie Ihr Headset auf.";
+"Device 1" = "Gerät 1";
+"Device 2" = "Gerät 2";
+"Device 3" = "Gerät 3";
+"Device 4" = "Gerät 4";
+"Device 5" = "Gerät 5";
+"Device 6" = "Gerät 6";
+"Device 7" = "Gerät 7";
+"Equalizer Presets" = "Equalizer-Voreinstellungen";
+"<1h" = "<1h";

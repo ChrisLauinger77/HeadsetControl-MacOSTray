@@ -185,10 +185,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
 
     func updateStatusItem() {
         let path = UserDefaults.standard.string(forKey: "headsetcontrolPath") ?? "/opt/homebrew/bin/headsetcontrol"
-        let testMode = UserDefaults.standard.bool(forKey: "testMode")
+        let testMode = UserDefaults.standard.integer(forKey: "testMode")
         var arguments = ["-o", "json"]
-        if testMode {
+        if testMode != 0 {
             arguments.append("--test-device")
+            arguments.append(String(testMode))
         }
         var batteryLevelText: String? = nil
         var devicesResult: [[String: Any]]? = nil
@@ -208,11 +209,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                         let status = battery["status"] as? String ?? ""
                         let notifyOnLowBattery = UserDefaults.standard.bool(forKey: "notifyOnLowBattery")
                         // Send notification if (battery is low and available) OR testMode is enabled
-                        if notifyOnLowBattery && ((status == "BATTERY_AVAILABLE" && level <= 25) || testMode) && !lowBatteryNotificationShown {
+                        if notifyOnLowBattery && ((status == "BATTERY_AVAILABLE" && level <= 25)) && !lowBatteryNotificationShown {
                             showLowBatteryNotification(level: level)
                             lowBatteryNotificationShown = true
                         }
-                        if status == "BATTERY_AVAILABLE" && level > 25 && !testMode {
+                        if status == "BATTERY_AVAILABLE" && level > 25 && testMode == 0 {
                             lowBatteryNotificationShown = false // Reset if battery recovers and not in test mode
                         }
                     }
