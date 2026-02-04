@@ -52,3 +52,12 @@
 "Comma-separated list of preset names." = "Comma-separated list of preset names.";
 "Notification on low battery" = "Notification on low battery";
 "Low battery notification message" = "Battery level is low (≤25%). Please charge your headset.";
+"Device 1" = "Device 1";
+"Device 2" = "Device 2";
+"Device 3" = "Device 3";
+"Device 4" = "Device 4";
+"Device 5" = "Device 5";
+"Device 6" = "Device 6";
+"Device 7" = "Device 7";
+"Equalizer Presets" = "Equalizer Presets";
+"<1h" = "<1h";
