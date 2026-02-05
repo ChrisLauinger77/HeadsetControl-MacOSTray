@@ -12,7 +12,15 @@ Tray
 
 Settings
 
-![Screenshot](https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray/blob/main/screenshots/settings.png)
+![General](https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray/blob/main/screenshots/settings1.png)
+
+![Sidetone](https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray/blob/main/screenshots/settings2.png)
+
+![Inactive time](https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray/blob/main/screenshots/settings3.png)
+
+![Equalizer presets](https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray/blob/main/screenshots/settings4.png)
+
+![About](https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray/blob/main/screenshots/settings5.png)
 
 ## Features
 
