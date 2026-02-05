@@ -257,6 +257,44 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
         return " (\(hours)h)"
     }
 
+    private let inactiveTimeOptionsDefault: [Int] = [1, 2, 5, 10, 15, 30, 45, 60, 75, 90]
+    private lazy var inactiveTimeOptionsAllowed: Set<Int> = Set(inactiveTimeOptionsDefault)
+
+    private var inactiveTimeMinutesFromSettings: [Int] {
+        let defaultRaw = inactiveTimeOptionsDefault.map(String.init).joined(separator: ",")
+        let raw = UserDefaults.standard.string(forKey: "inactiveTimeOptions") ?? defaultRaw
+        let parsed = raw.split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        let filtered = parsed.filter { inactiveTimeOptionsAllowed.contains($0) }
+        return Array(Set(filtered)).sorted()
+    }
+
+    private func inactiveTimeLabel(for minutes: Int) -> String {
+        switch minutes {
+        case 1:
+            return NSLocalizedString("1 Minute", comment: "Inactive Time 1 minute option")
+        case 2:
+            return NSLocalizedString("2 Minutes", comment: "Inactive Time 2 minutes option")
+        case 5:
+            return NSLocalizedString("5 Minutes", comment: "Inactive Time 5 minutes option")
+        case 10:
+            return NSLocalizedString("10 Minutes", comment: "Inactive Time 10 minutes option")
+        case 15:
+            return NSLocalizedString("15 Minutes", comment: "Inactive Time 15 minutes option")
+        case 30:
+            return NSLocalizedString("30 Minutes", comment: "Inactive Time 30 minutes option")
+        case 45:
+            return NSLocalizedString("45 Minutes", comment: "Inactive Time 45 minutes option")
+        case 60:
+            return NSLocalizedString("60 Minutes", comment: "Inactive Time 60 minutes option")
+        case 75:
+            return NSLocalizedString("75 Minutes", comment: "Inactive Time 75 minutes option")
+        case 90:
+            return NSLocalizedString("90 Minutes", comment: "Inactive Time 90 minutes option")
+        default:
+            return "\(minutes)"
+        }
+    }
+
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         guard let devices = latestDevices, !devices.isEmpty else {
@@ -355,19 +393,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                             menu.setSubmenu(rotateToMuteMenu, for: rotateToMuteMenuItem)
                         case "CAP_INACTIVE_TIME":
                             let inactiveTimeMenu = NSMenu(title: NSLocalizedString("Inactive Time", comment: "Inactive Time capability"))
-                            let inactiveOptions = [
-                                (NSLocalizedString("Off", comment: "Inactive Time off option"), 0),
-                                (NSLocalizedString("1 Minute", comment: "Inactive Time 5 min option"), 1),
-                                (NSLocalizedString("2 Minutes", comment: "Inactive Time 5 min option"), 2),
-                                (NSLocalizedString("5 Minutes", comment: "Inactive Time 5 min option"), 5),
-                                (NSLocalizedString("10 Minutes", comment: "Inactive Time 5 min option"), 10),
-                                (NSLocalizedString("15 Minutes", comment: "Inactive Time 15 min option"), 15),
-                                (NSLocalizedString("30 Minutes", comment: "Inactive Time 30 min option"), 30),
-                                (NSLocalizedString("45 Minutes", comment: "Inactive Time 45 min option"), 45),
-                                (NSLocalizedString("60 Minutes", comment: "Inactive Time 60 min option"), 60),
-                                (NSLocalizedString("75 Minutes", comment: "Inactive Time 75 min option"), 75),
-                                (NSLocalizedString("90 Minutes", comment: "Inactive Time 90 min option"), 90)
-                            ]
+                            let selectedMinutes = inactiveTimeMinutesFromSettings
+                            let inactiveOptions = [(NSLocalizedString("Off", comment: "Inactive Time off option"), 0)] + selectedMinutes.map {
+                                (inactiveTimeLabel(for: $0), $0)
+                            }
                             for (optionTitle, optionValue) in inactiveOptions {
                                 let item = NSMenuItem(title: optionTitle, action: #selector(setInactiveTime(_:)), keyEquivalent: "")
                                 item.target = self
