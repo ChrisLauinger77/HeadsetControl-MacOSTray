@@ -224,6 +224,10 @@ struct SettingsView: View {
             }
             .font(.subheadline)
             .foregroundColor(.secondary)
+            
+            Link(NSLocalizedString("GitHub Repository", comment: "GitHub link label"),
+                 destination: URL(string: "https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray")!)
+                .font(.subheadline)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
