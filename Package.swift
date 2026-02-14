@@ -8,6 +8,10 @@ let package = Package(
         .macOS(.v14)
     ],
     targets: [
+        .systemLibrary(
+            name: "HeadsetControlCLib",
+            path: "HeadsetControlCLib"
+        ),
         .executableTarget(
             name: "HeadsetControl-MacOSTray",
             dependencies: [],

@@ -1,0 +1,4 @@
+module HeadsetControlCLib {
+  header "HeadsetControlCLib.h"
+  export *
+}

@@ -18,100 +18,62 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
             (NSLocalizedString("Maximum", comment: "Sidetone level Maximum"), max)
         ]
     }
+    private let headsetControlService = HeadsetControlService()
+
+    private func activeHeadsetControlProvider() -> HeadsetControlProviding {
+        let testMode = UserDefaults.standard.integer(forKey: "testMode")
+        if testMode == 0 {
+            return headsetControlService
+        }
+        return MockHeadsetControlService(deviceIndex: testMode)
+    }
+
+    private func runControlAction(_ action: @escaping (HeadsetControlProviding) -> Void) {
+        let provider = activeHeadsetControlProvider()
+        DispatchQueue.global(qos: .userInitiated).async {
+            action(provider)
+        }
+    }
     // Handle Equalizer Preset selection
     @objc func setEqualizerPreset(_ sender: NSMenuItem) {
         guard let index = sender.representedObject as? Int else { return }
-        let path = UserDefaults.standard.string(forKey: "headsetcontrolPath") ?? "/opt/homebrew/bin/headsetcontrol"
-        let arguments = ["-p", String(index)]
-        let task = Process()
-        task.launchPath = path
-        task.arguments = arguments
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        do {
-            try task.run()
-        } catch {
-            // Optionally handle error
+        runControlAction { provider in
+            _ = provider.setEqualizerPreset(index: index)
         }
     }
     // Handle Rotate to Mute on/off selection
     @objc func setRotateToMute(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? Int else { return }
-        let path = UserDefaults.standard.string(forKey: "headsetcontrolPath") ?? "/opt/homebrew/bin/headsetcontrol"
-        let arguments = ["-r", String(value)]
-        let task = Process()
-        task.launchPath = path
-        task.arguments = arguments
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        do {
-            try task.run()
-        } catch {
-            // Optionally handle error
+        runControlAction { provider in
+            _ = provider.setRotateToMute(enabled: value != 0)
         }
     }
     // Handle Voice Prompts on/off selection
     @objc func setVoicePrompts(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? Int else { return }
-        let path = UserDefaults.standard.string(forKey: "headsetcontrolPath") ?? "/opt/homebrew/bin/headsetcontrol"
-        let arguments = ["-v", String(value)]
-        let task = Process()
-        task.launchPath = path
-        task.arguments = arguments
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        do {
-            try task.run()
-        } catch {
-            // Optionally handle error
+        runControlAction { provider in
+            _ = provider.setVoicePrompts(enabled: value != 0)
         }
     }
     // Handle Inactive Time selection
     @objc func setInactiveTime(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? Int else { return }
-        let path = UserDefaults.standard.string(forKey: "headsetcontrolPath") ?? "/opt/homebrew/bin/headsetcontrol"
-        let arguments = ["-i", String(value)]
-        let task = Process()
-        task.launchPath = path
-        task.arguments = arguments
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        do {
-            try task.run()
-        } catch {
-            // Optionally handle error
+        runControlAction { provider in
+            _ = provider.setInactiveTime(minutes: value)
         }
     }
     // Handle Lights on/off selection
     @objc func setLights(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? Int else { return }
-        let path = UserDefaults.standard.string(forKey: "headsetcontrolPath") ?? "/opt/homebrew/bin/headsetcontrol"
-        let arguments = ["-l", String(value)]
-        let task = Process()
-        task.launchPath = path
-        task.arguments = arguments
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        do {
-            try task.run()
-        } catch {
-            // Optionally handle error
+        runControlAction { provider in
+            _ = provider.setLights(enabled: value != 0)
         }
     }
     // Handle Sidetone level selection
     @objc func setSidetoneLevel(_ sender: NSMenuItem) {
         guard let level = sender.representedObject as? Int else { return }
-        let path = UserDefaults.standard.string(forKey: "headsetcontrolPath") ?? "/opt/homebrew/bin/headsetcontrol"
-        let arguments = ["-s", String(level)]
-        let task = Process()
-        task.launchPath = path
-        task.arguments = arguments
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        do {
-            try task.run()
-        } catch {
-            // Optionally handle error
+        runControlAction { provider in
+            _ = provider.setSidetone(level: level)
         }
     }
     var updateInterval: Int {
@@ -184,54 +146,34 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
     }
 
     func updateStatusItem() {
-        let path = UserDefaults.standard.string(forKey: "headsetcontrolPath") ?? "/opt/homebrew/bin/headsetcontrol"
-        let testMode = UserDefaults.standard.integer(forKey: "testMode")
-        var arguments = ["-o", "json"]
-        if testMode != 0 {
-            arguments.append("--test-device")
-            arguments.append(String(testMode))
-        }
-        var batteryLevelText: String? = nil
-        var devicesResult: [[String: Any]]? = nil
-        let task = Process()
-        task.launchPath = path
-        task.arguments = arguments
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        do {
-            try task.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                if let devices = json["devices"] as? [[String: Any]], !devices.isEmpty {
-                    devicesResult = devices
-                    if let battery = devices[0]["battery"] as? [String: Any], let level = battery["level"] as? Int {
-                        batteryLevelText = "\(level)%"
-                        let status = battery["status"] as? String ?? ""
-                        let notifyOnLowBattery = UserDefaults.standard.bool(forKey: "notifyOnLowBattery")
-                        // Send notification if (battery is low and available) OR testMode is enabled
-                        if notifyOnLowBattery && ((status == "BATTERY_AVAILABLE" && level <= 25)) && !lowBatteryNotificationShown {
-                            showLowBatteryNotification(level: level)
-                            lowBatteryNotificationShown = true
-                        }
-                        if status == "BATTERY_AVAILABLE" && level > 25 && testMode == 0 {
-                            lowBatteryNotificationShown = false // Reset if battery recovers and not in test mode
-                        }
+        let provider = activeHeadsetControlProvider()
+        DispatchQueue.global(qos: .utility).async {
+            let devicesResult = provider.fetchDevices()
+            var batteryLevelText: String? = nil
+            if let device = devicesResult.first,
+               let battery = device["battery"] as? [String: Any],
+               let level = battery["level"] as? Int {
+                batteryLevelText = "\(level)%"
+                let status = battery["status"] as? String ?? ""
+                let notifyOnLowBattery = UserDefaults.standard.bool(forKey: "notifyOnLowBattery")
+                if notifyOnLowBattery && ((status == "BATTERY_AVAILABLE" && level <= 25)) && !self.lowBatteryNotificationShown {
+                    self.showLowBatteryNotification(level: level)
+                    self.lowBatteryNotificationShown = true
+                }
+                if status == "BATTERY_AVAILABLE" && level > 25 && UserDefaults.standard.integer(forKey: "testMode") == 0 {
+                    self.lowBatteryNotificationShown = false
+                }
+            }
+            DispatchQueue.main.async {
+                if let button = self.statusItem?.button {
+                    if let batteryText = batteryLevelText {
+                        button.title = " " + batteryText
+                    } else {
+                        button.title = ""
                     }
                 }
+                self.latestDevices = devicesResult
             }
-        } catch {
-            // Ignore errors for tray icon, but could show error icon/text if desired
-        }
-        // Update tray icon title with battery level
-        DispatchQueue.main.async {
-            if let button = self.statusItem?.button {
-                if let batteryText = batteryLevelText {
-                    button.title = " " + batteryText
-                } else {
-                    button.title = ""
-                }
-            }
-            self.latestDevices = devicesResult
         }
     }
 

@@ -23,7 +23,6 @@ struct SettingsView: View {
     @AppStorage("sidetoneMax") var sidetoneMax: Int = 128
     var onClose: (() -> Void)? = nil
     @AppStorage("updateInterval") var updateInterval: Double = 600
-    @AppStorage("headsetcontrolPath") var headsetcontrolPath: String = "/opt/homebrew/bin/headsetcontrol"
     @AppStorage("testMode") var testMode: Int = 0
     @AppStorage("equalizerPresets") var equalizerPresets: String = "Preset 1,Preset 2,Preset 3,Preset 4"
     @AppStorage("notifyOnLowBattery") var notifyOnLowBattery: Bool = true
@@ -121,12 +120,6 @@ struct SettingsView: View {
                 Text(NSLocalizedString("Update Interval (seconds):", comment: "Update interval label"))
                 Slider(value: $updateInterval, in: 60...3600, step: 30)
                 Text("\(Int(updateInterval)) s")
-            }
-            HStack(alignment: .center) {
-                Text(NSLocalizedString("Binary Path:", comment: "Binary path label"))
-                TextField(NSLocalizedString("Binary Path:", comment: "Binary path label"), text: $headsetcontrolPath)
-                    .textFieldStyle(.roundedBorder)
-                    .disabled(false)
             }
             Toggle(NSLocalizedString("Notification on low battery", comment: "Low battery notification toggle label"), isOn: $notifyOnLowBattery)
         }

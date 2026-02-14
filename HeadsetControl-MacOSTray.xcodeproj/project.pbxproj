@@ -8,6 +8,8 @@
 
 /* Begin PBXFileReference section */
 		EB63F7D02E79B47D001D8A59 /* HeadsetControl-MacOSTray.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "HeadsetControl-MacOSTray.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		EB7A1C9E2F6B3D4A8C1E0F23 /* HeadsetControlCLib.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HeadsetControlCLib.h; sourceTree = "<group>"; };
+		EB7A1C9E2F6B3D4A8C1E0F24 /* module.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = module.modulemap; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -45,6 +47,7 @@
 		EB63F7C72E79B47D001D8A59 = {
 			isa = PBXGroup;
 			children = (
+				EB7A1C9E2F6B3D4A8C1E0F25 /* HeadsetControlCLib */,
 				EB63F7D22E79B47D001D8A59 /* HeadsetControl-MacOSTray */,
 				EB63F7D12E79B47D001D8A59 /* Products */,
 			);
@@ -56,6 +59,15 @@
 				EB63F7D02E79B47D001D8A59 /* HeadsetControl-MacOSTray.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		EB7A1C9E2F6B3D4A8C1E0F25 /* HeadsetControlCLib */ = {
+			isa = PBXGroup;
+			children = (
+				EB7A1C9E2F6B3D4A8C1E0F23 /* HeadsetControlCLib.h */,
+				EB7A1C9E2F6B3D4A8C1E0F24 /* module.modulemap */,
+			);
+			path = HeadsetControlCLib;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -279,14 +291,32 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/HeadsetControlCLib",
+					/opt/homebrew/include,
+					/usr/local/include,
+				);
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					/opt/homebrew/lib,
+					/usr/local/lib,
+				);
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 2.0;
+				MODULEMAP_FILE = "$(PROJECT_DIR)/HeadsetControlCLib/module.modulemap";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lheadsetcontrol",
+					"-lhidapi",
+					"-lstdc++",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "org.chrislauinger77.HeadsetControl-MacOSTray";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -313,14 +343,32 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/HeadsetControlCLib",
+					/opt/homebrew/include,
+					/usr/local/include,
+				);
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					/opt/homebrew/lib,
+					/usr/local/lib,
+				);
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 2.0;
+				MODULEMAP_FILE = "$(PROJECT_DIR)/HeadsetControlCLib/module.modulemap";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lheadsetcontrol",
+					"-lhidapi",
+					"-lstdc++",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "org.chrislauinger77.HeadsetControl-MacOSTray";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
