@@ -214,8 +214,8 @@ final class MockHeadsetControlService: HeadsetControlProviding {
         return [[
             "status": "success",
             "device": deviceName,
-            "vendor": "0xF00B",
-            "product": "0xA00C",
+            "vendor": "HeadsetControl",
+            "product": "Test Device",
             "capabilities": HeadsetCapability.menuCapabilities.map { $0.legacyCapabilityString },
             "battery": [
                 "status": "BATTERY_AVAILABLE",
