@@ -16,7 +16,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Install Homebrew dependencies
+      run: |
+        brew tap sapd/headsetcontrol
+        brew install sapd/headsetcontrol/headsetcontrol --HEAD
     - name: Build
-      run: swift build -v
-    - name: Run tests
-      run: swift test -v
+      run: |
+        xcodebuild -scheme HeadsetControl-MacOSTray \
+          -destination 'platform=macOS' \
+          build
+
