@@ -147,7 +147,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
 
     func updateStatusItem() {
         let provider = activeHeadsetControlProvider()
-        DispatchQueue.global(qos: .utility).async {
+        DispatchQueue.main.async {
             let devicesResult = provider.fetchDevices()
             var batteryLevelText: String? = nil
             if let device = devicesResult.first,
