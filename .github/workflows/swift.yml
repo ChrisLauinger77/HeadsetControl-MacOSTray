@@ -21,6 +21,12 @@ jobs:
         brew tap sapd/headsetcontrol
         brew install sapd/headsetcontrol/headsetcontrol --HEAD
     - name: Build
-      run: swift build -v
+      run: |
+        xcodebuild -scheme HeadsetControl-MacOSTray \
+          -destination 'platform=macOS' \
+          build
     - name: Run tests
-      run: swift test -v
+      run: |
+       xcodebuild -scheme HeadsetControl-MacOSTray \
+        -destination 'platform=macOS' \
+        test
