@@ -79,5 +79,7 @@ Desktop.ini
 *.preview-thumbnails
 *.preview
 
-## Xcode personal settings
-xcuserdata/
+# Ignore all user-specific Xcode data
+*.xcuserdata
+*.xcuserstate
+project.xcworkspace/xcuserdata/
