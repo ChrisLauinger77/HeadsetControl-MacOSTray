@@ -14,7 +14,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "HeadsetControl-MacOSTray",
-            dependencies: [],
+            dependencies: ["HeadsetControlCLib"],
             path: "HeadsetControl-MacOSTray"
         ),
         .testTarget(
