@@ -78,3 +78,6 @@ Desktop.ini
 # Ignore Xcode Preview files
 *.preview-thumbnails
 *.preview
+
+## Xcode personal settings
+xcuserdata/
