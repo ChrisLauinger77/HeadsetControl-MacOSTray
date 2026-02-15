@@ -30,7 +30,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
 
     private func runControlAction(_ action: @escaping (HeadsetControlProviding) -> Void) {
         let provider = activeHeadsetControlProvider()
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.main.async {
             action(provider)
         }
     }
