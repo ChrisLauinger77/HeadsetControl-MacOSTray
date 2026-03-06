@@ -85,8 +85,10 @@ final class HeadsetControlService: HeadsetControlProviding {
                 var device: [String: Any] = [:]
                 device["status"] = "success"
                 device["device"] = stringFromC(hsc_get_name(headset))
-                device["vendor"] = String(format: "0x%04x", hsc_get_vendor_id(headset))
-                device["product"] = String(format: "0x%04x", hsc_get_product_id(headset))
+                device["vendor"] = stringFromC(hsc_get_vendor_name(headset))
+                device["vendor_id"] = String(format: "0x%04x", hsc_get_vendor_id(headset))
+                device["product"] = stringFromC(hsc_get_product_name(headset))
+                device["product_id"] = String(format: "0x%04x", hsc_get_product_id(headset))
 
                 let capabilities = HeadsetCapability.menuCapabilities.compactMap { cap -> String? in
                     hsc_supports(headset, cap.rawValue) ? cap.legacyCapabilityString : nil
@@ -215,7 +217,9 @@ final class MockHeadsetControlService: HeadsetControlProviding {
             "status": "success",
             "device": deviceName,
             "vendor": "HeadsetControl",
+            "vendor_id": "0xf00b",
             "product": "Test Device",
+            "product_id": "0xa00c",
             "capabilities": HeadsetCapability.menuCapabilities.map { $0.legacyCapabilityString },
             "battery": [
                 "status": "BATTERY_AVAILABLE",
