@@ -12,6 +12,7 @@ struct AppIconImage: NSViewRepresentable {
         imageView.layer?.masksToBounds = true
         return imageView
     }
+
     func updateNSView(_ nsView: NSImageView, context: Context) {}
 }
 
@@ -29,6 +30,17 @@ struct SettingsView: View {
     @AppStorage("inactiveTimeOptions") private var inactiveTimeOptionsRaw: String = "1,2,5,10,15,30,45,60,75,90"
 
     private let inactiveTimeOptions: [Int] = [1, 2, 5, 10, 15, 30, 45, 60, 75, 90]
+    private let sidetoneLabelWidth: CGFloat = 96
+    private let sidetoneFieldWidth: CGFloat = 60
+
+    private let sidetoneFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .none
+        formatter.allowsFloats = false
+        formatter.minimum = NSNumber(value: -1)
+        formatter.maximum = NSNumber(value: 128)
+        return formatter
+    }()
 
     private var normalizedInactiveTimeOptions: [Int] {
         parseInactiveTimeOptions(raw: inactiveTimeOptionsRaw)
@@ -90,10 +102,47 @@ struct SettingsView: View {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "-"
     }
 
+    private var updateIntervalSecondsBinding: Binding<Int> {
+        Binding(
+            get: { Int(updateInterval.rounded()) },
+            set: { newValue in
+                updateInterval = Double(min(max(newValue, 60), 3600))
+            }
+        )
+    }
+
+    private func clampedSidetoneBinding(_ binding: Binding<Int>) -> Binding<Int> {
+        Binding(
+            get: { binding.wrappedValue },
+            set: { newValue in
+                binding.wrappedValue = min(max(newValue, -1), 128)
+            }
+        )
+    }
+
+    private func sidetoneRow(title: String, placeholder: String, value: Binding<Int>) -> some View {
+        let clampedValue = clampedSidetoneBinding(value)
+
+        return HStack(alignment: .center, spacing: 12) {
+            Text(title)
+                .frame(width: sidetoneLabelWidth, alignment: .trailing)
+
+            TextField(placeholder, value: clampedValue, formatter: sidetoneFormatter)
+                .frame(width: sidetoneFieldWidth)
+                .multilineTextAlignment(.trailing)
+                .textFieldStyle(.roundedBorder)
+
+            Stepper("", value: clampedValue, in: -1...128, step: 1)
+                .labelsHidden()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private var generalSettingsTab: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(NSLocalizedString("General Settings", comment: "General settings section header"))
                 .font(.headline)
+
             HStack(alignment: .center) {
                 Text(NSLocalizedString("Test Mode:", comment: "Test mode label"))
                 Picker("", selection: $testMode) {
@@ -116,11 +165,18 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.menu)
             }
-            HStack(alignment: .center) {
+
+            HStack(alignment: .center, spacing: 8) {
                 Text(NSLocalizedString("Update Interval (seconds):", comment: "Update interval label"))
                 Slider(value: $updateInterval, in: 60...3600, step: 30)
-                Text("\(Int(updateInterval)) s")
+                Text("\(updateIntervalSecondsBinding.wrappedValue) s")
+                    .monospacedDigit()
+                    .frame(width: 64, alignment: .trailing)
+                Stepper("", value: updateIntervalSecondsBinding, in: 60...3600, step: 1)
+                    .labelsHidden()
+
             }
+
             Toggle(NSLocalizedString("Notification on low battery", comment: "Low battery notification toggle label"), isOn: $notifyOnLowBattery)
         }
         .padding()
@@ -130,29 +186,40 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(NSLocalizedString("Sidetone", comment: "Sidetone section header"))
                 .font(.headline)
-            Text(NSLocalizedString("Sidetone Level Values (set -1 to hide)", comment: "Sidetone level info")).font(.subheadline)
-                .foregroundColor(.secondary)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(NSLocalizedString("Sidetone Level Values", comment: "Sidetone level info title"))
+                Text(NSLocalizedString("Valid range: -1...128. Use -1 to hide a menu entry.", comment: "Sidetone level range info"))
+            }
+            .font(.subheadline)
+            .foregroundColor(.secondary)
+
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(NSLocalizedString("Off:", comment: "Sidetone off label"))
-                    TextField(NSLocalizedString("Off", comment: "Sidetone off field"), value: $sidetoneOff, formatter: NumberFormatter())
-                }
-                HStack {
-                    Text(NSLocalizedString("Low:", comment: "Sidetone low label"))
-                    TextField(NSLocalizedString("Low", comment: "Sidetone low field"), value: $sidetoneLow, formatter: NumberFormatter())
-                }
-                HStack {
-                    Text(NSLocalizedString("Medium:", comment: "Sidetone medium label"))
-                    TextField(NSLocalizedString("Medium", comment: "Sidetone medium field"), value: $sidetoneMid, formatter: NumberFormatter())
-                }
-                HStack {
-                    Text(NSLocalizedString("High:", comment: "Sidetone high label"))
-                    TextField(NSLocalizedString("High", comment: "Sidetone high field"), value: $sidetoneHigh, formatter: NumberFormatter())
-                }
-                HStack {
-                    Text(NSLocalizedString("Maximum:", comment: "Sidetone maximum label"))
-                    TextField(NSLocalizedString("Maximum", comment: "Sidetone maximum field"), value: $sidetoneMax, formatter: NumberFormatter())
-                }
+                sidetoneRow(
+                    title: NSLocalizedString("Off:", comment: "Sidetone off label"),
+                    placeholder: NSLocalizedString("Off", comment: "Sidetone off field"),
+                    value: $sidetoneOff
+                )
+                sidetoneRow(
+                    title: NSLocalizedString("Low:", comment: "Sidetone low label"),
+                    placeholder: NSLocalizedString("Low", comment: "Sidetone low field"),
+                    value: $sidetoneLow
+                )
+                sidetoneRow(
+                    title: NSLocalizedString("Medium:", comment: "Sidetone medium label"),
+                    placeholder: NSLocalizedString("Medium", comment: "Sidetone medium field"),
+                    value: $sidetoneMid
+                )
+                sidetoneRow(
+                    title: NSLocalizedString("High:", comment: "Sidetone high label"),
+                    placeholder: NSLocalizedString("High", comment: "Sidetone high field"),
+                    value: $sidetoneHigh
+                )
+                sidetoneRow(
+                    title: NSLocalizedString("Maximum:", comment: "Sidetone maximum label"),
+                    placeholder: NSLocalizedString("Maximum", comment: "Sidetone maximum field"),
+                    value: $sidetoneMax
+                )
             }
         }
         .padding()
@@ -162,9 +229,11 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(NSLocalizedString("Inactive Time", comment: "Inactive time options section header"))
                 .font(.headline)
+
             Text(NSLocalizedString("(Off is always included.)", comment: "Inactive time options help text"))
                 .font(.subheadline)
                 .foregroundColor(.secondary)
+
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(NSLocalizedString("Off", comment: "Inactive Time off option"))
@@ -173,6 +242,7 @@ struct SettingsView: View {
                     Image(systemName: "checkmark")
                         .foregroundColor(.secondary)
                 }
+
                 ForEach(inactiveTimeOptions, id: \.self) { minutes in
                     Button(action: { toggleInactiveTime(minutes) }) {
                         HStack {
@@ -194,9 +264,11 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(NSLocalizedString("Equalizer Presets", comment: "Equalizer presets section header"))
                 .font(.headline)
+
             Text(NSLocalizedString("Comma-separated list of preset names.", comment: "Equalizer presets help text"))
                 .font(.subheadline)
                 .foregroundColor(.secondary)
+
             TextField(NSLocalizedString("Preset names", comment: "Equalizer presets text field label"), text: $equalizerPresets)
                 .textFieldStyle(.roundedBorder)
         }
@@ -208,19 +280,23 @@ struct SettingsView: View {
             AppIconImage()
                 .frame(width: 72, height: 72)
                 .shadow(radius: 4)
+
             Text(NSLocalizedString("HeadsetControl-MacOSTray", comment: "App title"))
                 .font(.title2)
                 .bold()
+
             VStack(spacing: 6) {
                 Text("\(NSLocalizedString("Version", comment: "App version label")): \(appVersion)")
                 Text("\(NSLocalizedString("Build", comment: "App build label")): \(appBuild)")
             }
             .font(.subheadline)
             .foregroundColor(.secondary)
-            
-            Link(NSLocalizedString("GitHub Repository", comment: "GitHub link label"),
-                 destination: URL(string: "https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray")!)
-                .font(.subheadline)
+
+            Link(
+                NSLocalizedString("GitHub Repository", comment: "GitHub link label"),
+                destination: URL(string: "https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray")!
+            )
+            .font(.subheadline)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
@@ -231,12 +307,16 @@ struct SettingsView: View {
             TabView {
                 generalSettingsTab
                     .tabItem { Text(NSLocalizedString("General", comment: "General settings tab")) }
+
                 sidetoneSettingsTab
                     .tabItem { Text(NSLocalizedString("Sidetone", comment: "Sidetone tab")) }
+
                 inactiveTimeSettingsTab
                     .tabItem { Text(NSLocalizedString("Inactive Time", comment: "Inactive time options tab")) }
+
                 equalizerSettingsTab
                     .tabItem { Text(NSLocalizedString("Equalizer Presets", comment: "Equalizer presets tab")) }
+
                 aboutTab
                     .tabItem { Text(NSLocalizedString("About", comment: "About tab")) }
             }
