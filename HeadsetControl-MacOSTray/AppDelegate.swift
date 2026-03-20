@@ -111,7 +111,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem?.button {
-            if let sfImage = NSImage(systemSymbolName: "headset", accessibilityDescription: "Headset") {
+            if let sfImage = NSImage(systemSymbolName: "headset", accessibilityDescription: NSLocalizedString("Headset", comment: "Headset symbol accessibility description")) {
                 button.image = sfImage
                 button.image?.isTemplate = true
             }
@@ -225,10 +225,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
         }
         guard let mins = minutes, mins > 0 else { return nil }
         if mins < 60 {
-            return " (<1h)"
+            return " (\(NSLocalizedString("<1h", comment: "Battery time less than one hour")))"
         }
         let hours = mins / 60 // floor division as requested
-        return " (\(hours)h)"
+        let hoursText = String(format: NSLocalizedString("%dh", comment: "Battery time in whole hours"), hours)
+        return " (\(hoursText))"
     }
 
     private let inactiveTimeOptionsDefault: [Int] = [1, 2, 5, 10, 15, 30, 45, 60, 75, 90]
@@ -279,9 +280,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
             return
         }
         for (idx, device) in devices.enumerated() {
-            let deviceName = device["device"] as? String ?? "Unknown Device"
-            let vendor = device["vendor"] as? String ?? "Unknown Vendor"
-            let product = device["product"] as? String ?? "Unknown Product"
+            let deviceName = device["device"] as? String ?? NSLocalizedString("Unknown Device", comment: "Unknown device fallback")
+            let vendor = device["vendor"] as? String ?? NSLocalizedString("Unknown Vendor", comment: "Unknown vendor fallback")
+            let product = device["product"] as? String ?? NSLocalizedString("Unknown Product", comment: "Unknown product fallback")
             menu.addItem(withTitle: String(format: "%@: %@", NSLocalizedString("Device", comment: "Device label"), deviceName), action: nil, keyEquivalent: "")
             menu.addItem(withTitle: String(format: "%@: %@", NSLocalizedString("Vendor", comment: "Vendor label"), vendor), action: nil, keyEquivalent: "")
             menu.addItem(withTitle: String(format: "%@: %@", NSLocalizedString("Product", comment: "Product label"), product), action: nil, keyEquivalent: "")
@@ -450,7 +451,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
             })
             let hostingController = NSHostingController(rootView: settingsView)
             let window = NSWindow(contentViewController: hostingController)
-            window.title = "HeadsetControl-MacOSTray"
+            window.title = NSLocalizedString("HeadsetControl-MacOSTray", comment: "App title")
             window.setContentSize(NSSize(width: 500, height: 400))
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
             window.isMovableByWindowBackground = true
@@ -467,7 +468,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
 
     func showLowBatteryNotification(level: Int) {
         let content = UNMutableNotificationContent()
-        content.title = "HeadsetControl-MacOSTray"
+        content.title = NSLocalizedString("HeadsetControl-MacOSTray", comment: "App title")
         content.body = String(format: NSLocalizedString("Low battery notification message", comment: "Low battery notification message"), level)
         content.sound = UNNotificationSound.default
         // App icon is shown by default in notification banner

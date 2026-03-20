@@ -13,7 +13,7 @@ struct ContentView: View {
             Image(systemName: "globe")
                 .imageScale(.large)
                 .foregroundStyle(.tint)
-            Text("Hello, world!")
+            Text(NSLocalizedString("Hello, world!", comment: "Placeholder content view text"))
         }
         .padding()
     }

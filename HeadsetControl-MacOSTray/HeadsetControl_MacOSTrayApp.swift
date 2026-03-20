@@ -12,7 +12,7 @@ HeadsetControl_MacOSTray: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
   var body: some Scene {
     Settings {
-      Text("Settings or main app window")
+      Text(NSLocalizedString("Settings or main app window", comment: "Placeholder settings scene text"))
     }
   }
 }

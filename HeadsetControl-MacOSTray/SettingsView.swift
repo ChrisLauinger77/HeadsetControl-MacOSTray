@@ -169,7 +169,7 @@ struct SettingsView: View {
             HStack(alignment: .center, spacing: 8) {
                 Text(NSLocalizedString("Update Interval (seconds):", comment: "Update interval label"))
                 Slider(value: $updateInterval, in: 60...3600, step: 30)
-                Text("\(updateIntervalSecondsBinding.wrappedValue) s")
+                Text(String(format: NSLocalizedString("%d s", comment: "Update interval value in seconds"), updateIntervalSecondsBinding.wrappedValue))
                     .monospacedDigit()
                     .frame(width: 64, alignment: .trailing)
                 Stepper("", value: updateIntervalSecondsBinding, in: 60...3600, step: 1)
