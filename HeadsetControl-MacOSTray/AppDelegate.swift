@@ -34,6 +34,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
             action(provider)
         }
     }
+
     // Handle Equalizer Preset selection
     @objc func setEqualizerPreset(_ sender: NSMenuItem) {
         guard let index = sender.representedObject as? Int else { return }
@@ -41,6 +42,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
             _ = provider.setEqualizerPreset(index: index)
         }
     }
+
     // Handle Rotate to Mute on/off selection
     @objc func setRotateToMute(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? Int else { return }
@@ -48,6 +50,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
             _ = provider.setRotateToMute(enabled: value != 0)
         }
     }
+
     // Handle Voice Prompts on/off selection
     @objc func setVoicePrompts(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? Int else { return }
@@ -55,6 +58,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
             _ = provider.setVoicePrompts(enabled: value != 0)
         }
     }
+
     // Handle Inactive Time selection
     @objc func setInactiveTime(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? Int else { return }
@@ -62,6 +66,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
             _ = provider.setInactiveTime(minutes: value)
         }
     }
+
     // Handle Lights on/off selection
     @objc func setLights(_ sender: NSMenuItem) {
         guard let value = sender.representedObject as? Int else { return }
@@ -69,6 +74,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
             _ = provider.setLights(enabled: value != 0)
         }
     }
+
     // Handle Sidetone level selection
     @objc func setSidetoneLevel(_ sender: NSMenuItem) {
         guard let level = sender.representedObject as? Int else { return }
@@ -76,6 +82,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
             _ = provider.setSidetone(level: level)
         }
     }
+
     var updateInterval: Int {
         get {
             let value = UserDefaults.standard.integer(forKey: "updateInterval")
@@ -93,6 +100,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
     var statusUpdateTimer: Timer?
     var latestDevices: [[String: Any]]? = nil
     var lowBatteryNotificationShown = false
+    private var activeTimerInterval: Int?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Request notification authorization and set delegate
@@ -108,6 +116,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                 button.image?.isTemplate = true
             }
         }
+
         let menu = NSMenu()
         menu.delegate = self
         statusItem?.menu = menu
@@ -118,6 +127,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
 
         // Start timer for periodic updates
         startStatusUpdateTimer()
+
         // Initial update
         updateStatusItem()
 
@@ -131,18 +141,40 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
             NSLog("HeadsetControl: normalized equalizerPresets in UserDefaults to '%@'", normalizedStored)
             #endif
         }
+
+        // Observe defaults changes so updateInterval takes effect immediately
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleUserDefaultsChanged(_:)),
+            name: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard
+        )
     }
 
     func startStatusUpdateTimer() {
         statusUpdateTimer?.invalidate()
-        let interval = Double(updateInterval)
-        statusUpdateTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+
+        let interval = updateInterval
+        activeTimerInterval = interval
+
+        statusUpdateTimer = Timer.scheduledTimer(withTimeInterval: Double(interval), repeats: true) { [weak self] _ in
             self?.updateStatusItem()
         }
     }
 
     @objc func handleRefreshNotification() {
         updateStatusItem()
+    }
+
+    @objc func handleUserDefaultsChanged(_ notification: Notification) {
+        let newInterval = updateInterval
+        guard newInterval != activeTimerInterval else { return }
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            guard self.updateInterval != self.activeTimerInterval else { return }
+            self.startStatusUpdateTimer()
+        }
     }
 
     func updateStatusItem() {
@@ -396,7 +428,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                     }
                 }
             }
-            
+
             if idx < devices.count - 1 {
                 menu.addItem(NSMenuItem.separator())
             }
@@ -432,7 +464,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
             settingsWindow?.makeKeyAndOrderFront(nil)
         }
     }
-    
+
     func showLowBatteryNotification(level: Int) {
         let content = UNMutableNotificationContent()
         content.title = "HeadsetControl-MacOSTray"
