@@ -13,7 +13,7 @@ struct ContentView: View {
             Image(systemName: "globe")
                 .imageScale(.large)
                 .foregroundStyle(.tint)
-            Text(NSLocalizedString("Hello, world!", comment: "Placeholder content view text"))
+            Text(NSLocalizedString("HeadsetControl-MacOSTray", comment: "App name"))
         }
         .padding()
     }

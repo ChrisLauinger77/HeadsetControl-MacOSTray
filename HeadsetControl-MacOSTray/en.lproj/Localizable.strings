@@ -2,11 +2,9 @@
 "Headset" = "Headset";
 "General Settings" = "General Settings";
 "Test Mode:" = "Test Mode:";
-"Enabled" = "Enabled";
 "Disabled" = "Disabled";
 "Update Interval (seconds):" = "Update Interval (seconds):";
 "%d s" = "%d s";
-"Binary Path:" = "Binary Path:";
 "Sidetone" = "Sidetone";
 "Sidetone Level Values" = "Sidetone Level Values";
 "Valid range: -1...128. Use -1 to hide a menu entry." = "Valid range: -1...128. Use -1 to hide a menu entry.";
@@ -74,5 +72,4 @@
 "GitHub Repository" = "GitHub Repository";
 "Version" = "Version";
 "Build" = "Build";
-"Hello, world!" = "Hello, world!";
 "Settings or main app window" = "Settings or main app window";

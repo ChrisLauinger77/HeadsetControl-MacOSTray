@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*" # Reacts to v1.1, v2.0, etc.
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check that tag points to main
+        id: main_check
+        run: |
+          git fetch origin main
+          TAG_COMMIT="$(git rev-list -n 1 "${GITHUB_REF_NAME}")"
+
+          if git merge-base --is-ancestor "$TAG_COMMIT" origin/main; then
+            echo "on_main=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "on_main=false" >> "$GITHUB_OUTPUT"
+            echo "Tag ${GITHUB_REF_NAME} is not pointing to a commit on main."
+          fi
+
+      - name: Create GitHub release
+        if: steps.main_check.outputs.on_main == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
