@@ -5,24 +5,22 @@ name: Swift
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   build:
-
     runs-on: macos-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Install Homebrew dependencies
-      run: |
-        brew tap sapd/headsetcontrol
-        brew install sapd/headsetcontrol/headsetcontrol --HEAD
-    - name: Build
-      run: |
-        xcodebuild -scheme HeadsetControl-MacOSTray \
-          -destination 'platform=macOS' \
-          build
-
+      - uses: actions/checkout@v6
+      - name: Install Homebrew dependencies
+        run: |
+          brew tap sapd/headsetcontrol
+          brew install sapd/headsetcontrol/headsetcontrol --HEAD
+      - name: Build
+        run: |
+          xcodebuild -scheme HeadsetControl-MacOSTray \
+            -destination 'platform=macOS' \
+            build
