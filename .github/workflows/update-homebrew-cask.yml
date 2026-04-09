@@ -1,0 +1,148 @@
+name: Update Homebrew cask
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  update-homebrew-cask:
+    runs-on: ubuntu-latest
+
+    env:
+      SOURCE_REPO: ChrisLauinger77/HeadsetControl-MacOSTray
+      TARGET_REPO: ChrisLauinger77/homebrew-cask
+      CASK_FILE: Casks/headsetcontrol-macostray.rb
+      ASSET_NAME: HeadsetControl-MacOSTray.zip
+
+    steps:
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Fetch latest release metadata
+        id: release
+        run: |
+          set -euo pipefail
+
+          release_json="$(curl -fsSL "https://api.github.com/repos/${SOURCE_REPO}/releases/latest")"
+          tag_name="$(echo "$release_json" | jq -r '.tag_name')"
+          version="${tag_name#v}"
+          asset_url="$(echo "$release_json" | jq -r --arg NAME "$ASSET_NAME" '.assets[] | select(.name == $NAME) | .browser_download_url')"
+
+          if [ -z "$tag_name" ] || [ "$tag_name" = "null" ]; then
+            echo "Failed to determine latest release tag"
+            exit 1
+          fi
+
+          if [ -z "$asset_url" ] || [ "$asset_url" = "null" ]; then
+            echo "Failed to find asset '$ASSET_NAME' in latest release"
+            exit 1
+          fi
+
+          echo "tag_name=$tag_name" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "asset_url=$asset_url" >> "$GITHUB_OUTPUT"
+
+      - name: Download release asset and compute SHA-256
+        id: asset
+        run: |
+          set -euo pipefail
+
+          curl -fsSL "${{ steps.release.outputs.asset_url }}" -o "$ASSET_NAME"
+          sha256="$(sha256sum "$ASSET_NAME" | awk '{print $1}')"
+
+          if [ -z "$sha256" ]; then
+            echo "Failed to compute sha256"
+            exit 1
+          fi
+
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout target cask repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TARGET_REPO }}
+          token: ${{ secrets.HOMEBREW_CASK_PUSH_TOKEN }}
+          path: homebrew-cask
+
+      - name: Read current cask values
+        id: current
+        run: |
+          set -euo pipefail
+
+          file="homebrew-cask/${CASK_FILE}"
+
+          if [ ! -f "$file" ]; then
+            echo "Cask file not found: $file"
+            exit 1
+          fi
+
+          current_version="$(sed -n 's/^[[:space:]]*version[[:space:]]*"\([^"]*\)".*/\1/p' "$file" | head -n1)"
+          current_sha256="$(sed -n 's/^[[:space:]]*sha256[[:space:]]*"\([^"]*\)".*/\1/p' "$file" | head -n1)"
+
+          if [ -z "$current_version" ] || [ -z "$current_sha256" ]; then
+            echo "Failed to parse version or sha256 from $file"
+            exit 1
+          fi
+
+          echo "current_version=$current_version" >> "$GITHUB_OUTPUT"
+          echo "current_sha256=$current_sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether update is needed
+        id: compare
+        run: |
+          set -euo pipefail
+
+          if [ "${{ steps.current.outputs.current_version }}" = "${{ steps.release.outputs.version }}" ] && \
+             [ "${{ steps.current.outputs.current_sha256 }}" = "${{ steps.asset.outputs.sha256 }}" ]; then
+            echo "update_needed=false" >> "$GITHUB_OUTPUT"
+            echo "Cask is already up to date."
+          else
+            echo "update_needed=true" >> "$GITHUB_OUTPUT"
+            echo "Cask update required."
+          fi
+
+      - name: Update cask file
+        if: steps.compare.outputs.update_needed == 'true'
+        run: |
+          set -euo pipefail
+
+          file="homebrew-cask/${CASK_FILE}"
+          new_version="${{ steps.release.outputs.version }}"
+          new_sha256="${{ steps.asset.outputs.sha256 }}"
+
+          ruby -e '
+            file = ARGV[0]
+            version = ARGV[1]
+            sha = ARGV[2]
+
+            content = File.read(file)
+            content.sub!(/^(\s*version\s*)"[^"]*"/, "\\1\"#{version}\"")
+            content.sub!(/^(\s*sha256\s*)"[^"]*"/, "\\1\"#{sha}\"")
+            File.write(file, content)
+          ' "$file" "$new_version" "$new_sha256"
+
+          echo "Updated $file:"
+          grep -E '^\s*(version|sha256)\s+"' "$file"
+
+      - name: Commit and push changes
+        if: steps.compare.outputs.update_needed == 'true'
+        run: |
+          set -euo pipefail
+
+          cd homebrew-cask
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add "${CASK_FILE}"
+
+          if git diff --cached --quiet; then
+            echo "No staged changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Update headsetcontrol-macostray cask to v${{ steps.release.outputs.version }}"
+          git push
