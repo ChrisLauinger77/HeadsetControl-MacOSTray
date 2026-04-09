@@ -62,7 +62,7 @@ jobs:
           echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
 
       - name: Checkout target cask repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.TARGET_REPO }}
           token: ${{ secrets.HOMEBREW_CASK_PUSH_TOKEN }}
