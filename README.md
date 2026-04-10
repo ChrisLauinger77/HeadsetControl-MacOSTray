@@ -1,5 +1,9 @@
 # HeadsetControl-MacOSTray
 
+[![Version](https://img.shields.io/github/v/release/ChrisLauinger77/HeadsetControl-MacOSTray)]()
+[![Github All Releases](https://img.shields.io/github/downloads/ChrisLauinger77/HeadsetControl-MacOSTray/total.svg)]()
+[![license](https://img.shields.io/github/license/ChrisLauinger77/HeadsetControl-MacOSTray)]()
+
 ![Screenshot](https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray/blob/main/HeadsetControl-MacOSTray/Assets.xcassets/AppIcon.appiconset/mac128.png)
 
 HeadsetControl-MacOSTray is a macOS background application that visualizes information from the [headsetcontrol](https://github.com/Sapd/HeadsetControl) command line tool. It provides a convenient status bar menu to display headset battery, chatmix, and device information, and allows quick access to settings and refresh actions.
