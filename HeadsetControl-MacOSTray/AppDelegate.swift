@@ -22,10 +22,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
 
     private func activeHeadsetControlProvider() -> HeadsetControlProviding {
         let testMode = UserDefaults.standard.integer(forKey: "testMode")
-        if testMode == 0 {
-            return headsetControlService
-        }
-        return MockHeadsetControlService(deviceIndex: testMode)
+        headsetControlService.setTestProfile(testMode)
+        return headsetControlService
     }
 
     private func runControlAction(_ action: @escaping (HeadsetControlProviding) -> Void) {

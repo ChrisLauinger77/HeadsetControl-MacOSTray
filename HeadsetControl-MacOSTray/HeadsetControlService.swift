@@ -76,6 +76,16 @@ private func legacyBatteryStatusString(_ status: hsc_battery_status_t) -> String
 final class HeadsetControlService: HeadsetControlProviding {
     private let libraryLock = NSLock()
 
+    func setTestProfile(_ profile: Int) {
+        let normalizedProfile = max(0, profile)
+
+        libraryLock.lock()
+        defer { libraryLock.unlock() }
+
+        hsc_set_test_profile(Int32(normalizedProfile))
+        hsc_enable_test_device(normalizedProfile != 0)
+    }
+
     func fetchDevices() -> [[String: Any]] {
         return withDiscoveredHeadsets { headsets in
             var devices: [[String: Any]] = []

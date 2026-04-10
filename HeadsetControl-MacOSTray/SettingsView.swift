@@ -146,24 +146,27 @@ struct SettingsView: View {
             HStack(alignment: .center) {
                 Text(NSLocalizedString("Test Mode:", comment: "Test mode label"))
                 Picker("", selection: $testMode) {
-                    Text(NSLocalizedString("Device 1", comment: "Test mode device 1"))
+                    Text(NSLocalizedString("1 - Error conditions", comment: "Test mode 1"))
                         .tag(1)
-                    Text(NSLocalizedString("Device 2", comment: "Test mode device 2"))
+                    Text(NSLocalizedString("2 - Charging battery", comment: "Test mode 2"))
                         .tag(2)
-                    Text(NSLocalizedString("Device 3", comment: "Test mode device 3"))
+                    Text(NSLocalizedString("3 - Basic battery", comment: "Test mode 3"))
                         .tag(3)
-                    Text(NSLocalizedString("Device 4", comment: "Test mode device 4"))
+                    Text(NSLocalizedString("4 - Battery unavailable", comment: "Test mode 4"))
                         .tag(4)
-                    Text(NSLocalizedString("Device 5", comment: "Test mode device 5"))
+                    Text(NSLocalizedString("5 - Timeout", comment: "Test mode 5"))
                         .tag(5)
-                    Text(NSLocalizedString("Device 6", comment: "Test mode device 6"))
+                    Text(NSLocalizedString("6 - Full battery", comment: "Test mode 6"))
                         .tag(6)
-                    Text(NSLocalizedString("Device 7", comment: "Test mode device 7"))
+                    Text(NSLocalizedString("7 - Low battery", comment: "Test mode 7"))
                         .tag(7)
                     Text(NSLocalizedString("Disabled", comment: "Test mode disabled"))
                         .tag(0)
                 }
                 .pickerStyle(.menu)
+                .onChange(of: testMode) { _, _ in
+                    NotificationCenter.default.post(name: .refreshHeadsetStatus, object: nil)
+                }
             }
 
             HStack(alignment: .center, spacing: 8) {
