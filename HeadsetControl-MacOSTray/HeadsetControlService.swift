@@ -65,11 +65,19 @@ struct HeadsetCapability {
 }
 
 private func legacyBatteryStatusString(_ status: hsc_battery_status_t) -> String? {
-    switch status {
-    case HSC_BATTERY_AVAILABLE: return "BATTERY_AVAILABLE"
-    case HSC_BATTERY_CHARGING: return "BATTERY_CHARGING"
-    case HSC_BATTERY_UNAVAILABLE: return "BATTERY_UNAVAILABLE"
-    default: return nil
+    switch status.rawValue {
+    case HSC_BATTERY_AVAILABLE.rawValue:
+        return "BATTERY_AVAILABLE"
+    case HSC_BATTERY_CHARGING.rawValue, 1:
+        return "BATTERY_CHARGING"
+    case HSC_BATTERY_UNAVAILABLE.rawValue:
+        return "BATTERY_UNAVAILABLE"
+    case HSC_BATTERY_ERROR.rawValue:
+        return "BATTERY_ERROR"
+    case HSC_BATTERY_TIMEOUT.rawValue:
+        return "BATTERY_TIMEOUT"
+    default:
+        return nil
     }
 }
 
