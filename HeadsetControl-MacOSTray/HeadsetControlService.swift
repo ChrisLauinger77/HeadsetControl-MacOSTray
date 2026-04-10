@@ -65,16 +65,34 @@ struct HeadsetCapability {
 }
 
 private func legacyBatteryStatusString(_ status: hsc_battery_status_t) -> String? {
-    switch status {
-    case HSC_BATTERY_AVAILABLE: return "BATTERY_AVAILABLE"
-    case HSC_BATTERY_CHARGING: return "BATTERY_CHARGING"
-    case HSC_BATTERY_UNAVAILABLE: return "BATTERY_UNAVAILABLE"
-    default: return nil
+    switch status.rawValue {
+    case HSC_BATTERY_AVAILABLE.rawValue:
+        return "BATTERY_AVAILABLE"
+    case HSC_BATTERY_CHARGING.rawValue, 1:
+        return "BATTERY_CHARGING"
+    case HSC_BATTERY_UNAVAILABLE.rawValue:
+        return "BATTERY_UNAVAILABLE"
+    case HSC_BATTERY_ERROR.rawValue:
+        return "BATTERY_ERROR"
+    case HSC_BATTERY_TIMEOUT.rawValue:
+        return "BATTERY_TIMEOUT"
+    default:
+        return nil
     }
 }
 
 final class HeadsetControlService: HeadsetControlProviding {
     private let libraryLock = NSLock()
+
+    func setTestProfile(_ profile: Int) {
+        let normalizedProfile = max(0, profile)
+
+        libraryLock.lock()
+        defer { libraryLock.unlock() }
+
+        hsc_set_test_profile(Int32(normalizedProfile))
+        hsc_enable_test_device(normalizedProfile != 0)
+    }
 
     func fetchDevices() -> [[String: Any]] {
         return withDiscoveredHeadsets { headsets in

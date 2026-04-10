@@ -22,10 +22,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
 
     private func activeHeadsetControlProvider() -> HeadsetControlProviding {
         let testMode = UserDefaults.standard.integer(forKey: "testMode")
-        if testMode == 0 {
-            return headsetControlService
-        }
-        return MockHeadsetControlService(deviceIndex: testMode)
+        headsetControlService.setTestProfile(testMode)
+        return headsetControlService
     }
 
     private func runControlAction(_ action: @escaping (HeadsetControlProviding) -> Void) {
@@ -187,17 +185,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
             let devicesResult = provider.fetchDevices()
             var batteryLevelText: String? = nil
             if let device = devicesResult.first,
-               let battery = device["battery"] as? [String: Any],
-               let level = battery["level"] as? Int {
-                batteryLevelText = "\(level)%"
+               let battery = device["battery"] as? [String: Any] {
+                batteryLevelText = self.batteryChargeText(from: battery)
                 let status = battery["status"] as? String ?? ""
-                let notifyOnLowBattery = UserDefaults.standard.bool(forKey: "notifyOnLowBattery")
-                if notifyOnLowBattery && ((status == "BATTERY_AVAILABLE" && level <= 25)) && !self.lowBatteryNotificationShown {
-                    self.showLowBatteryNotification(level: level)
-                    self.lowBatteryNotificationShown = true
-                }
-                if status == "BATTERY_AVAILABLE" && level > 25 && UserDefaults.standard.integer(forKey: "testMode") == 0 {
-                    self.lowBatteryNotificationShown = false
+                if let level = battery["level"] as? Int {
+                    let notifyOnLowBattery = UserDefaults.standard.bool(forKey: "notifyOnLowBattery")
+                    if notifyOnLowBattery && ((status == "BATTERY_AVAILABLE" && level <= 25)) && !self.lowBatteryNotificationShown {
+                        self.showLowBatteryNotification(level: level)
+                        self.lowBatteryNotificationShown = true
+                    }
+                    if status == "BATTERY_AVAILABLE" && level > 25 && UserDefaults.standard.integer(forKey: "testMode") == 0 {
+                        self.lowBatteryNotificationShown = false
+                    }
                 }
             }
             DispatchQueue.main.async {
@@ -211,6 +210,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                 self.latestDevices = devicesResult
             }
         }
+    }
+
+    private func batteryChargeText(from battery: [String: Any]) -> String? {
+        let status = battery["status"] as? String ?? ""
+        let isCharging = status == "BATTERY_CHARGING"
+        let prefix = isCharging ? "⚡︎ " : ""
+
+        if let level = battery["level"] as? Int, level >= 0 {
+            return prefix + "\(level)%"
+        }
+
+        return isCharging ? "⚡︎" : nil
     }
 
     // Helper to format time_to_empty_min into a submenu suffix like " (5h)" or " (<1h)".
@@ -290,10 +301,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
             menu.addItem(withTitle: String(format: "%@: %@", NSLocalizedString("Device", comment: "Device label"), deviceName), action: nil, keyEquivalent: "")
             menu.addItem(withTitle: String(format: "%@: %@", NSLocalizedString("Vendor", comment: "Vendor label"), vendor), action: nil, keyEquivalent: "")
             menu.addItem(withTitle: String(format: "%@: %@", NSLocalizedString("Product", comment: "Product label"), product), action: nil, keyEquivalent: "")
-            if let battery = device["battery"] as? [String: Any], let level = battery["level"] as? Int {
+            if let battery = device["battery"] as? [String: Any], let batteryText = batteryChargeText(from: battery) {
                 // Append time-to-empty in hours (submenu only) when available. Use floor rounding and "h" suffix; show "<1h" for under 60 minutes.
                 let suffix = formatTimeToEmpty(minutesAny: battery["time_to_empty_min"])
-                let title = String(format: "%@: %d%%%@", NSLocalizedString("Battery", comment: "Battery label"), level, suffix ?? "")
+                let title = String(format: "%@: %@%@", NSLocalizedString("Battery", comment: "Battery label"), batteryText, suffix ?? "")
                 menu.addItem(withTitle: title, action: nil, keyEquivalent: "")
             }
             if let chatmix = device["chatmix"] {
