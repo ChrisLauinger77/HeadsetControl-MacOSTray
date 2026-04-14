@@ -194,7 +194,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                         self.showLowBatteryNotification(level: level)
                         self.lowBatteryNotificationShown = true
                     }
-                    if status == "BATTERY_AVAILABLE" && level > 25 && UserDefaults.standard.integer(forKey: "testMode") == 0 {
+                    if status == "BATTERY_AVAILABLE" && level > 25 {
                         self.lowBatteryNotificationShown = false
                     }
                 }

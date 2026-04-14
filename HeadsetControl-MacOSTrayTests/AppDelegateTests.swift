@@ -8,4 +8,14 @@ class AppDelegateTests: XCTestCase {
         UserDefaults.standard.removeObject(forKey: "updateInterval")
         XCTAssertEqual(appDelegate.updateInterval, 600)
     }
+
+    func testLowBatteryTestProfileReturnsAvailableBatteryStatus() throws {
+        let service = HeadsetControlService()
+        service.setTestProfile(7)
+        defer { service.setTestProfile(0) }
+
+        let battery = try XCTUnwrap(service.fetchDevices().first?["battery"] as? [String: Any])
+        XCTAssertEqual(battery["level"] as? Int, 10)
+        XCTAssertEqual(battery["status"] as? String, "BATTERY_AVAILABLE")
+    }
 }

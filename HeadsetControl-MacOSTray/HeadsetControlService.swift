@@ -66,7 +66,7 @@ struct HeadsetCapability {
 
 private func legacyBatteryStatusString(_ status: hsc_battery_status_t) -> String? {
     switch status.rawValue {
-    case HSC_BATTERY_AVAILABLE.rawValue:
+    case HSC_BATTERY_AVAILABLE.rawValue, 2:
         return "BATTERY_AVAILABLE"
     case HSC_BATTERY_CHARGING.rawValue, 1:
         return "BATTERY_CHARGING"

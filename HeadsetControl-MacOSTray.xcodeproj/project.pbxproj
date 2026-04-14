@@ -311,7 +311,7 @@
 					/usr/local/lib,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = 2.5;
+				MARKETING_VERSION = 2.6;
 				MODULEMAP_FILE = "$(PROJECT_DIR)/HeadsetControlCLib/module.modulemap";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -363,7 +363,7 @@
 					/usr/local/lib,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = 2.5;
+				MARKETING_VERSION = 2.6;
 				MODULEMAP_FILE = "$(PROJECT_DIR)/HeadsetControlCLib/module.modulemap";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
