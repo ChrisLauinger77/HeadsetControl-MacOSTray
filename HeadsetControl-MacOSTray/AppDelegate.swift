@@ -91,6 +91,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
         }
     }
 
+    var lowBatteryThreshold: Int {
+        get {
+            let value = UserDefaults.standard.integer(forKey: "lowBatteryThreshold")
+            return value == 0 ? 25 : min(max(value, 1), 30)
+        }
+        set {
+            UserDefaults.standard.set(min(max(newValue, 1), 30), forKey: "lowBatteryThreshold")
+        }
+    }
+
     var statusItem: NSStatusItem?
     var statusMenu: NSMenu?
     var settingsWindow: NSWindow?
@@ -189,12 +199,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                 batteryLevelText = self.batteryChargeText(from: battery)
                 let status = battery["status"] as? String ?? ""
                 if let level = battery["level"] as? Int {
-                    let notifyOnLowBattery = UserDefaults.standard.bool(forKey: "notifyOnLowBattery")
-                    if notifyOnLowBattery && ((status == "BATTERY_AVAILABLE" && level <= 25)) && !self.lowBatteryNotificationShown {
+                    let notifyOnLowBattery = UserDefaults.standard.object(forKey: "notifyOnLowBattery") as? Bool ?? true
+                    let lowBatteryThreshold = self.lowBatteryThreshold
+                    if notifyOnLowBattery && status == "BATTERY_AVAILABLE" && level <= lowBatteryThreshold && !self.lowBatteryNotificationShown {
                         self.showLowBatteryNotification(level: level)
                         self.lowBatteryNotificationShown = true
                     }
-                    if status == "BATTERY_AVAILABLE" && level > 25 {
+                    if status == "BATTERY_AVAILABLE" && level > lowBatteryThreshold {
                         self.lowBatteryNotificationShown = false
                     }
                 }

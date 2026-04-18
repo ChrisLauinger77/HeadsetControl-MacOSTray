@@ -9,6 +9,23 @@ class AppDelegateTests: XCTestCase {
         XCTAssertEqual(appDelegate.updateInterval, 600)
     }
 
+    func testDefaultLowBatteryThreshold() {
+        UserDefaults.standard.removeObject(forKey: "lowBatteryThreshold")
+        let appDelegate = AppDelegate()
+        XCTAssertEqual(appDelegate.lowBatteryThreshold, 25)
+    }
+
+    func testLowBatteryThresholdClampsToValidRange() {
+        let appDelegate = AppDelegate()
+        defer { UserDefaults.standard.removeObject(forKey: "lowBatteryThreshold") }
+
+        appDelegate.lowBatteryThreshold = 99
+        XCTAssertEqual(appDelegate.lowBatteryThreshold, 30)
+
+        appDelegate.lowBatteryThreshold = -5
+        XCTAssertEqual(appDelegate.lowBatteryThreshold, 1)
+    }
+
     func testLowBatteryTestProfileReturnsAvailableBatteryStatus() throws {
         let service = HeadsetControlService()
         service.setTestProfile(7)

@@ -41,6 +41,7 @@
 "Lights" = "Lights";
 "Low" = "Low";
 "Low battery notification message" = "Battery level is low (%d%%). Please charge your headset.";
+"Low battery threshold:" = "Low battery threshold:";
 "Low:" = "Low:";
 "Maximum" = "Maximum";
 "Maximum:" = "Maximum:";

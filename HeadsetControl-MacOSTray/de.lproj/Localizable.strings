@@ -41,6 +41,7 @@
 "Lights" = "LED";
 "Low" = "Niedrig";
 "Low battery notification message" = "Batteriestand ist niedrig (%d%%). Bitte laden Sie Ihr Headset auf.";
+"Low battery threshold:" = "Schwellenwert für niedrigen Batteriestand:";
 "Low:" = "Niedrig:";
 "Maximum" = "Maximal";
 "Maximum:" = "Maximal:";

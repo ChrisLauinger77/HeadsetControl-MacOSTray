@@ -41,6 +41,7 @@
 "Lights" = "Luces";
 "Low" = "Bajo";
 "Low battery notification message" = "El nivel de batería es bajo (%d%%). Por favor, carga los auriculares.";
+"Low battery threshold:" = "Umbral de batería baja:";
 "Low:" = "Bajo:";
 "Maximum" = "Máximo";
 "Maximum:" = "Máximo:";

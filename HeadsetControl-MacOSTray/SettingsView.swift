@@ -27,6 +27,7 @@ struct SettingsView: View {
     @AppStorage("testMode") var testMode: Int = 0
     @AppStorage("equalizerPresets") var equalizerPresets: String = "Preset 1,Preset 2,Preset 3,Preset 4"
     @AppStorage("notifyOnLowBattery") var notifyOnLowBattery: Bool = true
+    @AppStorage("lowBatteryThreshold") var lowBatteryThreshold: Int = 25
     @AppStorage("inactiveTimeOptions") private var inactiveTimeOptionsRaw: String = "1,2,5,10,15,30,45,60,75,90"
 
     private let inactiveTimeOptions: [Int] = [1, 2, 5, 10, 15, 30, 45, 60, 75, 90]
@@ -111,6 +112,15 @@ struct SettingsView: View {
         )
     }
 
+    private var lowBatteryThresholdBinding: Binding<Int> {
+        Binding(
+            get: { min(max(lowBatteryThreshold, 1), 30) },
+            set: { newValue in
+                lowBatteryThreshold = min(max(newValue, 1), 30)
+            }
+        )
+    }
+
     private func clampedSidetoneBinding(_ binding: Binding<Int>) -> Binding<Int> {
         Binding(
             get: { binding.wrappedValue },
@@ -181,6 +191,22 @@ struct SettingsView: View {
             }
 
             Toggle(NSLocalizedString("Notification on low battery", comment: "Low battery notification toggle label"), isOn: $notifyOnLowBattery)
+
+            HStack(alignment: .center) {
+                Text(NSLocalizedString("Low battery threshold:", comment: "Low battery threshold label"))
+                Spacer()
+                Picker("", selection: lowBatteryThresholdBinding) {
+                    ForEach(1...30, id: \.self) { value in
+                        Text("\(value)%")
+                            .tag(value)
+                    }
+                }
+                .frame(width: 80)
+                .pickerStyle(.menu)
+            }
+            .onChange(of: lowBatteryThreshold) { _, _ in
+                NotificationCenter.default.post(name: .refreshHeadsetStatus, object: nil)
+            }
         }
         .padding()
     }

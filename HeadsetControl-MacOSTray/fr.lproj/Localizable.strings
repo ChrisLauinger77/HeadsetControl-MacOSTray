@@ -41,6 +41,7 @@
 "Lights" = "Éclairage";
 "Low" = "Faible";
 "Low battery notification message" = "Le niveau de batterie est faible (%d%%). Veuillez recharger votre casque.";
+"Low battery threshold:" = "Seuil de batterie faible :";
 "Low:" = "Faible :";
 "Maximum" = "Maximum";
 "Maximum:" = "Maximum :";
