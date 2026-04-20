@@ -73,6 +73,18 @@ If you like my work, please consider supporting me ! <br><br>
 4. Check/change settings of the app when the headsetcontrol binary is not found
 5. You need to allow the execution of the app in MacOS security settings.
 
+## Update
+
+1. This app
+   ```sh
+   brew upgrade
+   ```
+2. headsetcontrol
+   ```sh
+   brew reinstall headsetcontrol
+   ```
+   headsetcontrol is used to talk to the supported headsets over a library. So every once on a while it should be updated even when the app has no updates. The app will use the updated library after restart of the app. Additional headsets might be added as well as new features for existing ones.
+
 ## Build with Xcode
 
 1. Clone this repository:
