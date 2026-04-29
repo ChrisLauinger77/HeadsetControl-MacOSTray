@@ -1,5 +1,6 @@
 # HeadsetControl-MacOSTray
 
+[![Github Latest Releases](https://img.shields.io/github/downloads/ChrisLauinger77/HeadsetControl-MacOSTray/latest/total)]()
 [![Version](https://img.shields.io/github/v/release/ChrisLauinger77/HeadsetControl-MacOSTray)]()
 [![Github All Releases](https://img.shields.io/github/downloads/ChrisLauinger77/HeadsetControl-MacOSTray/total.svg)]()
 [![license](https://img.shields.io/github/license/ChrisLauinger77/HeadsetControl-MacOSTray)]()
