@@ -7,7 +7,7 @@
 
 ![Screenshot](https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray/blob/main/HeadsetControl-MacOSTray/Assets.xcassets/AppIcon.appiconset/mac128.png)
 
-HeadsetControl-MacOSTray is a macOS background application that visualizes information from the [headsetcontrol](https://github.com/Sapd/HeadsetControl) command line tool. It provides a convenient status bar menu to display headset battery, chatmix, and device information, and allows quick access to settings and refresh actions.
+HeadsetControl-MacOSTray is a macOS background application that uses the [headsetcontrol](https://github.com/Sapd/HeadsetControl) library to talk directly to supported headsets. It provides a convenient status bar menu to display headset battery, chatmix, and device information, and allows quick access to settings and refresh actions.
 
 ## Screenshots
 
@@ -33,20 +33,21 @@ Settings
 - Settings panel for configuration
 - Refresh button to manually update headset status
 - Automatic periodic updates
-- Error handling for missing or misconfigured headsetcontrol binary
+- Direct integration with libheadsetcontrol through the headsetcontrol C API
+- Test mode for checking menu and battery states without a connected headset
 
 ## Dynamic Capability Menu
 
-- The tray menu now dynamically displays controls based on the capabilities reported by your headset. If a capability is available, a corresponding submenu or action is shown:
+- The tray menu dynamically displays controls based on the capabilities reported by your headset. If a capability is available, a corresponding submenu or action is shown:
 
-- **Sidetone**: Choose from Off, Low, Mid, High, Max. Sets sidetone level via `headsetcontrol -s <level>`.
-- **Lights**: Toggle On/Off. Sets lights via `headsetcontrol -l <0|1>`.
-- **Inactive Time**: Choose from Off, 5, 15, 30, 45, 60, 75, 90 minutes. Sets timeout via `headsetcontrol -i <minutes>`.
-- **Voice Prompts**: Toggle On/Off. Sets voice prompts via `headsetcontrol -v <0|1>`.
-- **Rotate to Mute**: Toggle On/Off. Sets rotate-to-mute via `headsetcontrol -r <0|1>`.
-- **Equalizer Preset**: If available, shows preset names from the device; otherwise, shows four generic presets. Sets preset via `headsetcontrol -p <index>`.
+- **Sidetone**: Choose from Off, Low, Mid, High, Max. Sets the sidetone level through the headsetcontrol library.
+- **Lights**: Toggle headset lights on or off.
+- **Inactive Time**: Choose the headset idle timeout from the configured options.
+- **Voice Prompts**: Toggle headset voice prompts on or off.
+- **Rotate to Mute**: Toggle rotate-to-mute on or off.
+- **Equalizer Preset**: If available, shows preset names from the device; otherwise, shows the configured generic presets.
 
-These menu items only appear if the headset reports the corresponding capability in its JSON output. Selecting an option will immediately apply the setting using the `headsetcontrol` binary.
+These menu items only appear if the headset reports the corresponding capability through libheadsetcontrol. Selecting an option immediately applies the setting through the library; V2.x no longer launches the `headsetcontrol` command line tool as a subprocess.
 
 ## Support
 
@@ -58,11 +59,11 @@ If you like my work, please consider supporting me ! <br><br>
 ## Preconditions
 
 1. MacOS 14 or later
-2. [homebrew](https://brew.sh/) to install headsetcontrol binary
+2. [Homebrew](https://brew.sh/) to install headsetcontrol and the app
 
 ## Installation
 
-1. Install [headsetcontrol](https://github.com/Sapd/HeadsetControl) via [Homebrew](https://brew.sh/):
+1. Install [headsetcontrol](https://github.com/Sapd/HeadsetControl) via [Homebrew](https://brew.sh/). The app links against the installed library and headers:
    ```sh
    brew install sapd/headsetcontrol/headsetcontrol --HEAD
    ```
@@ -70,9 +71,8 @@ If you like my work, please consider supporting me ! <br><br>
    ```sh
    brew install --cask chrislauinger77/cask/headsetcontrol-macostray
    ```
-3. Verify the headsetcontrol binary works in a terminal (headsetcontrol -o json)
-4. Check/change settings of the app when the headsetcontrol binary is not found
-5. You need to allow the execution of the app in MacOS security settings.
+3. Restart the app after installing or updating headsetcontrol so macOS loads the current library.
+4. You need to allow the execution of the app in macOS security settings.
 
 ## Update
 
@@ -84,27 +84,28 @@ If you like my work, please consider supporting me ! <br><br>
    ```sh
    brew reinstall headsetcontrol
    ```
-   headsetcontrol is used to talk to the supported headsets over a library. So every once on a while it should be updated even when the app has no updates. The app will use the updated library after restart of the app. Additional headsets might be added as well as new features for existing ones.
+   headsetcontrol is used as a library to talk to supported headsets. It should be updated occasionally even when the app has no updates. The app will use the updated library after restart of the app. Additional headsets might be added as well as new features for existing ones.
 
 ## Build with Xcode
 
 1. Clone this repository:
    ```sh
-   git clone https://github.com/yourusername/HeadsetControl-MacOSTray.git
+   git clone https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray.git
    ```
-2. Open the project in Xcode and build.
+2. Install headsetcontrol so Xcode can find `headsetcontrol_c.h` and `libheadsetcontrol`.
+3. Open the project in Xcode and build.
 
 ## Usage
 
 - The app runs in the background and places an icon in the macOS status bar.
 - Click the icon to view headset data.
-- Access settings via the dialog to configure update interval, binary path, and test mode.
+- Access settings via the dialog to configure update interval, sidetone levels, inactive-time options, equalizer preset names, low-battery notifications, and test mode.
 - Use the Refresh button in the settings panel to manually update headset status.
 
 ## Troubleshooting
 
-- **Refresh button does not work:** Ensure you are using the latest version. The app now observes refresh notifications and updates the status when the button is pressed.
-- **headsetcontrol binary not found:** Check the path in settings and ensure headsetcontrol is installed.
+- **No headset data appears:** Ensure headsetcontrol is installed, restart the app, and check that your headset is supported by the installed headsetcontrol version.
+- **Build fails with `headsetcontrol_c.h not found`:** Install headsetcontrol through Homebrew and make sure the headers are available in `/opt/homebrew/include` or `/usr/local/include`.
 
 ## License
 
