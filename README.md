@@ -110,3 +110,7 @@ If you like my work, please consider supporting me ! <br><br>
 ## License
 
 See [LICENSE](LICENSE) for details.
+
+## Credits
+
+- [Sapd](https://github.com/sapd/) for [HeadsetControl](https://github.com/Sapd/HeadsetControl)
