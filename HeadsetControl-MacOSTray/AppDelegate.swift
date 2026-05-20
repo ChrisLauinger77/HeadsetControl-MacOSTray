@@ -329,8 +329,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
                     ("CAP_INACTIVE_TIME", NSLocalizedString("Inactive Time", comment: "Inactive Time capability")),
                     ("CAP_VOICE_PROMPTS", NSLocalizedString("Voice Prompts", comment: "Voice Prompts capability")),
                     ("CAP_ROTATE_TO_MUTE", NSLocalizedString("Rotate to Mute", comment: "Rotate to Mute capability")),
-                    ("CAP_EQUALIZER_PRESET", NSLocalizedString("Equalizer Preset", comment: "Equalizer Preset capability")),
-                    ("CAP_EQUALIZER", NSLocalizedString("Equalizer", comment: "Equalizer capability"))
+                    ("CAP_EQUALIZER_PRESET", NSLocalizedString("Equalizer Preset", comment: "Equalizer Preset capability"))
                 ]
                 for (cap, title) in capabilityMap {
                     if capabilities.contains(cap) {
@@ -466,30 +465,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
     }
 
     @objc func openSettings() {
-        guard let mainWindow = NSApplication.shared.windows.first else { return }
         if settingsWindow == nil {
-            // Pass a close handler to SettingsView that ends the sheet
             let settingsView = SettingsView(onClose: { [weak self] in
-                if let window = self?.settingsWindow {
-                    mainWindow.endSheet(window)
-                    self?.settingsWindow = nil
-                }
+                self?.settingsWindow?.close()
             })
             let hostingController = NSHostingController(rootView: settingsView)
             let window = NSWindow(contentViewController: hostingController)
             window.title = NSLocalizedString("HeadsetControl-MacOSTray", comment: "App title")
-            window.setContentSize(NSSize(width: 500, height: 400))
+            window.setContentSize(NSSize(width: 580, height: 440))
+            window.minSize = NSSize(width: 520, height: 380)
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+            window.titlebarAppearsTransparent = true
+            window.toolbarStyle = .unified
+            window.isMovable = true
             window.isMovableByWindowBackground = true
             window.isReleasedWhenClosed = false
+            window.collectionBehavior = [.moveToActiveSpace]
             window.delegate = self
+            window.center()
             settingsWindow = window
-            mainWindow.beginSheet(window, completionHandler: { _ in
-                self.settingsWindow = nil
-            })
-        } else {
-            settingsWindow?.makeKeyAndOrderFront(nil)
         }
+        NSApp.activate(ignoringOtherApps: true)
+        settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard notification.object as? NSWindow === settingsWindow else { return }
+        settingsWindow = nil
     }
 
     func showLowBatteryNotification(level: Int) {

@@ -59,8 +59,7 @@ struct HeadsetCapability {
         .inactiveTime,
         .voicePrompts,
         .rotateToMute,
-        .equalizerPreset,
-        .equalizer
+        .equalizerPreset
     ]
 }
 
