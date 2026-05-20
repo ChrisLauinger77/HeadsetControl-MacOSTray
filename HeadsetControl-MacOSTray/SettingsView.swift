@@ -16,6 +16,25 @@ struct AppIconImage: NSViewRepresentable {
     func updateNSView(_ nsView: NSImageView, context: Context) {}
 }
 
+struct SettingsSection<Content: View>: View {
+    let title: String
+    let systemImage: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                content
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+        } label: {
+            Label(title, systemImage: systemImage)
+                .font(.headline)
+        }
+    }
+}
+
 struct SettingsView: View {
     @AppStorage("sidetoneOff") var sidetoneOff: Int = 0
     @AppStorage("sidetoneLow") var sidetoneLow: Int = 32
@@ -148,160 +167,183 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private func settingsLabel(_ title: String) -> some View {
+        Text(title)
+            .foregroundColor(.secondary)
+            .frame(width: 180, alignment: .trailing)
+    }
+
     private var generalSettingsTab: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(NSLocalizedString("General Settings", comment: "General settings section header"))
-                .font(.headline)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                SettingsSection(
+                    title: NSLocalizedString("General Settings", comment: "General settings section header"),
+                    systemImage: "gearshape"
+                ) {
+                    HStack(alignment: .center, spacing: 12) {
+                        settingsLabel(NSLocalizedString("Test Mode:", comment: "Test mode label"))
+                        Picker("", selection: $testMode) {
+                            Text(NSLocalizedString("1 - Error conditions", comment: "Test mode 1"))
+                                .tag(1)
+                            Text(NSLocalizedString("2 - Charging battery", comment: "Test mode 2"))
+                                .tag(2)
+                            Text(NSLocalizedString("3 - Basic battery", comment: "Test mode 3"))
+                                .tag(3)
+                            Text(NSLocalizedString("4 - Battery unavailable", comment: "Test mode 4"))
+                                .tag(4)
+                            Text(NSLocalizedString("5 - Timeout", comment: "Test mode 5"))
+                                .tag(5)
+                            Text(NSLocalizedString("6 - Full battery", comment: "Test mode 6"))
+                                .tag(6)
+                            Text(NSLocalizedString("7 - Low battery", comment: "Test mode 7"))
+                                .tag(7)
+                            Text(NSLocalizedString("Disabled", comment: "Test mode disabled"))
+                                .tag(0)
+                        }
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: 260, alignment: .leading)
+                        .onChange(of: testMode) { _, _ in
+                            NotificationCenter.default.post(name: .refreshHeadsetStatus, object: nil)
+                        }
+                    }
 
-            HStack(alignment: .center) {
-                Text(NSLocalizedString("Test Mode:", comment: "Test mode label"))
-                Picker("", selection: $testMode) {
-                    Text(NSLocalizedString("1 - Error conditions", comment: "Test mode 1"))
-                        .tag(1)
-                    Text(NSLocalizedString("2 - Charging battery", comment: "Test mode 2"))
-                        .tag(2)
-                    Text(NSLocalizedString("3 - Basic battery", comment: "Test mode 3"))
-                        .tag(3)
-                    Text(NSLocalizedString("4 - Battery unavailable", comment: "Test mode 4"))
-                        .tag(4)
-                    Text(NSLocalizedString("5 - Timeout", comment: "Test mode 5"))
-                        .tag(5)
-                    Text(NSLocalizedString("6 - Full battery", comment: "Test mode 6"))
-                        .tag(6)
-                    Text(NSLocalizedString("7 - Low battery", comment: "Test mode 7"))
-                        .tag(7)
-                    Text(NSLocalizedString("Disabled", comment: "Test mode disabled"))
-                        .tag(0)
-                }
-                .pickerStyle(.menu)
-                .onChange(of: testMode) { _, _ in
-                    NotificationCenter.default.post(name: .refreshHeadsetStatus, object: nil)
-                }
-            }
-
-            HStack(alignment: .center, spacing: 8) {
-                Text(NSLocalizedString("Update Interval (seconds):", comment: "Update interval label"))
-                Slider(value: $updateInterval, in: 60...3600, step: 30)
-                Text(String(format: NSLocalizedString("%d s", comment: "Update interval value in seconds"), updateIntervalSecondsBinding.wrappedValue))
-                    .monospacedDigit()
-                    .frame(width: 64, alignment: .trailing)
-                Stepper("", value: updateIntervalSecondsBinding, in: 60...3600, step: 1)
-                    .labelsHidden()
-
-            }
-
-            Toggle(NSLocalizedString("Notification on low battery", comment: "Low battery notification toggle label"), isOn: $notifyOnLowBattery)
-
-            HStack(alignment: .center) {
-                Text(NSLocalizedString("Low battery threshold:", comment: "Low battery threshold label"))
-                Spacer()
-                Picker("", selection: lowBatteryThresholdBinding) {
-                    ForEach(1...30, id: \.self) { value in
-                        Text("\(value)%")
-                            .tag(value)
+                    HStack(alignment: .center, spacing: 12) {
+                        settingsLabel(NSLocalizedString("Update Interval (seconds):", comment: "Update interval label"))
+                        Slider(value: $updateInterval, in: 60...3600, step: 30)
+                        Text(String(format: NSLocalizedString("%d s", comment: "Update interval value in seconds"), updateIntervalSecondsBinding.wrappedValue))
+                            .monospacedDigit()
+                            .frame(width: 64, alignment: .trailing)
+                        Stepper("", value: updateIntervalSecondsBinding, in: 60...3600, step: 1)
+                            .labelsHidden()
                     }
                 }
-                .frame(width: 80)
-                .pickerStyle(.menu)
+
+                SettingsSection(
+                    title: NSLocalizedString("Battery", comment: "Battery settings section header"),
+                    systemImage: "battery.50"
+                ) {
+                    Toggle(NSLocalizedString("Notification on low battery", comment: "Low battery notification toggle label"), isOn: $notifyOnLowBattery)
+
+                    HStack(alignment: .center, spacing: 12) {
+                        settingsLabel(NSLocalizedString("Low battery threshold:", comment: "Low battery threshold label"))
+                        Picker("", selection: lowBatteryThresholdBinding) {
+                            ForEach(1...30, id: \.self) { value in
+                                Text("\(value)%")
+                                    .tag(value)
+                            }
+                        }
+                        .frame(width: 90)
+                        .pickerStyle(.menu)
+                        .onChange(of: lowBatteryThreshold) { _, _ in
+                            NotificationCenter.default.post(name: .refreshHeadsetStatus, object: nil)
+                        }
+                    }
+                }
             }
-            .onChange(of: lowBatteryThreshold) { _, _ in
-                NotificationCenter.default.post(name: .refreshHeadsetStatus, object: nil)
-            }
+            .padding(20)
         }
-        .padding()
     }
 
     private var sidetoneSettingsTab: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(NSLocalizedString("Sidetone", comment: "Sidetone section header"))
-                .font(.headline)
+        ScrollView {
+            SettingsSection(
+                title: NSLocalizedString("Sidetone", comment: "Sidetone section header"),
+                systemImage: "waveform"
+            ) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(NSLocalizedString("Sidetone Level Values", comment: "Sidetone level info title"))
+                    Text(NSLocalizedString("Valid range: -1...128. Use -1 to hide a menu entry.", comment: "Sidetone level range info"))
+                }
+                .font(.subheadline)
+                .foregroundColor(.secondary)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(NSLocalizedString("Sidetone Level Values", comment: "Sidetone level info title"))
-                Text(NSLocalizedString("Valid range: -1...128. Use -1 to hide a menu entry.", comment: "Sidetone level range info"))
+                VStack(alignment: .leading, spacing: 8) {
+                    sidetoneRow(
+                        title: NSLocalizedString("Off:", comment: "Sidetone off label"),
+                        placeholder: NSLocalizedString("Off", comment: "Sidetone off field"),
+                        value: $sidetoneOff
+                    )
+                    sidetoneRow(
+                        title: NSLocalizedString("Low:", comment: "Sidetone low label"),
+                        placeholder: NSLocalizedString("Low", comment: "Sidetone low field"),
+                        value: $sidetoneLow
+                    )
+                    sidetoneRow(
+                        title: NSLocalizedString("Medium:", comment: "Sidetone medium label"),
+                        placeholder: NSLocalizedString("Medium", comment: "Sidetone medium field"),
+                        value: $sidetoneMid
+                    )
+                    sidetoneRow(
+                        title: NSLocalizedString("High:", comment: "Sidetone high label"),
+                        placeholder: NSLocalizedString("High", comment: "Sidetone high field"),
+                        value: $sidetoneHigh
+                    )
+                    sidetoneRow(
+                        title: NSLocalizedString("Maximum:", comment: "Sidetone maximum label"),
+                        placeholder: NSLocalizedString("Maximum", comment: "Sidetone maximum field"),
+                        value: $sidetoneMax
+                    )
+                }
             }
-            .font(.subheadline)
-            .foregroundColor(.secondary)
-
-            VStack(alignment: .leading, spacing: 8) {
-                sidetoneRow(
-                    title: NSLocalizedString("Off:", comment: "Sidetone off label"),
-                    placeholder: NSLocalizedString("Off", comment: "Sidetone off field"),
-                    value: $sidetoneOff
-                )
-                sidetoneRow(
-                    title: NSLocalizedString("Low:", comment: "Sidetone low label"),
-                    placeholder: NSLocalizedString("Low", comment: "Sidetone low field"),
-                    value: $sidetoneLow
-                )
-                sidetoneRow(
-                    title: NSLocalizedString("Medium:", comment: "Sidetone medium label"),
-                    placeholder: NSLocalizedString("Medium", comment: "Sidetone medium field"),
-                    value: $sidetoneMid
-                )
-                sidetoneRow(
-                    title: NSLocalizedString("High:", comment: "Sidetone high label"),
-                    placeholder: NSLocalizedString("High", comment: "Sidetone high field"),
-                    value: $sidetoneHigh
-                )
-                sidetoneRow(
-                    title: NSLocalizedString("Maximum:", comment: "Sidetone maximum label"),
-                    placeholder: NSLocalizedString("Maximum", comment: "Sidetone maximum field"),
-                    value: $sidetoneMax
-                )
-            }
+            .padding(20)
         }
-        .padding()
     }
 
     private var inactiveTimeSettingsTab: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(NSLocalizedString("Inactive Time", comment: "Inactive time options section header"))
-                .font(.headline)
+        ScrollView {
+            SettingsSection(
+                title: NSLocalizedString("Inactive Time", comment: "Inactive time options section header"),
+                systemImage: "timer"
+            ) {
+                Text(NSLocalizedString("(Off is always included.)", comment: "Inactive time options help text"))
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
 
-            Text(NSLocalizedString("(Off is always included.)", comment: "Inactive time options help text"))
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(NSLocalizedString("Off", comment: "Inactive Time off option"))
-                        .foregroundColor(.secondary)
-                    Spacer()
-                    Image(systemName: "checkmark")
-                        .foregroundColor(.secondary)
-                }
-
-                ForEach(inactiveTimeOptions, id: \.self) { minutes in
-                    Button(action: { toggleInactiveTime(minutes) }) {
-                        HStack {
-                            Text(inactiveTimeLabel(for: minutes))
-                            Spacer()
-                            Image(systemName: "checkmark")
-                                .opacity(selectedInactiveTimeMinutes.contains(minutes) ? 1 : 0)
-                        }
-                        .contentShape(Rectangle())
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(NSLocalizedString("Off", comment: "Inactive Time off option"))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Image(systemName: "checkmark")
+                            .foregroundColor(.secondary)
                     }
-                    .buttonStyle(.plain)
+                    .padding(.vertical, 3)
+
+                    ForEach(inactiveTimeOptions, id: \.self) { minutes in
+                        Button(action: { toggleInactiveTime(minutes) }) {
+                            HStack {
+                                Text(inactiveTimeLabel(for: minutes))
+                                Spacer()
+                                Image(systemName: "checkmark")
+                                    .opacity(selectedInactiveTimeMinutes.contains(minutes) ? 1 : 0)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.vertical, 3)
+                    }
                 }
             }
+            .padding(20)
         }
-        .padding()
     }
 
     private var equalizerSettingsTab: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(NSLocalizedString("Equalizer Presets", comment: "Equalizer presets section header"))
-                .font(.headline)
+        ScrollView {
+            SettingsSection(
+                title: NSLocalizedString("Equalizer Presets", comment: "Equalizer presets section header"),
+                systemImage: "slider.horizontal.3"
+            ) {
+                Text(NSLocalizedString("Comma-separated list of preset names.", comment: "Equalizer presets help text"))
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
 
-            Text(NSLocalizedString("Comma-separated list of preset names.", comment: "Equalizer presets help text"))
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-
-            TextField(NSLocalizedString("Preset names", comment: "Equalizer presets text field label"), text: $equalizerPresets)
-                .textFieldStyle(.roundedBorder)
+                TextField(NSLocalizedString("Preset names", comment: "Equalizer presets text field label"), text: $equalizerPresets)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 360)
+            }
+            .padding(20)
         }
-        .padding()
     }
 
     private var aboutTab: some View {
@@ -332,23 +374,34 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(spacing: 0) {
             TabView {
                 generalSettingsTab
-                    .tabItem { Text(NSLocalizedString("General", comment: "General settings tab")) }
+                    .tabItem {
+                        Label(NSLocalizedString("General", comment: "General settings tab"), systemImage: "gearshape")
+                    }
 
                 sidetoneSettingsTab
-                    .tabItem { Text(NSLocalizedString("Sidetone", comment: "Sidetone tab")) }
+                    .tabItem {
+                        Label(NSLocalizedString("Sidetone", comment: "Sidetone tab"), systemImage: "waveform")
+                    }
 
                 inactiveTimeSettingsTab
-                    .tabItem { Text(NSLocalizedString("Inactive Time", comment: "Inactive time options tab")) }
+                    .tabItem {
+                        Label(NSLocalizedString("Inactive Time", comment: "Inactive time options tab"), systemImage: "timer")
+                    }
 
                 equalizerSettingsTab
-                    .tabItem { Text(NSLocalizedString("Equalizer Presets", comment: "Equalizer presets tab")) }
+                    .tabItem {
+                        Label(NSLocalizedString("Equalizer Presets", comment: "Equalizer presets tab"), systemImage: "slider.horizontal.3")
+                    }
 
                 aboutTab
-                    .tabItem { Text(NSLocalizedString("About", comment: "About tab")) }
+                    .tabItem {
+                        Label(NSLocalizedString("About", comment: "About tab"), systemImage: "info.circle")
+                    }
             }
+            .frame(minWidth: 520, minHeight: 330)
 
             Divider()
 
@@ -360,10 +413,13 @@ struct SettingsView: View {
                 Button(NSLocalizedString("Close", comment: "Close button")) {
                     onClose?()
                 }
-                Spacer()
+                .keyboardShortcut(.cancelAction)
             }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(.bar)
         }
-        .padding()
+        .background(.regularMaterial)
     }
 }
 
