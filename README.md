@@ -9,6 +9,36 @@
 
 HeadsetControl-MacOSTray is a macOS background application that uses the [headsetcontrol](https://github.com/Sapd/HeadsetControl) library to talk directly to supported headsets. It provides a convenient status bar menu to display headset battery, chatmix, and device information, and allows quick access to settings and refresh actions.
 
+## Preconditions
+
+1. MacOS 14 or later
+2. [Homebrew](https://brew.sh/) to install headsetcontrol and the app
+
+## Installation
+
+1. Install [headsetcontrol](https://github.com/Sapd/HeadsetControl) via [Homebrew](https://brew.sh/). The app links against the installed library and headers:
+   ```sh
+   brew install sapd/headsetcontrol/headsetcontrol --HEAD
+   ```
+2. Install headsetcontrol-macostray via [Homebrew](https://brew.sh/)
+   ```sh
+   brew install --cask chrislauinger77/cask/headsetcontrol-macostray
+   ```
+3. Restart the app after installing or updating headsetcontrol so macOS loads the current library.
+4. You need to allow the execution of the app in macOS security settings.
+
+## Update
+
+1. This app
+   ```sh
+   brew upgrade
+   ```
+2. headsetcontrol
+   ```sh
+   brew reinstall headsetcontrol
+   ```
+   headsetcontrol is used as a library to talk to supported headsets. It should be updated occasionally even when the app has no updates. The app will use the updated library after restart of the app. Additional headsets might be added as well as new features for existing ones.
+
 ## Screenshots
 
 Tray
@@ -55,36 +85,6 @@ If you like my work, please consider supporting me ! <br><br>
 <a href="https://ko-fi.com/ChrisLauinger77" target="_blank">
 <img src="https://cdn.prod.website-files.com/5c14e387dab576fe667689cf/670f5a01cf2da94a032117b9_support_me_on_kofi_red-p-500.png" alt="Support me on Ko-fi" width="30%">
 </a>
-
-## Preconditions
-
-1. MacOS 14 or later
-2. [Homebrew](https://brew.sh/) to install headsetcontrol and the app
-
-## Installation
-
-1. Install [headsetcontrol](https://github.com/Sapd/HeadsetControl) via [Homebrew](https://brew.sh/). The app links against the installed library and headers:
-   ```sh
-   brew install sapd/headsetcontrol/headsetcontrol --HEAD
-   ```
-2. Install headsetcontrol-macostray via [Homebrew](https://brew.sh/)
-   ```sh
-   brew install --cask chrislauinger77/cask/headsetcontrol-macostray
-   ```
-3. Restart the app after installing or updating headsetcontrol so macOS loads the current library.
-4. You need to allow the execution of the app in macOS security settings.
-
-## Update
-
-1. This app
-   ```sh
-   brew upgrade
-   ```
-2. headsetcontrol
-   ```sh
-   brew reinstall headsetcontrol
-   ```
-   headsetcontrol is used as a library to talk to supported headsets. It should be updated occasionally even when the app has no updates. The app will use the updated library after restart of the app. Additional headsets might be added as well as new features for existing ones.
 
 ## Build with Xcode
 
