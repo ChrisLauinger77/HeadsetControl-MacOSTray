@@ -6,15 +6,19 @@
 //
 
 import SwiftUI
+import AppKit
 
 @main struct
 HeadsetControl_MacOSTray: App {
-  @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-  var body: some Scene {
-    Settings {
-      Text(NSLocalizedString("Settings or main app window", comment: "Placeholder settings scene text"))
-    }
-  }
-}
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
+    var body: some Scene {
+        Settings {
+            SettingsView {
+                NSApp.keyWindow?.close()
+            }
+            .frame(minWidth: 580, minHeight: 440)
+        }
+    }
+}
 
