@@ -21,4 +21,3 @@ HeadsetControl_MacOSTray: App {
         }
     }
 }
-
