@@ -1,8 +1,7 @@
 import Cocoa
-import SwiftUI
 import UserNotifications
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate, UNUserNotificationCenterDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotificationCenterDelegate {
     // Sidetone level values from UserDefaults
     var sidetoneLevelsFromSettings: [(String, Int)] {
         let off = UserDefaults.standard.integer(forKey: "sidetoneOff")
@@ -103,7 +102,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
 
     var statusItem: NSStatusItem?
     var statusMenu: NSMenu?
-    var settingsWindow: NSWindow?
 
     var statusUpdateTimer: Timer?
     var latestDevices: [[String: Any]]? = nil
@@ -465,33 +463,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDele
     }
 
     @objc func openSettings() {
-        if settingsWindow == nil {
-            let settingsView = SettingsView(onClose: { [weak self] in
-                self?.settingsWindow?.close()
-            })
-            let hostingController = NSHostingController(rootView: settingsView)
-            let window = NSWindow(contentViewController: hostingController)
-            window.title = NSLocalizedString("HeadsetControl-MacOSTray", comment: "App title")
-            window.setContentSize(NSSize(width: 580, height: 440))
-            window.minSize = NSSize(width: 520, height: 380)
-            window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-            window.titlebarAppearsTransparent = true
-            window.toolbarStyle = .unified
-            window.isMovable = true
-            window.isMovableByWindowBackground = true
-            window.isReleasedWhenClosed = false
-            window.collectionBehavior = [.moveToActiveSpace]
-            window.delegate = self
-            window.center()
-            settingsWindow = window
-        }
-        NSApp.activate(ignoringOtherApps: true)
-        settingsWindow?.makeKeyAndOrderFront(nil)
-    }
+        guard let settingsItem = NSApp.mainMenu?.items.first?.submenu?.items.first(where: {
+            $0.keyEquivalent == "," && $0.keyEquivalentModifierMask.contains(.command)
+        }), let action = settingsItem.action else { return }
 
-    func windowWillClose(_ notification: Notification) {
-        guard notification.object as? NSWindow === settingsWindow else { return }
-        settingsWindow = nil
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.sendAction(action, to: settingsItem.target, from: settingsItem)
+        }
     }
 
     func showLowBatteryNotification(level: Int) {
