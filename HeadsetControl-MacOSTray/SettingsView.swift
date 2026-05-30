@@ -70,6 +70,20 @@ struct SettingsView: View {
         Set(normalizedInactiveTimeOptions)
     }
 
+    private var displayedEqualizerPresets: [String] {
+        let presets = equalizerPresets
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        return presets.isEmpty ? [
+            NSLocalizedString("Preset 1", comment: "Equalizer preset 1"),
+            NSLocalizedString("Preset 2", comment: "Equalizer preset 2"),
+            NSLocalizedString("Preset 3", comment: "Equalizer preset 3"),
+            NSLocalizedString("Preset 4", comment: "Equalizer preset 4")
+        ] : presets.map { NSLocalizedString($0, comment: "Equalizer preset from settings") }
+    }
+
     private func parseInactiveTimeOptions(raw: String) -> [Int] {
         let allowed = Set(inactiveTimeOptions)
         let parsed = raw.split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
@@ -334,13 +348,22 @@ struct SettingsView: View {
                 title: NSLocalizedString("Equalizer Presets", comment: "Equalizer presets section header"),
                 systemImage: "slider.horizontal.3"
             ) {
-                Text(NSLocalizedString("Comma-separated list of preset names.", comment: "Equalizer presets help text"))
+                Text(NSLocalizedString("Equalizer presets are configured on the headset.", comment: "Equalizer presets help text"))
                     .font(.subheadline)
                     .foregroundColor(.secondary)
 
-                TextField(NSLocalizedString("Preset names", comment: "Equalizer presets text field label"), text: $equalizerPresets)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 360)
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(displayedEqualizerPresets, id: \.self) { preset in
+                        HStack {
+                            Text(preset)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Image(systemName: "checkmark")
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 3)
+                    }
+                }
             }
             .padding(20)
         }

@@ -30,6 +30,7 @@
 "Equalizer" = "Ecualizador";
 "Equalizer Preset" = "Preajuste del ecualizador";
 "Equalizer Presets" = "Preajustes del ecualizador";
+"Equalizer presets are configured on the headset." = "Los preajustes del ecualizador se configuran en los auriculares.";
 "General" = "General";
 "General Settings" = "Ajustes generales";
 "GitHub Repository" = "Repositorio de GitHub";
