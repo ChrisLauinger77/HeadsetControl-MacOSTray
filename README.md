@@ -17,11 +17,13 @@ HeadsetControl-MacOSTray is a macOS background application that uses the [headse
 ## Installation
 
 1. Install [headsetcontrol](https://github.com/Sapd/HeadsetControl) via [Homebrew](https://brew.sh/). The app links against the installed library and headers:
-   ```sh
+   ```
+   brew trust sapd/headsetcontrol
    brew install sapd/headsetcontrol/headsetcontrol --HEAD
    ```
 2. Install headsetcontrol-macostray via [Homebrew](https://brew.sh/)
    ```sh
+   brew trust chrislauinger77/cask
    brew install --cask chrislauinger77/cask/headsetcontrol-macostray
    ```
 3. Restart the app after installing or updating headsetcontrol so macOS loads the current library.
