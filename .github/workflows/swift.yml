@@ -25,7 +25,7 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install Homebrew dependencies
         run: |
           brew tap sapd/headsetcontrol
