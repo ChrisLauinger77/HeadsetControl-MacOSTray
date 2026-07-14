@@ -30,6 +30,15 @@ jobs:
         run: |
           brew tap sapd/headsetcontrol
           brew install sapd/headsetcontrol/headsetcontrol --HEAD
+      - name: Test
+        run: |
+          HOMEBREW_PREFIX="$(brew --prefix)"
+          swift test \
+            -Xcc "-I${HOMEBREW_PREFIX}/include" \
+            -Xlinker "-L${HOMEBREW_PREFIX}/lib" \
+            -Xlinker -lheadsetcontrol \
+            -Xlinker -lhidapi \
+            -Xlinker -lc++
       - name: Build
         run: |
           xcodebuild -scheme HeadsetControl-MacOSTray \
