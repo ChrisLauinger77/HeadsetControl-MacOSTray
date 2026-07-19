@@ -27,7 +27,18 @@ HeadsetControl-MacOSTray is a macOS background application that uses the [headse
    brew install --cask chrislauinger77/cask/headsetcontrol-macostray
    ```
 3. Restart the app after installing or updating headsetcontrol so macOS loads the current library.
-4. You need to allow the execution of the app in macOS security settings.
+4. Follow the first-launch instructions below if macOS blocks the app.
+
+## macOS Security Notice
+
+The universal macOS build supports Apple Silicon and Intel. It is ad-hoc signed but cannot
+be notarized without a paid Apple Developer Program membership. On first launch:
+
+1. Control-click `HeadsetControl-MacOSTray.app` in Finder and choose **Open**.
+2. Confirm **Open** in the security dialog.
+
+If macOS still blocks the app, open **System Settings → Privacy & Security**, find the
+HeadsetControl-MacOSTray message, and choose **Open Anyway**.
 
 ## Update
 

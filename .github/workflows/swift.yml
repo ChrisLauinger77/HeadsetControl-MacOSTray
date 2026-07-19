@@ -1,6 +1,3 @@
-# This workflow will build a Swift project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-swift
-
 name: Swift
 
 on:
@@ -11,7 +8,6 @@ on:
       - "**/*.md"
       - "LICENSE"
       - ".github/FUNDING.yml"
-
   pull_request:
     branches: ["main"]
     paths-ignore:
@@ -22,7 +18,16 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - uses: actions/checkout@v7
@@ -32,15 +37,67 @@ jobs:
           brew install sapd/headsetcontrol/headsetcontrol --HEAD
       - name: Test
         run: |
-          HOMEBREW_PREFIX="$(brew --prefix)"
+          homebrew_prefix="$(brew --prefix)"
           swift test \
-            -Xcc "-I${HOMEBREW_PREFIX}/include" \
-            -Xlinker "-L${HOMEBREW_PREFIX}/lib" \
+            -Xcc "-I${homebrew_prefix}/include" \
+            -Xlinker "-L${homebrew_prefix}/lib" \
             -Xlinker -lheadsetcontrol \
             -Xlinker -lhidapi \
             -Xlinker -lc++
       - name: Build
+        env:
+          DERIVED_DATA: ${{ runner.temp }}/DerivedData
         run: |
-          xcodebuild -scheme HeadsetControl-MacOSTray \
+          xcodebuild \
+            -scheme HeadsetControl-MacOSTray \
+            -project HeadsetControl-MacOSTray.xcodeproj \
+            -configuration Release \
             -destination 'platform=macOS' \
+            -derivedDataPath "$DERIVED_DATA" \
             build
+      - name: Verify app signature and architecture
+        env:
+          APP_PATH: ${{ runner.temp }}/DerivedData/Build/Products/Release/HeadsetControl-MacOSTray.app
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          executable="$APP_PATH/Contents/MacOS/HeadsetControl-MacOSTray"
+          codesign --verify --deep --strict --verbose=4 "$APP_PATH"
+          lipo "$executable" -verify_arch "$EXPECTED_ARCH"
+      - name: Create architecture archive
+        env:
+          APP_PATH: ${{ runner.temp }}/DerivedData/Build/Products/Release/HeadsetControl-MacOSTray.app
+          ARCHIVE_PATH: ${{ runner.temp }}/HeadsetControl-MacOSTray-${{ matrix.arch }}.zip
+        run: ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ARCHIVE_PATH"
+      - name: Upload architecture archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-${{ matrix.arch }}
+          path: ${{ runner.temp }}/HeadsetControl-MacOSTray-${{ matrix.arch }}.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  verify-universal:
+    needs: build
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download architecture archives
+        uses: actions/download-artifact@v8
+        with:
+          pattern: app-*
+          path: ${{ runner.temp }}/architecture-archives
+          merge-multiple: true
+      - name: Create and verify universal app archive
+        run: |
+          bash scripts/create-universal-app.sh \
+            "${{ runner.temp }}/architecture-archives/HeadsetControl-MacOSTray-arm64.zip" \
+            "${{ runner.temp }}/architecture-archives/HeadsetControl-MacOSTray-x86_64.zip" \
+            "${{ runner.temp }}/HeadsetControl-MacOSTray.zip"
+      - name: Upload universal archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: HeadsetControl-MacOSTray-universal
+          path: ${{ runner.temp }}/HeadsetControl-MacOSTray.zip
+          if-no-files-found: error
+          retention-days: 7

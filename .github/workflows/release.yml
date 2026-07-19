@@ -3,13 +3,13 @@ name: Release
 on:
   push:
     tags:
-      - "v*" # Reacts to v1.1, v2.0, etc.
+      - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  create-release:
+  validate-tag:
     runs-on: ubuntu-latest
 
     steps:
@@ -19,22 +19,155 @@ jobs:
           fetch-depth: 0
 
       - name: Check that tag points to main
-        id: main_check
         run: |
           git fetch origin main
-          TAG_COMMIT="$(git rev-list -n 1 "${GITHUB_REF_NAME}")"
+          tag_commit="$(git rev-list -n 1 "${GITHUB_REF_NAME}")"
+          git merge-base --is-ancestor "$tag_commit" origin/main
 
-          if git merge-base --is-ancestor "$TAG_COMMIT" origin/main; then
-            echo "on_main=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "on_main=false" >> "$GITHUB_OUTPUT"
-            echo "Tag ${GITHUB_REF_NAME} is not pointing to a commit on main."
-          fi
+  create-draft:
+    needs: validate-tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.create-release.outputs.result }}
 
-      - name: Create GitHub release
-        if: steps.main_check.outputs.on_main == 'true'
-        uses: softprops/action-gh-release@v3
+    steps:
+      - name: Create draft release
+        id: create-release
+        uses: actions/github-script@v7
         with:
-          tag_name: ${{ github.ref_name }}
-          generate_release_notes: true
-          draft: true
+          script: |
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: context.ref.replace("refs/tags/", ""),
+              name: `HeadsetControl-MacOSTray ${context.ref.replace("refs/tags/", "")}`,
+              body: "The universal macOS build is ad-hoc signed but cannot be notarized without a paid Apple Developer Program membership. On first launch, Control-click HeadsetControl-MacOSTray and choose Open. See the README for additional Gatekeeper instructions.",
+              draft: true,
+              prerelease: false,
+              generate_release_notes: true
+            })
+            return data.id
+
+  build:
+    needs: validate-tag
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Homebrew dependencies
+        run: |
+          brew tap sapd/headsetcontrol
+          brew install sapd/headsetcontrol/headsetcontrol --HEAD
+
+      - name: Test
+        run: |
+          homebrew_prefix="$(brew --prefix)"
+          swift test \
+            -Xcc "-I${homebrew_prefix}/include" \
+            -Xlinker "-L${homebrew_prefix}/lib" \
+            -Xlinker -lheadsetcontrol \
+            -Xlinker -lhidapi \
+            -Xlinker -lc++
+
+      - name: Build ad-hoc signed app
+        env:
+          DERIVED_DATA: ${{ runner.temp }}/DerivedData
+        run: |
+          xcodebuild \
+            -scheme HeadsetControl-MacOSTray \
+            -project HeadsetControl-MacOSTray.xcodeproj \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$DERIVED_DATA" \
+            build
+
+      - name: Verify app signature and architecture
+        env:
+          APP_PATH: ${{ runner.temp }}/DerivedData/Build/Products/Release/HeadsetControl-MacOSTray.app
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          executable="$APP_PATH/Contents/MacOS/HeadsetControl-MacOSTray"
+          codesign --verify --deep --strict --verbose=4 "$APP_PATH"
+          lipo "$executable" -verify_arch "$EXPECTED_ARCH"
+
+      - name: Create architecture archive
+        env:
+          APP_PATH: ${{ runner.temp }}/DerivedData/Build/Products/Release/HeadsetControl-MacOSTray.app
+          ARCHIVE_PATH: ${{ runner.temp }}/HeadsetControl-MacOSTray-${{ matrix.arch }}.zip
+        run: ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ARCHIVE_PATH"
+
+      - name: Upload architecture archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-${{ matrix.arch }}
+          path: ${{ runner.temp }}/HeadsetControl-MacOSTray-${{ matrix.arch }}.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: [create-draft, build]
+    runs-on: macos-15
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Download architecture archives
+        uses: actions/download-artifact@v8
+        with:
+          pattern: app-*
+          path: ${{ runner.temp }}/architecture-archives
+          merge-multiple: true
+
+      - name: Create universal app archive
+        run: |
+          bash scripts/create-universal-app.sh \
+            "${{ runner.temp }}/architecture-archives/HeadsetControl-MacOSTray-arm64.zip" \
+            "${{ runner.temp }}/architecture-archives/HeadsetControl-MacOSTray-x86_64.zip" \
+            "${{ runner.temp }}/HeadsetControl-MacOSTray.zip"
+
+      - name: Upload universal archive to draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" "${{ runner.temp }}/HeadsetControl-MacOSTray.zip" --clobber
+
+      - name: Publish GitHub release
+        uses: actions/github-script@v7
+        env:
+          RELEASE_ID: ${{ needs.create-draft.outputs.release_id }}
+        with:
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: Number(process.env.RELEASE_ID),
+              draft: false,
+              prerelease: false
+            })
+
+      - name: Request Homebrew cask update
+        env:
+          HOMEBREW_CASK_PUSH_TOKEN: ${{ secrets.HOMEBREW_CASK_PUSH_TOKEN }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${HOMEBREW_CASK_PUSH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/ChrisLauinger77/homebrew-cask/dispatches \
+            --data '{"event_type":"update-cask","client_payload":{"cask":"headsetcontrol-macostray"}}'
