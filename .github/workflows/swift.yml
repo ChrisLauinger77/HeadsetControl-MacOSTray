@@ -62,7 +62,7 @@ jobs:
         run: |
           executable="$APP_PATH/Contents/MacOS/HeadsetControl-MacOSTray"
           codesign --verify --deep --strict --verbose=4 "$APP_PATH"
-          lipo -verify_arch "$EXPECTED_ARCH" "$executable"
+          lipo "$executable" -verify_arch "$EXPECTED_ARCH"
       - name: Create architecture archive
         env:
           APP_PATH: ${{ runner.temp }}/DerivedData/Build/Products/Release/HeadsetControl-MacOSTray.app

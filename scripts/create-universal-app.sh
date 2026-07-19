@@ -30,6 +30,6 @@ chmod +x "$universal_app/$executable_path"
 
 codesign --force --deep --sign - "$universal_app"
 codesign --verify --deep --strict --verbose=4 "$universal_app"
-lipo -verify_arch arm64 x86_64 "$universal_app/$executable_path"
+lipo "$universal_app/$executable_path" -verify_arch arm64 x86_64
 
 ditto -c -k --sequesterRsrc --keepParent "$universal_app" "$output_archive"
