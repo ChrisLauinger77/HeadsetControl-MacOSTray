@@ -24,6 +24,32 @@ jobs:
           tag_commit="$(git rev-list -n 1 "${GITHUB_REF_NAME}")"
           git merge-base --is-ancestor "$tag_commit" origin/main
 
+  create-draft:
+    needs: validate-tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.create-release.outputs.result }}
+
+    steps:
+      - name: Create draft release
+        id: create-release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: context.ref.replace("refs/tags/", ""),
+              name: `HeadsetControl-MacOSTray ${context.ref.replace("refs/tags/", "")}`,
+              body: "The universal macOS build is ad-hoc signed but cannot be notarized without a paid Apple Developer Program membership. On first launch, Control-click HeadsetControl-MacOSTray and choose Open. See the README for additional Gatekeeper instructions.",
+              draft: true,
+              prerelease: false,
+              generate_release_notes: true
+            })
+            return data.id
+
   build:
     needs: validate-tag
     strategy:
@@ -92,7 +118,7 @@ jobs:
           retention-days: 1
 
   publish:
-    needs: build
+    needs: [create-draft, build]
     runs-on: macos-15
     permissions:
       contents: write
@@ -115,15 +141,24 @@ jobs:
             "${{ runner.temp }}/architecture-archives/HeadsetControl-MacOSTray-x86_64.zip" \
             "${{ runner.temp }}/HeadsetControl-MacOSTray.zip"
 
+      - name: Upload universal archive to draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" "${{ runner.temp }}/HeadsetControl-MacOSTray.zip" --clobber
+
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@v3
+        uses: actions/github-script@v7
+        env:
+          RELEASE_ID: ${{ needs.create-draft.outputs.release_id }}
         with:
-          tag_name: ${{ github.ref_name }}
-          files: ${{ runner.temp }}/HeadsetControl-MacOSTray.zip
-          generate_release_notes: true
-          draft: false
-          body: |
-            The universal macOS build is ad-hoc signed but cannot be notarized without a paid Apple Developer Program membership. On first launch, Control-click HeadsetControl-MacOSTray and choose Open. See the README for additional Gatekeeper instructions.
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: Number(process.env.RELEASE_ID),
+              draft: false,
+              prerelease: false
+            })
 
       - name: Request Homebrew cask update
         env:
