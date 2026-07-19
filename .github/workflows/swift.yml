@@ -22,7 +22,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-15
 
     steps:
       - uses: actions/checkout@v7
@@ -40,7 +40,16 @@ jobs:
             -Xlinker -lhidapi \
             -Xlinker -lc++
       - name: Build
+        env:
+          DERIVED_DATA: ${{ runner.temp }}/DerivedData
         run: |
           xcodebuild -scheme HeadsetControl-MacOSTray \
+            -project HeadsetControl-MacOSTray.xcodeproj \
+            -configuration Release \
             -destination 'platform=macOS' \
+            -derivedDataPath "$DERIVED_DATA" \
             build
+      - name: Verify app signature
+        env:
+          APP_PATH: ${{ runner.temp }}/DerivedData/Build/Products/Release/HeadsetControl-MacOSTray.app
+        run: codesign --verify --deep --strict --verbose=4 "$APP_PATH"
