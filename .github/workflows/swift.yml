@@ -33,6 +33,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install Homebrew dependencies
         run: |
+          brew untap aws/tap 2>/dev/null || true
           brew tap sapd/headsetcontrol
           brew install sapd/headsetcontrol/headsetcontrol --HEAD
       - name: Test
