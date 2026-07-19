@@ -6,11 +6,11 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
-    runs-on: macos-15
+  validate-tag:
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
@@ -23,6 +23,23 @@ jobs:
           git fetch origin main
           tag_commit="$(git rev-list -n 1 "${GITHUB_REF_NAME}")"
           git merge-base --is-ancestor "$tag_commit" origin/main
+
+  build:
+    needs: validate-tag
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
 
       - name: Install Homebrew dependencies
         run: |
@@ -51,16 +68,52 @@ jobs:
             -derivedDataPath "$DERIVED_DATA" \
             build
 
-      - name: Verify app signature
+      - name: Verify app signature and architecture
         env:
           APP_PATH: ${{ runner.temp }}/DerivedData/Build/Products/Release/HeadsetControl-MacOSTray.app
-        run: codesign --verify --deep --strict --verbose=4 "$APP_PATH"
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          executable="$APP_PATH/Contents/MacOS/HeadsetControl-MacOSTray"
+          codesign --verify --deep --strict --verbose=4 "$APP_PATH"
+          lipo -verify_arch "$EXPECTED_ARCH" "$executable"
 
-      - name: Create release archive
+      - name: Create architecture archive
         env:
           APP_PATH: ${{ runner.temp }}/DerivedData/Build/Products/Release/HeadsetControl-MacOSTray.app
-          ARCHIVE_PATH: ${{ runner.temp }}/HeadsetControl-MacOSTray.zip
+          ARCHIVE_PATH: ${{ runner.temp }}/HeadsetControl-MacOSTray-${{ matrix.arch }}.zip
         run: ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ARCHIVE_PATH"
+
+      - name: Upload architecture archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-${{ matrix.arch }}
+          path: ${{ runner.temp }}/HeadsetControl-MacOSTray-${{ matrix.arch }}.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: macos-15
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Download architecture archives
+        uses: actions/download-artifact@v8
+        with:
+          pattern: app-*
+          path: ${{ runner.temp }}/architecture-archives
+          merge-multiple: true
+
+      - name: Create universal app archive
+        run: |
+          bash scripts/create-universal-app.sh \
+            "${{ runner.temp }}/architecture-archives/HeadsetControl-MacOSTray-arm64.zip" \
+            "${{ runner.temp }}/architecture-archives/HeadsetControl-MacOSTray-x86_64.zip" \
+            "${{ runner.temp }}/HeadsetControl-MacOSTray.zip"
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v3
@@ -70,7 +123,7 @@ jobs:
           generate_release_notes: true
           draft: false
           body: |
-            The macOS build is ad-hoc signed but cannot be notarized without a paid Apple Developer Program membership. On first launch, Control-click HeadsetControl-MacOSTray and choose Open. See the README for additional Gatekeeper instructions.
+            The universal macOS build is ad-hoc signed but cannot be notarized without a paid Apple Developer Program membership. On first launch, Control-click HeadsetControl-MacOSTray and choose Open. See the README for additional Gatekeeper instructions.
 
       - name: Request Homebrew cask update
         env:

@@ -31,8 +31,8 @@ HeadsetControl-MacOSTray is a macOS background application that uses the [headse
 
 ## macOS Security Notice
 
-The macOS build is ad-hoc signed but cannot be notarized without a paid Apple Developer
-Program membership. On first launch:
+The universal macOS build supports Apple Silicon and Intel. It is ad-hoc signed but cannot
+be notarized without a paid Apple Developer Program membership. On first launch:
 
 1. Control-click `HeadsetControl-MacOSTray.app` in Finder and choose **Open**.
 2. Confirm **Open** in the security dialog.
