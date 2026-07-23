@@ -35,7 +35,7 @@ jobs:
     steps:
       - name: Create draft release
         id: create-release
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const { data } = await github.rest.repos.createRelease({
@@ -120,7 +120,7 @@ jobs:
 
   publish:
     needs: [create-draft, build]
-    runs-on: macos-15
+    runs-on: macos-26
     permissions:
       contents: write
 
@@ -148,7 +148,7 @@ jobs:
         run: gh release upload "$GITHUB_REF_NAME" "${{ runner.temp }}/HeadsetControl-MacOSTray.zip" --clobber
 
       - name: Publish GitHub release
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           RELEASE_ID: ${{ needs.create-draft.outputs.release_id }}
         with:
