@@ -22,6 +22,8 @@ External dependency:
 
 - Install `headsetcontrol` before building, usually with:
   ```sh
+  brew tap sapd/headsetcontrol
+  brew trust --formula sapd/headsetcontrol/headsetcontrol
   brew install sapd/headsetcontrol/headsetcontrol --HEAD
   ```
 - The C wrapper accepts headers from either `<headsetcontrol/headsetcontrol_c.h>` or `<headsetcontrol_c.h>`.
@@ -35,6 +37,18 @@ xcodebuild -scheme HeadsetControl-MacOSTray -project HeadsetControl-MacOSTray.xc
 ```
 
 The app target links `-lheadsetcontrol`, `-lhidapi`, and `-lstdc++`. The app sandbox is disabled because headset/HID access is required.
+
+## Related Repositories And Release Coordination
+
+- `https://github.com/Sapd/HeadsetControl` contains the upstream C library and CLI.
+- `https://github.com/Sapd/homebrew-headsetcontrol` provides the official `sapd/headsetcontrol/headsetcontrol` Homebrew formula.
+- `https://github.com/ChrisLauinger77/homebrew-cask` owns `Casks/headsetcontrol-macostray.rb` for distributing this app through Homebrew.
+- Publishing a release from this repository triggers a `repository_dispatch` event named `update-cask` for `headsetcontrol-macostray`.
+- `.github/workflows/update-homebrew-cask.yml` provides the manual fallback for requesting the same cask update.
+- Dispatch authentication uses the `HOMEBREW_CASK_PUSH_TOKEN` repository secret. Never print or persist this token.
+- Do not maintain a duplicate HeadsetControl formula in the personal cask tap. Use the official Sapd formula.
+- When changing release tags, archive names, minimum macOS versions, signing behavior, or installation requirements, verify whether the cask repository and its README must be updated as well.
+- Homebrew 6 requires explicit trust for non-official taps. Keep the user-facing trust commands in this repository's README aligned with the cask tap README.
 
 ## Architecture Notes
 
