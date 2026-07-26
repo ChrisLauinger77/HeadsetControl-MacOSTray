@@ -40,7 +40,12 @@ be notarized without a paid Apple Developer Program membership. On first launch:
 2. Confirm **Open** in the security dialog.
 
 If macOS still blocks the app, open **System Settings → Privacy & Security**, find the
-HeadsetControl-MacOSTray message, and choose **Open Anyway**.
+HeadsetControl-MacOSTray message, and choose **Open Anyway**.As a final option, remove the quarantine
+attribute from a build you downloaded from this repository and trust:
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/HeadsetControl-MacOSTray.app"
+```
 
 ## Update
 
