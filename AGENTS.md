@@ -50,6 +50,25 @@ The app target links `-lheadsetcontrol`, `-lhidapi`, and `-lstdc++`. The app san
 - When changing release tags, archive names, minimum macOS versions, signing behavior, or installation requirements, verify whether the cask repository and its README must be updated as well.
 - Homebrew 6 requires explicit trust for non-official taps. Keep the user-facing trust commands in this repository's README aligned with the cask tap README.
 
+## Release Workflow
+
+When asked to create a release, update the project version, commit the version change, push the commit, and add/push the matching release tag.
+
+Example request:
+
+```text
+create release 3.0.0
+```
+
+Expected actions:
+
+```sh
+git commit -am "Bump version to 3.0.0"
+git push
+git tag v3.0.0
+git push origin v3.0.0
+```
+
 ## Architecture Notes
 
 - `AppDelegate` is the runtime coordinator. It owns the status item, builds the menu in `menuNeedsUpdate(_:)`, schedules status refreshes, and sends commands to the active `HeadsetControlProviding` implementation.
