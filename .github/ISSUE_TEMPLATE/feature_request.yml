@@ -1,0 +1,73 @@
+name: Feature request
+description: Suggest an improvement or new capability for HeadsetControl-MacOSTray
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement. Please focus on the problem you want to solve; implementation ideas are welcome but optional.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and did not find a matching request.
+          required: true
+        - label: This request is for the macOS tray app, not solely for the upstream HeadsetControl library or CLI.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to accomplish, and why is the current behavior insufficient?
+      placeholder: Describe the situation and who would benefit.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior or experience you would like to see.
+      placeholder: The app could ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Status bar menu
+        - Settings
+        - Notifications
+        - Headset controls or capabilities
+        - Installation or updates
+        - Accessibility or localization
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: headset
+    attributes:
+      label: Headset model
+      description: If the request concerns specific hardware, provide its model and connection type. Otherwise enter "Not hardware-specific".
+      placeholder: e.g. Logitech G Pro X Wireless via USB dongle
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe any workarounds or alternative designs you have tried or considered.
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add mockups, screenshots, links to relevant upstream HeadsetControl features, or any other useful details.
+
