@@ -7,14 +7,14 @@ on:
       - "*.md"
       - "**/*.md"
       - "LICENSE"
-      - ".github/FUNDING.yml"
+      - ".github/**"
   pull_request:
     branches: ["main"]
     paths-ignore:
       - "*.md"
       - "**/*.md"
       - "LICENSE"
-      - ".github/FUNDING.yml"
+      - ".github/**"
 
 jobs:
   build:
