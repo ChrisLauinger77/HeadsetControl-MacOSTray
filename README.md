@@ -1,9 +1,9 @@
 # HeadsetControl-MacOSTray
 
-[![Github Latest Releases](https://img.shields.io/github/downloads/ChrisLauinger77/HeadsetControl-MacOSTray/latest/total)]()
-[![Version](https://img.shields.io/github/v/release/ChrisLauinger77/HeadsetControl-MacOSTray)]()
-[![Github All Releases](https://img.shields.io/github/downloads/ChrisLauinger77/HeadsetControl-MacOSTray/total.svg)]()
-[![license](https://img.shields.io/github/license/ChrisLauinger77/HeadsetControl-MacOSTray)]()
+[![Github Latest Releases](https://img.shields.io/github/downloads/ChrisLauinger77/HeadsetControl-MacOSTray/latest/total)](<>)
+[![Version](https://img.shields.io/github/v/release/ChrisLauinger77/HeadsetControl-MacOSTray)](<>)
+[![Github All Releases](https://img.shields.io/github/downloads/ChrisLauinger77/HeadsetControl-MacOSTray/total.svg)](<>)
+[![license](https://img.shields.io/github/license/ChrisLauinger77/HeadsetControl-MacOSTray)](<>)
 
 ![Screenshot](https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray/blob/main/HeadsetControl-MacOSTray/Assets.xcassets/AppIcon.appiconset/mac128.png)
 
@@ -17,11 +17,14 @@ HeadsetControl-MacOSTray is a macOS background application that uses the [headse
 ## Installation
 
 1. Install [headsetcontrol](https://github.com/Sapd/HeadsetControl) via [Homebrew](https://brew.sh/). The app links against the installed library and headers:
-   ```
+   ```sh
    brew tap sapd/headsetcontrol
    brew trust --formula sapd/headsetcontrol/headsetcontrol
-   brew install sapd/headsetcontrol/headsetcontrol --HEAD
+   brew install sapd/headsetcontrol/headsetcontrol
    ```
+
+(brew install sapd/headsetcontrol/headsetcontrol --HEAD) when release is not yet available via Homebrew.
+
 2. Install headsetcontrol-macostray via [Homebrew](https://brew.sh/)
    ```sh
    brew tap ChrisLauinger77/cask
