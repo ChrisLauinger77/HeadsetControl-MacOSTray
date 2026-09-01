@@ -17,7 +17,7 @@ let package = Package(
             dependencies: ["HeadsetControlCLib"],
             path: "HeadsetControl-MacOSTray",
             resources: [
-                .process("Assets.xcassets")
+                .copy("Assets.xcassets")
             ]
         ),
         .testTarget(
