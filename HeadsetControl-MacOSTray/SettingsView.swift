@@ -20,7 +20,7 @@ struct AppIconImage: NSViewRepresentable {
     }
 
     private var currentIcon: NSImage? {
-        NSImage(named: colorScheme == .dark ? "AppIconDark" : "AppIconLight")
+        AppIconProvider.image(isDark: colorScheme == .dark)
     }
 }
 

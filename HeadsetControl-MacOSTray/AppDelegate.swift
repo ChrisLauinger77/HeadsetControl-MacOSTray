@@ -185,9 +185,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifi
 
     private func updateApplicationIcon() {
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        let imageName = isDark ? "AppIconDark" : "AppIconLight"
 
-        if let icon = NSImage(named: imageName) {
+        if let icon = AppIconProvider.image(isDark: isDark) {
             NSApp.applicationIconImage = icon
         }
     }
