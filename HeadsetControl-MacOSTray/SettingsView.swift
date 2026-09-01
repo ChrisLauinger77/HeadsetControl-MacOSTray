@@ -3,9 +3,11 @@ import AppKit
 
 // SwiftUI wrapper for NSImage
 struct AppIconImage: NSViewRepresentable {
+    @Environment(\.colorScheme) private var colorScheme
+
     func makeNSView(context: Context) -> NSImageView {
         let imageView = NSImageView()
-        imageView.image = NSApplication.shared.applicationIconImage
+        imageView.image = currentIcon
         imageView.imageScaling = .scaleProportionallyUpOrDown
         imageView.wantsLayer = true
         imageView.layer?.cornerRadius = 12
@@ -13,7 +15,13 @@ struct AppIconImage: NSViewRepresentable {
         return imageView
     }
 
-    func updateNSView(_ nsView: NSImageView, context: Context) {}
+    func updateNSView(_ nsView: NSImageView, context: Context) {
+        nsView.image = currentIcon
+    }
+
+    private var currentIcon: NSImage? {
+        NSImage(named: colorScheme == .dark ? "AppIconDark" : "AppIconLight")
+    }
 }
 
 struct SettingsSection<Content: View>: View {

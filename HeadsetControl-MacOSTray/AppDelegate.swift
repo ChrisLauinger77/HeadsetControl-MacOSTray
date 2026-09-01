@@ -107,12 +107,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifi
     var latestDevices: [[String: Any]]? = nil
     var lowBatteryNotificationShown = false
     private var activeTimerInterval: Int?
+    private var appearanceObservation: NSKeyValueObservation?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        observeApplicationAppearance()
+
         // Request notification authorization and set delegate
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             // Optionally handle granted/error
@@ -169,6 +172,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifi
 
         statusUpdateTimer = Timer.scheduledTimer(withTimeInterval: Double(interval), repeats: true) { [weak self] _ in
             self?.updateStatusItem()
+        }
+    }
+
+    private func observeApplicationAppearance() {
+        appearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.initial, .new]) { [weak self] _, _ in
+            DispatchQueue.main.async {
+                self?.updateApplicationIcon()
+            }
+        }
+    }
+
+    private func updateApplicationIcon() {
+        let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let imageName = isDark ? "AppIconDark" : "AppIconLight"
+
+        if let icon = NSImage(named: imageName) {
+            NSApp.applicationIconImage = icon
         }
     }
 
