@@ -48,9 +48,6 @@ playground.xcworkspace
 *.moved-aside
 *.xcuserstate
 
-# Asset catalog generated files
-*.xcassets
-
 # Temporary files
 *.orig
 *.bak

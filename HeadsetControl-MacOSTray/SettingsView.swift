@@ -1,19 +1,17 @@
 import SwiftUI
 import AppKit
 
-// SwiftUI wrapper for NSImage
-struct AppIconImage: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSImageView {
-        let imageView = NSImageView()
-        imageView.image = NSApplication.shared.applicationIconImage
-        imageView.imageScaling = .scaleProportionallyUpOrDown
-        imageView.wantsLayer = true
-        imageView.layer?.cornerRadius = 12
-        imageView.layer?.masksToBounds = true
-        return imageView
-    }
+struct AppIconImage: View {
+    @Environment(\.colorScheme) private var colorScheme
 
-    func updateNSView(_ nsView: NSImageView, context: Context) {}
+    var body: some View {
+        if let icon = AppIconProvider.image(isDark: colorScheme == .dark) {
+            Image(nsImage: icon)
+                .resizable()
+                .scaledToFit()
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+    }
 }
 
 struct SettingsSection<Content: View>: View {
@@ -373,6 +371,7 @@ struct SettingsView: View {
         VStack(alignment: .center, spacing: 16) {
             AppIconImage()
                 .frame(width: 72, height: 72)
+                .clipped()
                 .shadow(radius: 4)
 
             Text(NSLocalizedString("HeadsetControl-MacOSTray", comment: "App title"))
