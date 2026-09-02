@@ -164,17 +164,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifi
         )
     }
 
-    func startStatusUpdateTimer() {
-        statusUpdateTimer?.invalidate()
-
-        let interval = updateInterval
-        activeTimerInterval = interval
-
-        statusUpdateTimer = Timer.scheduledTimer(withTimeInterval: Double(interval), repeats: true) { [weak self] _ in
-            self?.updateStatusItem()
-        }
-    }
-
     private func observeApplicationAppearance() {
         appearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.initial, .new]) { [weak self] _, _ in
             DispatchQueue.main.async {
@@ -188,6 +177,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifi
 
         if let icon = AppIconProvider.image(isDark: isDark) {
             NSApp.applicationIconImage = icon
+        }
+    }
+
+    func startStatusUpdateTimer() {
+        statusUpdateTimer?.invalidate()
+
+        let interval = updateInterval
+        activeTimerInterval = interval
+
+        statusUpdateTimer = Timer.scheduledTimer(withTimeInterval: Double(interval), repeats: true) { [weak self] _ in
+            self?.updateStatusItem()
         }
     }
 
