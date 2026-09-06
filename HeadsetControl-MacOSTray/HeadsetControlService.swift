@@ -53,23 +53,6 @@ nonisolated struct HeadsetCapability {
     ]
 }
 
-nonisolated func legacyBatteryStatusString(_ status: hsc_battery_status_t) -> String? {
-    switch status.rawValue {
-    case HSC_BATTERY_AVAILABLE.rawValue, 2:
-        return "BATTERY_AVAILABLE"
-    case HSC_BATTERY_CHARGING.rawValue, 1:
-        return "BATTERY_CHARGING"
-    case HSC_BATTERY_UNAVAILABLE.rawValue:
-        return "BATTERY_UNAVAILABLE"
-    case HSC_BATTERY_ERROR.rawValue:
-        return "BATTERY_ERROR"
-    case HSC_BATTERY_TIMEOUT.rawValue:
-        return "BATTERY_TIMEOUT"
-    default:
-        return nil
-    }
-}
-
 // All mutable state, including the injected adapter, belongs to one executor.
 // Production adapters assert the shared HID thread at the transaction boundary.
 nonisolated final class HeadsetControlService: HeadsetControlProviding, @unchecked Sendable {
@@ -94,12 +77,16 @@ nonisolated final class HeadsetControlService: HeadsetControlProviding, @uncheck
         self.checkExecutionContext = checkExecutionContext
     }
 
-    func fetchDevices(testProfile: Int) -> [HeadsetDevice] {
-        withTransaction(testProfile: testProfile) {
+    func fetchDevices(testProfile: Int) -> Result<[HeadsetDevice], HeadsetFailure> {
+        withTransaction(testProfile: testProfile, operation: .discovery) {
             let before = testProfile > 0 ? nil : inventory.attachments()
-            let connections = library.discover()
+            let connections: [HeadsetConnection]
+            switch library.discover() {
+            case .success(let value): connections = value
+            case .failure(let error): return .failure(error)
+            }
             let after = testProfile > 0 ? nil : inventory.attachments()
-            return connections.compactMap { connection in
+            return .success(connections.compactMap { connection in
                 // The library adds its test device to physical discovery. Filter
                 // BEFORE battery/chatmix calls so fake mode never queries hardware.
                 guard (connection.usbID == .testDevice) == (testProfile > 0) else { return nil }
@@ -112,15 +99,26 @@ nonisolated final class HeadsetControlService: HeadsetControlProviding, @uncheck
                     device.target = .physical(connection.usbID, attachmentID: ids[0])
                 }
                 return device
-            }
-        } ?? []
+            })
+        }
     }
 
-    func perform(_ command: HeadsetCommand, on target: HeadsetTarget, testProfile: Int) -> Bool {
-        guard target.accepts(testProfile: testProfile) else { return false }
-        return withTransaction(testProfile: testProfile) {
-            guard targetIsAttached(target) else { return false }
-            let connections = library.discover()
+    func perform(_ command: HeadsetCommand, on target: HeadsetTarget, testProfile: Int) -> Result<Void, HeadsetFailure> {
+        guard AppDefaults.testProfileRange.contains(testProfile) else {
+            return .failure(.init(operation: .command, kind: .invalidTestProfile(testProfile)))
+        }
+        guard target.accepts(testProfile: testProfile) else {
+            return .failure(.init(operation: .command, kind: .targetUnavailable))
+        }
+        return withTransaction(testProfile: testProfile, operation: .command) {
+            guard targetIsAttached(target) else {
+                return .failure(.init(operation: .command, kind: .targetUnavailable))
+            }
+            let connections: [HeadsetConnection]
+            switch library.discover() {
+            case .success(let value): connections = value
+            case .failure(let error): return .failure(error)
+            }
             let usbID: HeadsetUSBID
             switch target {
             case .physical(let id, _): usbID = id
@@ -128,12 +126,14 @@ nonisolated final class HeadsetControlService: HeadsetControlProviding, @uncheck
             }
             let matches = connections.filter { $0.usbID == usbID }
             guard matches.count == 1, let connection = matches.first,
-                  targetIsAttached(target) else { return false }
+                  targetIsAttached(target) else {
+                return .failure(.init(operation: .command, kind: .targetUnavailable))
+            }
             // Exactly one selected handle; there is deliberately no broadcast loop.
             // The C API opens by VID/PID inside this call. Atomic binding across
             // a replacement AFTER our last check requires a dependency path API.
             return library.perform(command, on: connection)
-        } ?? false
+        }
     }
 
     func shutdown() {
@@ -154,18 +154,25 @@ nonisolated final class HeadsetControlService: HeadsetControlProviding, @uncheck
         }
     }
 
-    private func withTransaction<T>(testProfile: Int, _ body: () -> T) -> T? {
+    private func withTransaction<T>(testProfile: Int, operation: HeadsetOperation,
+                                    _ body: () -> Result<T, HeadsetFailure>) -> Result<T, HeadsetFailure> {
         checkExecutionContext()
-        guard !stopped, !inTransaction else { return nil }
+        guard AppDefaults.testProfileRange.contains(testProfile) else {
+            return .failure(.init(operation: operation, kind: .invalidTestProfile(testProfile)))
+        }
+        guard !stopped else { return .failure(.init(operation: operation, kind: .stopped)) }
+        guard !inTransaction else { return .failure(.init(operation: operation, kind: .reentrant)) }
         inTransaction = true
         defer {
             library.releaseDevices()
-            library.configure(testProfile: 0)
+            try? library.configure(testProfile: 0)
             inTransaction = false
         }
-        library.configure(testProfile: testProfile)
+        do { try library.configure(testProfile: testProfile) }
+        catch { return .failure(error) }
         return body()
     }
+
 }
 
 nonisolated final class MockHeadsetControlService: HeadsetControlProviding, Sendable {
@@ -173,17 +180,18 @@ nonisolated final class MockHeadsetControlService: HeadsetControlProviding, Send
 
     init(deviceIndex: Int) { self.deviceIndex = deviceIndex }
 
-    func fetchDevices(testProfile: Int) -> [HeadsetDevice] {
-        [HeadsetDevice(
+    func fetchDevices(testProfile: Int) -> Result<[HeadsetDevice], HeadsetFailure> {
+        .success([HeadsetDevice(
             usbID: .testDevice, name: "Test Device \(deviceIndex)", vendor: "HeadsetControl", product: "Test Device",
             capabilities: HeadsetCapability.menuCapabilities.map { $0.legacyCapabilityString },
-            battery: .init(level: max(5, min(95, 10 * deviceIndex)), status: "BATTERY_AVAILABLE", timeToEmpty: 120),
-            chatmix: 50, target: .test(profile: testProfile)
-        )]
+            battery: .success(.init(level: max(5, min(95, 10 * deviceIndex)), status: .available, timeToEmpty: 120)),
+            chatmix: .success(50), target: .test(profile: testProfile)
+        )])
     }
 
-    func perform(_ command: HeadsetCommand, on target: HeadsetTarget, testProfile: Int) -> Bool {
-        target == .test(profile: testProfile) && testProfile > 0
+    func perform(_ command: HeadsetCommand, on target: HeadsetTarget, testProfile: Int) -> Result<Void, HeadsetFailure> {
+        target == .test(profile: testProfile) && AppDefaults.testProfileRange.contains(testProfile) && testProfile > 0
+            ? .success(()) : .failure(.init(operation: .command, kind: .targetUnavailable))
     }
     func shutdown() {}
 }

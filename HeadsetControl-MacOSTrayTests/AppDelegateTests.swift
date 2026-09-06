@@ -18,6 +18,7 @@ import XCTest
         UserDefaults.standard.removeObject(forKey: "inactiveTimeOptions")
         UserDefaults.standard.removeObject(forKey: "equalizerPresets")
         UserDefaults.standard.removeObject(forKey: "testMode")
+        UserDefaults.standard.removeObject(forKey: "notifyOnLowBattery")
         super.tearDown()
     }
 
@@ -105,14 +106,15 @@ import XCTest
         XCTAssertEqual(submenu.items.map { ($0.representedObject as? HeadsetMenuAction)?.value }, [0, 1, 15, 90])
     }
 
-    func testMenuUsesConfiguredEqualizerPresetNamesWhenDeviceDoesNotReportPresets() async throws {
+    func testMenuUsesConfiguredEqualizerNamesOnlyForReportedIndicesWithoutNames() async throws {
         UserDefaults.standard.set("Game, Music, Voice", forKey: "equalizerPresets")
         let appDelegate = AppDelegate()
         appDelegate.latestDevices = [[
             "device": "Test Headset",
             "vendor": "Test Vendor",
             "product": "Test Product",
-            "capabilities": ["CAP_EQUALIZER_PRESET"]
+            "capabilities": ["CAP_EQUALIZER_PRESET"],
+            "equalizerPresets": Result<[HeadsetEqualizerPreset], HeadsetFailure>.success((0..<3).map { .init(index: $0, name: nil) })
         ]]
         let menu = NSMenu()
 
@@ -130,11 +132,7 @@ import XCTest
             "device": "Test Headset",
             "vendor": "Test Vendor",
             "product": "Test Product",
-            "battery": [
-                "status": "BATTERY_AVAILABLE",
-                "level": 44,
-                "time_to_empty_min": 119
-            ],
+            "battery": Result<HeadsetBattery, HeadsetFailure>.success(.init(level: 44, status: .available, timeToEmpty: 119)),
             "capabilities": []
         ]]
         let menu = NSMenu()
@@ -149,12 +147,12 @@ import XCTest
         let lowIndexProvider = MockHeadsetControlService(deviceIndex: 0)
         let highIndexProvider = MockHeadsetControlService(deviceIndex: 20)
 
-        let lowBattery = try XCTUnwrap(lowIndexProvider.fetchDevices(testProfile: 7).first?.menuDictionary["battery"] as? [String: Any])
-        let highBattery = try XCTUnwrap(highIndexProvider.fetchDevices(testProfile: 7).first?.menuDictionary["battery"] as? [String: Any])
-        let capabilities = try XCTUnwrap(lowIndexProvider.fetchDevices(testProfile: 7).first?.menuDictionary["capabilities"] as? [String])
+        let lowBattery = try XCTUnwrap(lowIndexProvider.fetchDevices(testProfile: 7).successValue?.first?.battery?.successValue)
+        let highBattery = try XCTUnwrap(highIndexProvider.fetchDevices(testProfile: 7).successValue?.first?.battery?.successValue)
+        let capabilities = try XCTUnwrap(lowIndexProvider.fetchDevices(testProfile: 7).successValue?.first?.menuDictionary["capabilities"] as? [String])
 
-        XCTAssertEqual(lowBattery["level"] as? Int, 5)
-        XCTAssertEqual(highBattery["level"] as? Int, 95)
+        XCTAssertEqual(lowBattery.percentage, 5)
+        XCTAssertEqual(highBattery.percentage, 95)
         XCTAssertEqual(capabilities, HeadsetCapability.menuCapabilities.map { $0.legacyCapabilityString })
     }
 
@@ -172,9 +170,9 @@ import XCTest
         let devices = await withCheckedContinuation { continuation in
             HeadsetIOWorker.shared.enqueue { continuation.resume(returning: service.fetchDevices(testProfile: 7)) }
         }
-        let battery = try XCTUnwrap(devices.first?.menuDictionary["battery"] as? [String: Any])
-        XCTAssertEqual(battery["level"] as? Int, 10)
-        XCTAssertEqual(battery["status"] as? String, "BATTERY_AVAILABLE")
+        let battery = try XCTUnwrap(devices.successValue?.first?.battery?.successValue)
+        XCTAssertEqual(battery.percentage, 10)
+        XCTAssertEqual(battery.status, .available)
     }
     func testEveryMenuControlKeepsItsOwnDeviceAfterSnapshotChanges() async throws {
         UserDefaults.standard.set(0, forKey: "testMode")
@@ -278,10 +276,282 @@ import XCTest
         XCTAssertEqual(provider.profiles, [0, 7])
     }
 
+    func testDiscoveryFailureOffersRetryInsteadOfReportingNoDevices() async {
+        let provider = RecordingHeadsetProvider()
+        let executor = ManualHeadsetExecutor()
+        let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor))
+        provider.fetchFailure = .init(operation: .discovery, kind: .native(-5))
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+        let menu = NSMenu()
+        delegate.menuNeedsUpdate(menu)
+        XCTAssertEqual(delegate.refreshFailure, provider.fetchFailure)
+        XCTAssertTrue(menu.items.contains { $0.title == localized("Retry refresh") })
+        XCTAssertFalse(menu.items.contains { $0.title == localized("No devices found") })
+        provider.fetchFailure = nil
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+        delegate.menuNeedsUpdate(menu)
+        XCTAssertTrue(menu.items.contains { $0.title == localized("No devices found") })
+        XCTAssertNil(delegate.refreshFailure)
+    }
+
+    func testCommandFailureIsVisibleAndSuccessClearsIt() async throws {
+        UserDefaults.standard.set(0, forKey: "testMode")
+        let provider = RecordingHeadsetProvider()
+        let executor = ManualHeadsetExecutor()
+        let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor))
+        delegate.latestDevices = [menuDevice(target: .physical(.init(vendor: 1, product: 2), attachmentID: 11))]
+        let menu = NSMenu()
+        delegate.menuNeedsUpdate(menu)
+        let item = try XCTUnwrap(menu.items.first { $0.title == localized("Lights") }?.submenu?.items.first)
+        provider.commandResult = .failure(.init(operation: .command, kind: .native(-4)))
+        delegate.setLights(item)
+        executor.runNext()
+        await drainResults()
+        XCTAssertTrue(delegate.commandFailure?.contains("-4") == true)
+        delegate.menuNeedsUpdate(menu)
+        XCTAssertTrue(menu.items.contains { $0.title.contains("-4") })
+        provider.commandResult = .success(())
+        delegate.setLights(item)
+        executor.runNext()
+        await drainResults()
+        XCTAssertNil(delegate.commandFailure)
+    }
+
+    func testEqualizerMenuPreservesExplicitOrderAndNeverInventsUnknownIndices() async throws {
+        let delegate = AppDelegate()
+        var device = menuDevice(target: .test(profile: 7))
+        device["equalizerPresets"] = Result<[HeadsetEqualizerPreset], HeadsetFailure>.success([
+            .init(index: 3, name: "Voice"), .init(index: 1, name: "Flat"), .init(index: 2, name: "Flat")
+        ])
+        delegate.latestDevices = [device]
+        let menu = NSMenu()
+        delegate.menuNeedsUpdate(menu)
+        var items = try XCTUnwrap(menu.items.first { $0.title == localized("Equalizer Preset") }?.submenu).items
+        XCTAssertEqual(items.map(\.title), ["Voice", "Flat", "Flat"])
+        XCTAssertEqual(items.map { ($0.representedObject as? HeadsetMenuAction)?.value }, [3, 1, 2])
+        device["equalizerPresets"] = Result<[HeadsetEqualizerPreset], HeadsetFailure>.success([])
+        delegate.latestDevices = [device]
+        delegate.menuNeedsUpdate(menu)
+        items = try XCTUnwrap(menu.items.first { $0.title == localized("Equalizer Preset") }?.submenu).items
+        XCTAssertEqual(items.count, 1)
+        XCTAssertNil(items.first?.action)
+        XCTAssertNil(items.first?.representedObject)
+    }
+
+    func testMenuNeverDisplaysInvalidOrUnavailablePercentages() async {
+        let delegate = AppDelegate()
+        let states: [(HeadsetBattery, String?)] = [
+            (.init(level: 0, status: .available), "0%"),
+            (.init(level: 10, status: .available), "10%"),
+            (.init(level: 0, status: .unavailable), nil),
+            (.init(level: 42, status: .unknown(999)), nil),
+            (.init(level: -1, status: .available), nil),
+            (.init(level: 101, status: .available), nil),
+            (.init(level: -1, status: .charging), nil)
+        ]
+        for (battery, percentage) in states {
+            var device = menuDevice(target: nil)
+            device["battery"] = Result<HeadsetBattery, HeadsetFailure>.success(battery)
+            delegate.latestDevices = [device]
+            let menu = NSMenu()
+            delegate.menuNeedsUpdate(menu)
+            let row = menu.items.first { $0.title.hasPrefix(localized("Battery") + ":") }
+            XCTAssertNotNil(row)
+            if let percentage { XCTAssertTrue(row?.title.contains(percentage) == true) }
+            else { XCTAssertFalse(row?.title.contains("%") == true) }
+        }
+    }
+
+    func testNotificationPreferenceIsRecheckedBeforeAsyncSubmission() async {
+        UserDefaults.standard.set(7, forKey: "testMode")
+        UserDefaults.standard.set(true, forKey: "notifyOnLowBattery")
+        let provider = RecordingHeadsetProvider()
+        provider.devices = [HeadsetDevice(usbID: .testDevice, name: "Fake", vendor: "Vendor", product: "Product", capabilities: [],
+                                          battery: .success(.init(level: 10, status: .available)), target: .test(profile: 7))]
+        let executor = ManualHeadsetExecutor()
+        let delivery = RecordingNotificationDelivery()
+        let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor), notificationDelivery: delivery)
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+        XCTAssertEqual(delivery.authorizations.count, 1)
+        UserDefaults.standard.set(false, forKey: "notifyOnLowBattery")
+        delivery.authorizations[0](.success(true))
+        XCTAssertTrue(delivery.submissions.isEmpty)
+    }
+
+    func testPendingAuthorizationChecksLatestBatteryAgainstChangedThreshold() async throws {
+        UserDefaults.standard.set(7, forKey: "testMode")
+        UserDefaults.standard.set(true, forKey: "notifyOnLowBattery")
+        UserDefaults.standard.set(25, forKey: "lowBatteryThreshold")
+        let provider = RecordingHeadsetProvider()
+        provider.devices = [HeadsetDevice(usbID: .testDevice, name: "Fake", vendor: "Vendor", product: "Product", capabilities: [],
+                                          battery: .success(.init(level: 10, status: .available)), target: .test(profile: 7))]
+        let executor = ManualHeadsetExecutor()
+        let delivery = RecordingNotificationDelivery()
+        let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor), notificationDelivery: delivery)
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+        provider.devices[0].battery = .success(.init(level: 20, status: .available))
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+        XCTAssertEqual(delivery.authorizations.count, 1)
+
+        // Complete authorization before a defaults observer can suspend it.
+        UserDefaults.standard.set(15, forKey: "lowBatteryThreshold")
+        let authorize = try XCTUnwrap(delivery.authorizations.first)
+        authorize(.success(true))
+        XCTAssertTrue(delivery.submissions.isEmpty)
+
+        // Rejecting the old attempt must leave the next genuine low reading
+        // eligible, rather than keeping an unresolved pending authorization.
+        provider.devices[0].battery = .success(.init(level: 10, status: .available))
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+        XCTAssertEqual(delivery.authorizations.count, 2)
+        if delivery.authorizations.count == 2 {
+            delivery.authorizations[1](.success(true))
+            XCTAssertEqual(delivery.submissions, [LowBatteryNotice(target: .test(profile: 7), level: 10)])
+        }
+        delegate.stop()
+        executor.finishStop()
+        await drainResults()
+    }
+
+    func testDisablingAlertsClearsFailuresBeforeRefreshAndRejectsLateWarnings() async {
+        for failure in [NotificationFailure.denied, .system(domain: "Test", code: 1, description: "Rejected")] {
+            UserDefaults.standard.set(7, forKey: "testMode")
+            UserDefaults.standard.set(true, forKey: "notifyOnLowBattery")
+            let provider = RecordingHeadsetProvider()
+            provider.devices = [HeadsetDevice(usbID: .testDevice, name: "Fake", vendor: "Vendor", product: "Product", capabilities: [],
+                                              battery: .success(.init(level: 10, status: .available)), target: .test(profile: 7))]
+            let executor = ManualHeadsetExecutor()
+            let delivery = RecordingNotificationDelivery()
+            let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor), notificationDelivery: delivery)
+            delegate.updateStatusItem()
+            executor.runNext()
+            await drainResults()
+            if failure == .denied {
+                delivery.authorizations[0](.success(false))
+            } else {
+                delivery.authorizations[0](.success(true))
+                delivery.completions[0](.failure(failure))
+            }
+            XCTAssertEqual(delegate.notificationFailure, failure)
+            let menu = NSMenu()
+            delegate.menuNeedsUpdate(menu)
+            XCTAssertTrue(menu.items.contains { $0.title == failure.message })
+
+            UserDefaults.standard.set(false, forKey: "notifyOnLowBattery")
+            delegate.handleUserDefaultsChanged(Notification(name: UserDefaults.didChangeNotification))
+            await drainResults()
+            // Hold the refresh pending: clearing feedback must not wait for HID.
+            XCTAssertEqual(executor.jobs.count, 1)
+            XCTAssertNil(delegate.notificationFailure)
+            delegate.menuNeedsUpdate(menu)
+            XCTAssertFalse(menu.items.contains { $0.title == failure.message })
+            executor.runNext()
+            await drainResults()
+
+            UserDefaults.standard.set(true, forKey: "notifyOnLowBattery")
+            delegate.handleUserDefaultsChanged(Notification(name: UserDefaults.didChangeNotification))
+            await drainResults()
+            executor.runNext()
+            await drainResults()
+            XCTAssertEqual(delivery.authorizations.count, 2)
+            // Authorization can complete before the queued defaults observer.
+            UserDefaults.standard.set(false, forKey: "notifyOnLowBattery")
+            delivery.authorizations[1](.success(false))
+            XCTAssertNil(delegate.notificationFailure)
+            delegate.menuNeedsUpdate(menu)
+            XCTAssertFalse(menu.items.contains { $0.title == NotificationFailure.denied.message })
+            delegate.stop()
+            executor.finishStop()
+            await drainResults()
+        }
+    }
+
+    func testNotificationWarningClearsOnlyAfterItsOwnDeviceSucceeds() async throws {
+        for failsAuthorization in [true, false] {
+            for retryCompletesWhileEligible in [true, false] {
+                UserDefaults.standard.set(0, forKey: "testMode")
+                UserDefaults.standard.set(true, forKey: "notifyOnLowBattery")
+                UserDefaults.standard.set(25, forKey: "lowBatteryThreshold")
+                let a = HeadsetDevice(usbID: .init(vendor: 1, product: 2), name: "A", vendor: "Vendor", product: "Product", capabilities: [],
+                                      battery: .success(.init(level: 10, status: .available)),
+                                      target: .physical(.init(vendor: 1, product: 2), attachmentID: 11))
+                let b = HeadsetDevice(usbID: .init(vendor: 3, product: 4), name: "B", vendor: "Vendor", product: "Product", capabilities: [],
+                                      battery: .success(.init(level: 10, status: .available)),
+                                      target: .physical(.init(vendor: 3, product: 4), attachmentID: 22))
+                let provider = RecordingHeadsetProvider()
+                let executor = ManualHeadsetExecutor()
+                let delivery = RecordingNotificationDelivery()
+                let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor), notificationDelivery: delivery)
+                func refresh(_ devices: [HeadsetDevice]) async {
+                    provider.devices = devices
+                    delegate.updateStatusItem()
+                    executor.runNext()
+                    await drainResults()
+                }
+
+                await refresh([a, b])
+                let authorizeA = try XCTUnwrap(delivery.authorizations.first)
+                authorizeA(.success(true))
+                await refresh([b, a])
+                let authorizeB = try XCTUnwrap(delivery.authorizations.dropFirst().first)
+                let failure: NotificationFailure = failsAuthorization ? .denied : .system(domain: "Test", code: 1, description: "Rejected")
+                if failsAuthorization {
+                    authorizeB(.success(false))
+                } else {
+                    authorizeB(.success(true))
+                    let failB = try XCTUnwrap(delivery.completions.dropFirst().first)
+                    failB(.failure(failure))
+                }
+                XCTAssertEqual(delegate.notificationFailure, failure)
+
+                // A becomes eligible again before its older submission succeeds.
+                // That success must not clear the warning produced by B.
+                await refresh([a, b])
+                let completeA = try XCTUnwrap(delivery.completions.first)
+                completeA(.success(()))
+                XCTAssertEqual(delegate.notificationFailure, failure)
+                let menu = NSMenu()
+                delegate.menuNeedsUpdate(menu)
+                XCTAssertTrue(menu.items.contains { $0.title == failure.message })
+
+                await refresh([b, a])
+                XCTAssertEqual(delivery.authorizations.count, 3)
+                let retryB = try XCTUnwrap(delivery.authorizations.dropFirst(2).first)
+                retryB(.success(true))
+                if !retryCompletesWhileEligible { await refresh([a, b]) }
+                let completeB = try XCTUnwrap(delivery.completions.last)
+                completeB(.success(()))
+                XCTAssertNil(delegate.notificationFailure)
+                delegate.menuNeedsUpdate(menu)
+                XCTAssertFalse(menu.items.contains { $0.title == failure.message })
+                delegate.stop()
+                executor.finishStop()
+                await drainResults()
+            }
+        }
+    }
+
+    private func drainResults() async {
+        await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
+    }
+
     private func menuDevice(target: HeadsetTarget?) -> [String: Any] {
         var device: [String: Any] = [
             "device": "Headset", "vendor": "Vendor", "product": "Product",
-            "capabilities": HeadsetCapability.menuCapabilities.map { $0.legacyCapabilityString }
+            "capabilities": HeadsetCapability.menuCapabilities.map { $0.legacyCapabilityString },
+            "equalizerPresets": Result<[HeadsetEqualizerPreset], HeadsetFailure>.success([.init(index: 0, name: "Flat")])
         ]
         device["control_target"] = target
         return device

@@ -42,14 +42,14 @@ final class HeadsetIOWorkerTests: XCTestCase {
                 timerFired.fulfill()
                 worker.enqueue {
                     XCTAssertFalse(transaction.active)
-                    XCTAssertEqual(service.fetchDevices(testProfile: 7).first?.target, .test(profile: 7))
-                    XCTAssertTrue(service.perform(.lights(false), on: .test(profile: 7), testProfile: 7))
+                    XCTAssertEqual(service.fetchDevices(testProfile: 7).successValue?.first?.target, .test(profile: 7))
+                    XCTAssertTrue(service.perform(.lights(false), on: .test(profile: 7), testProfile: 7).isSuccess)
                     finished.fulfill()
                 }
             }
             RunLoop.current.add(timer, forMode: .default)
             XCTAssertFalse(Thread.isMainThread)
-            XCTAssertEqual(service.fetchDevices(testProfile: 7).first?.target, .test(profile: 7))
+            XCTAssertEqual(service.fetchDevices(testProfile: 7).successValue?.first?.target, .test(profile: 7))
             transaction.active = false
         }
         await fulfillment(of: [timerFired, finished], timeout: 2, enforceOrder: true)

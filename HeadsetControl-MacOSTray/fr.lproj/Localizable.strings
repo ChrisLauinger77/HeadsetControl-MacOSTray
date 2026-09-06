@@ -78,3 +78,28 @@
 
 /* Cannot safely select a USB attachment */
 "Controls unavailable: device connection is not unique" = "Commandes indisponibles : la connexion du périphérique n’est pas unique";
+
+/* Settings validation and device feedback */
+"Discovery" = "Détection";
+"Control" = "Commande";
+"Not supported" = "Non pris en charge";
+"Device offline" = "Périphérique hors ligne";
+"Timed out" = "Délai dépassé";
+"HID communication failed" = "Échec de la communication HID";
+"Invalid parameter" = "Paramètre non valide";
+"Native operation failed" = "Échec de l’opération native";
+"Invalid device response" = "Réponse du périphérique non valide";
+"Invalid test profile" = "Profil de test non valide";
+"Device connection changed or is ambiguous" = "La connexion du périphérique a changé ou est ambiguë";
+"Preset is not supported" = "Préréglage non pris en charge";
+"Operation cancelled" = "Opération annulée";
+"Operation already in progress" = "Opération déjà en cours";
+"Charging" = "En charge";
+"Unavailable" = "Indisponible";
+"Unknown" = "Inconnu";
+"Preset %d" = "Préréglage %d";
+"Low-battery notifications are not authorized" = "Les notifications de batterie faible ne sont pas autorisées";
+"Low-battery notification could not be sent" = "Impossible d’envoyer la notification de batterie faible";
+"Retry refresh" = "Réessayer l’actualisation";
+"Preset metadata unavailable" = "Métadonnées des préréglages indisponibles";
+"Fallback names are used only for supported presets without a device-reported name." = "Les noms de remplacement sont utilisés uniquement pour les préréglages pris en charge dont le périphérique ne fournit pas le nom.";

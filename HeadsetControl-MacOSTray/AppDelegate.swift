@@ -4,11 +4,11 @@ import UserNotifications
 @MainActor class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotificationCenterDelegate {
     // Sidetone level values from UserDefaults
     var sidetoneLevelsFromSettings: [(String, Int)] {
-        let off = UserDefaults.standard.integer(forKey: "sidetoneOff")
-        let low = UserDefaults.standard.integer(forKey: "sidetoneLow")
-        let mid = UserDefaults.standard.integer(forKey: "sidetoneMid")
-        let high = UserDefaults.standard.integer(forKey: "sidetoneHigh")
-        let max = UserDefaults.standard.integer(forKey: "sidetoneMax")
+        let off = AppDefaults.validatedSidetone(AppDefaults.standard.object(forKey: "sidetoneOff"), fallback: AppDefaults.sidetoneValues[0])
+        let low = AppDefaults.validatedSidetone(AppDefaults.standard.object(forKey: "sidetoneLow"), fallback: AppDefaults.sidetoneValues[1])
+        let mid = AppDefaults.validatedSidetone(AppDefaults.standard.object(forKey: "sidetoneMid"), fallback: AppDefaults.sidetoneValues[2])
+        let high = AppDefaults.validatedSidetone(AppDefaults.standard.object(forKey: "sidetoneHigh"), fallback: AppDefaults.sidetoneValues[3])
+        let max = AppDefaults.validatedSidetone(AppDefaults.standard.object(forKey: "sidetoneMax"), fallback: AppDefaults.sidetoneValues[4])
         return [
             (NSLocalizedString("Off", comment: "Sidetone level Off"), off),
             (NSLocalizedString("Low", comment: "Sidetone level Low"), low),
@@ -20,22 +20,49 @@ import UserNotifications
     private let headsetController: HeadsetController
     private var stopping = false
     private var lastRequestedProfile: Int?
+    private var lastNotificationEnabled: Bool?
+    private var lastNotificationThreshold: Int?
+    private let lowBatteryNotifications: LowBatteryNotifications
+    private var statusBatteryText: String?
+    private var telemetryFailures: [HeadsetFailure] = []
+    private(set) var refreshFailure: HeadsetFailure?
+    private(set) var commandFailure: String?
+    // A nil target represents the app-wide startup authorization request.
+    private var notificationIssue: (target: HeadsetTarget?, failure: NotificationFailure)?
+    var notificationFailure: NotificationFailure? { notificationIssue?.failure }
 
     override init() {
+        _ = AppDefaults.standard
+        lowBatteryNotifications = LowBatteryNotifications(delivery: SystemLowBatteryNotificationDelivery())
         headsetController = HeadsetController(provider: HeadsetControlService(), executor: HeadsetIOWorker.shared)
         super.init()
         bindHeadsetController()
     }
 
-    init(headsetController: HeadsetController) {
+    init(headsetController: HeadsetController, notificationDelivery: LowBatteryNotificationDelivering? = nil) {
+        _ = AppDefaults.standard
+        lowBatteryNotifications = LowBatteryNotifications(delivery: notificationDelivery ?? SystemLowBatteryNotificationDelivery())
         self.headsetController = headsetController
         super.init()
         bindHeadsetController()
     }
 
     private func bindHeadsetController() {
-        headsetController.onDevices = { [weak self] devices in
-            self?.applyDevices(devices.map(\.menuDictionary))
+        headsetController.onRefresh = { [weak self] result in self?.applyRefresh(result) }
+        lowBatteryNotifications.isStillAllowed = { [weak self] notice in
+            guard let self, !self.stopping else { return false }
+            return AppDefaults.standard.bool(forKey: "notifyOnLowBattery") && notice.level <= self.lowBatteryThreshold
+                && notice.target.accepts(testProfile: self.currentTestProfile)
+        }
+        lowBatteryNotifications.onFailure = { [weak self] target, error in
+            self?.notificationIssue = (target, error)
+            self?.updateStatusPresentation()
+        }
+        lowBatteryNotifications.onSuccess = { [weak self] target in
+            guard let self, let issue = self.notificationIssue,
+                  issue.target == nil || issue.target == target else { return }
+            self.notificationIssue = nil
+            self.updateStatusPresentation()
         }
     }
 
@@ -43,7 +70,16 @@ import UserNotifications
         guard !stopping, let action = sender.representedObject as? HeadsetMenuAction,
               let target = action.target else { return }
         headsetController.perform(command(action.value), on: target,
-                                  testProfile: UserDefaults.standard.integer(forKey: "testMode"))
+                                  testProfile: currentTestProfile) { [weak self] result in
+            guard let self, !self.stopping else { return }
+            switch result {
+            case .success: self.commandFailure = nil
+            case .failure(let error):
+                guard !error.isCancelled else { return }
+                self.commandFailure = action.deviceName.isEmpty ? error.message : "\(action.deviceName): \(error.message)"
+            }
+            self.updateStatusPresentation()
+        }
     }
 
     @objc func setEqualizerPreset(_ sender: NSMenuItem) {
@@ -70,24 +106,18 @@ import UserNotifications
         runControlAction(sender) { .sidetone($0) }
     }
 
+    private var currentTestProfile: Int {
+        AppDefaults.validatedTestProfile(AppDefaults.standard.object(forKey: "testMode"))
+    }
+
     var updateInterval: Int {
-        get {
-            let value = UserDefaults.standard.integer(forKey: "updateInterval")
-            return value == 0 ? 600 : value
-        }
-        set {
-            UserDefaults.standard.set(newValue, forKey: "updateInterval")
-        }
+        get { AppDefaults.validatedUpdateInterval(AppDefaults.standard.object(forKey: "updateInterval")) }
+        set { AppDefaults.standard.set(AppDefaults.validatedUpdateInterval(newValue), forKey: "updateInterval") }
     }
 
     var lowBatteryThreshold: Int {
-        get {
-            let value = UserDefaults.standard.integer(forKey: "lowBatteryThreshold")
-            return value == 0 ? 25 : min(max(value, 1), 30)
-        }
-        set {
-            UserDefaults.standard.set(min(max(newValue, 1), 30), forKey: "lowBatteryThreshold")
-        }
+        get { AppDefaults.validatedLowBatteryThreshold(AppDefaults.standard.object(forKey: "lowBatteryThreshold")) }
+        set { AppDefaults.standard.set(AppDefaults.validatedLowBatteryThreshold(newValue), forKey: "lowBatteryThreshold") }
     }
 
     var statusItem: NSStatusItem?
@@ -95,7 +125,6 @@ import UserNotifications
 
     var statusUpdateTimer: Timer?
     var latestDevices: [[String: Any]]? = nil
-    var lowBatteryNotificationShown = false
     private var activeTimerInterval: Int?
     private var appearanceObservation: NSKeyValueObservation?
 
@@ -107,8 +136,12 @@ import UserNotifications
         observeApplicationAppearance()
 
         // Request notification authorization and set delegate
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
-            // Optionally handle granted/error
+        SystemLowBatteryNotificationDelivery().authorize { [weak self] result in
+            guard let self, !self.stopping else { return }
+            if case .failure(let error) = result {
+                self.notificationIssue = (nil, error)
+                self.updateStatusPresentation()
+            }
         }
         UNUserNotificationCenter.current().delegate = self
 
@@ -133,17 +166,6 @@ import UserNotifications
 
         // Initial update
         updateStatusItem()
-
-        // Normalize stored equalizer preset names to comma-only (no spaces) for consistency
-        let storedRaw = UserDefaults.standard.string(forKey: "equalizerPresets") ?? "Preset 1,Preset 2,Preset 3,Preset 4"
-        let storedParts = storedRaw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        let normalizedStored = storedParts.joined(separator: ",")
-        if normalizedStored != storedRaw {
-            UserDefaults.standard.set(normalizedStored, forKey: "equalizerPresets")
-            #if DEBUG
-            NSLog("HeadsetControl: normalized equalizerPresets in UserDefaults to '%@'", normalizedStored)
-            #endif
-        }
 
         // Observe defaults changes so updateInterval takes effect immediately
         NotificationCenter.default.addObserver(
@@ -192,8 +214,12 @@ import UserNotifications
     @objc nonisolated func handleUserDefaultsChanged(_ notification: Notification) {
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.stopping else { return }
+            AppDefaults.validate(in: AppDefaults.standard)
             if self.updateInterval != self.activeTimerInterval { self.startStatusUpdateTimer() }
-            if UserDefaults.standard.integer(forKey: "testMode") != self.lastRequestedProfile {
+            if self.currentTestProfile != self.lastRequestedProfile
+                || AppDefaults.standard.bool(forKey: "notifyOnLowBattery") != self.lastNotificationEnabled
+                || self.lowBatteryThreshold != self.lastNotificationThreshold {
+                self.lowBatteryNotifications.suspend()
                 self.updateStatusItem()
             }
         }
@@ -201,41 +227,58 @@ import UserNotifications
 
     func updateStatusItem() {
         guard !stopping else { return }
-        let profile = UserDefaults.standard.integer(forKey: "testMode")
+        let profile = currentTestProfile
         if profile != lastRequestedProfile {
             latestDevices = []
-            statusItem?.button?.title = ""
+            statusBatteryText = nil
+            telemetryFailures = []
+            refreshFailure = nil
+            commandFailure = nil
+            notificationIssue = nil
+            lowBatteryNotifications.suspend()
         }
         lastRequestedProfile = profile
+        lastNotificationEnabled = AppDefaults.standard.bool(forKey: "notifyOnLowBattery")
+        lastNotificationThreshold = lowBatteryThreshold
+        updateStatusPresentation() // Preference feedback must not wait for HID.
         headsetController.refresh(testProfile: profile)
     }
 
-    private func applyDevices(_ devicesResult: [[String: Any]]) {
+    private func applyRefresh(_ result: Result<[HeadsetDevice], HeadsetFailure>) {
         guard !stopping else { return }
         // A defaults notification can still be queued behind this result.
-        guard UserDefaults.standard.integer(forKey: "testMode") == lastRequestedProfile else {
-            updateStatusItem()
-            return
+        guard currentTestProfile == lastRequestedProfile else { updateStatusItem(); return }
+        switch result {
+        case .failure(let error):
+            refreshFailure = error
+            latestDevices = nil
+            statusBatteryText = nil
+            telemetryFailures = []
+            lowBatteryNotifications.suspend()
+        case .success(let devices):
+            refreshFailure = nil
+            latestDevices = devices.map(\.menuDictionary)
+            telemetryFailures = devices.flatMap(\.failures)
+            if let first = devices.first, case .success(let battery) = first.battery {
+                statusBatteryText = battery.chargeText
+            } else { statusBatteryText = nil }
+            lowBatteryNotifications.update(devices: devices, enabled: AppDefaults.standard.bool(forKey: "notifyOnLowBattery"),
+                                           threshold: lowBatteryThreshold, testProfile: currentTestProfile)
         }
-        var batteryLevelText: String? = nil
-        if let device = devicesResult.first,
-           let battery = device["battery"] as? [String: Any] {
-            batteryLevelText = batteryChargeText(from: battery)
-            let status = battery["status"] as? String ?? ""
-            if let level = battery["level"] as? Int {
-                let notifyOnLowBattery = UserDefaults.standard.object(forKey: "notifyOnLowBattery") as? Bool ?? true
-                let lowBatteryThreshold = self.lowBatteryThreshold
-                if notifyOnLowBattery && status == "BATTERY_AVAILABLE" && level <= lowBatteryThreshold && !lowBatteryNotificationShown {
-                    showLowBatteryNotification(level: level)
-                    lowBatteryNotificationShown = true
-                }
-                if status == "BATTERY_AVAILABLE" && level > lowBatteryThreshold {
-                    lowBatteryNotificationShown = false
-                }
-            }
-        }
-        statusItem?.button?.title = batteryLevelText.map { " " + $0 } ?? ""
-        latestDevices = devicesResult
+        updateStatusPresentation()
+    }
+
+    private var feedbackMessages: [String] {
+        [refreshFailure?.message, commandFailure, notificationFailure?.message].compactMap { $0 }
+    }
+
+    private func updateStatusPresentation() {
+        guard !stopping else { return }
+        // Also reject failures delivered before the queued defaults observer.
+        if !AppDefaults.standard.bool(forKey: "notifyOnLowBattery") { notificationIssue = nil }
+        let messages = feedbackMessages + telemetryFailures.map(\.message)
+        statusItem?.button?.title = (statusBatteryText.map { " " + $0 } ?? "") + (messages.isEmpty ? "" : " ⚠︎")
+        statusItem?.button?.toolTip = messages.isEmpty ? nil : messages.joined(separator: "\n")
     }
 
     // Never join the HID thread or take a lock around native work on the main
@@ -254,6 +297,7 @@ import UserNotifications
     func stop(completion: @escaping () -> Void = {}) {
         if !stopping {
             stopping = true
+            lowBatteryNotifications.stop()
             statusUpdateTimer?.invalidate()
             statusUpdateTimer = nil
             NotificationCenter.default.removeObserver(self)
@@ -269,50 +313,14 @@ import UserNotifications
         headsetController.stop(completion: completion)
     }
 
-    private func batteryChargeText(from battery: [String: Any]) -> String? {
-        let status = battery["status"] as? String ?? ""
-        let isCharging = status == "BATTERY_CHARGING"
-        let prefix = isCharging ? "⚡︎ " : ""
-
-        if let level = battery["level"] as? Int, level >= 0 {
-            return prefix + "\(level)%"
-        }
-
-        return isCharging ? "⚡︎" : nil
+    private func formatTimeToEmpty(minutes: Int?) -> String? {
+        guard let minutes, minutes > 0 else { return nil }
+        if minutes < 60 { return " (\(NSLocalizedString("<1h", comment: "Battery time less than one hour")))" }
+        return " (" + String(format: NSLocalizedString("%dh", comment: "Battery time in whole hours"), minutes / 60) + ")"
     }
-
-    // Helper to format time_to_empty_min into a submenu suffix like " (5h)" or " (<1h)".
-    // - Accepts Int/Double/String values from JSON and returns an optional suffix with a leading space.
-    private func formatTimeToEmpty(minutesAny: Any?) -> String? {
-        guard let value = minutesAny else { return nil }
-        var minutes: Int?
-        if let m = value as? Int {
-            minutes = m
-        } else if let m = value as? Double {
-            minutes = Int(m)
-        } else if let m = value as? String, let mi = Int(m) {
-            minutes = mi
-        } else {
-            return nil
-        }
-        guard let mins = minutes, mins > 0 else { return nil }
-        if mins < 60 {
-            return " (\(NSLocalizedString("<1h", comment: "Battery time less than one hour")))"
-        }
-        let hours = mins / 60 // floor division as requested
-        let hoursText = String(format: NSLocalizedString("%dh", comment: "Battery time in whole hours"), hours)
-        return " (\(hoursText))"
-    }
-
-    private let inactiveTimeOptionsDefault: [Int] = [1, 2, 5, 10, 15, 30, 45, 60, 75, 90]
-    private lazy var inactiveTimeOptionsAllowed: Set<Int> = Set(inactiveTimeOptionsDefault)
 
     private var inactiveTimeMinutesFromSettings: [Int] {
-        let defaultRaw = inactiveTimeOptionsDefault.map(String.init).joined(separator: ",")
-        let raw = UserDefaults.standard.string(forKey: "inactiveTimeOptions") ?? defaultRaw
-        let parsed = raw.split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-        let filtered = parsed.filter { inactiveTimeOptionsAllowed.contains($0) }
-        return Array(Set(filtered)).sorted()
+        AppDefaults.parseInactiveTimeOptions(AppDefaults.standard.string(forKey: "inactiveTimeOptions") ?? AppDefaults.inactiveTimeOptionsRaw)
     }
 
     private func inactiveTimeLabel(for minutes: Int) -> String {
@@ -344,8 +352,15 @@ import UserNotifications
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        for message in feedbackMessages { menu.addItem(withTitle: message, action: nil, keyEquivalent: "") }
+        if refreshFailure != nil {
+            let retry = menu.addItem(withTitle: NSLocalizedString("Retry refresh", comment: "Retry discovery after failure"), action: #selector(handleRefreshNotification), keyEquivalent: "")
+            retry.target = self
+        }
         guard let devices = latestDevices, !devices.isEmpty else {
-            menu.addItem(withTitle: NSLocalizedString("No devices found", comment: "No devices found message"), action: nil, keyEquivalent: "")
+            if refreshFailure == nil {
+                menu.addItem(withTitle: NSLocalizedString("No devices found", comment: "No devices found message"), action: nil, keyEquivalent: "")
+            }
             menu.addItem(NSMenuItem.separator())
             menu.addItem(withTitle: NSLocalizedString("Settings...", comment: "Settings menu item"), action: #selector(openSettings), keyEquivalent: "s")
             menu.addItem(withTitle: NSLocalizedString("Quit", comment: "Quit menu item"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -359,14 +374,19 @@ import UserNotifications
             menu.addItem(withTitle: String(format: "%@: %@", NSLocalizedString("Device", comment: "Device label"), deviceName), action: nil, keyEquivalent: "")
             menu.addItem(withTitle: String(format: "%@: %@", NSLocalizedString("Vendor", comment: "Vendor label"), vendor), action: nil, keyEquivalent: "")
             menu.addItem(withTitle: String(format: "%@: %@", NSLocalizedString("Product", comment: "Product label"), product), action: nil, keyEquivalent: "")
-            if let battery = device["battery"] as? [String: Any], let batteryText = batteryChargeText(from: battery) {
-                // Append time-to-empty in hours (submenu only) when available. Use floor rounding and "h" suffix; show "<1h" for under 60 minutes.
-                let suffix = formatTimeToEmpty(minutesAny: battery["time_to_empty_min"])
-                let title = String(format: "%@: %@%@", NSLocalizedString("Battery", comment: "Battery label"), batteryText, suffix ?? "")
-                menu.addItem(withTitle: title, action: nil, keyEquivalent: "")
+            if let battery = device["battery"] as? Result<HeadsetBattery, HeadsetFailure> {
+                switch battery {
+                case .success(let value):
+                    let suffix = value.percentage != nil ? formatTimeToEmpty(minutes: value.timeToEmpty) ?? "" : ""
+                    menu.addItem(withTitle: "\(NSLocalizedString("Battery", comment: "Battery label")): \(value.chargeText ?? value.statusText)\(suffix)", action: nil, keyEquivalent: "")
+                case .failure(let error): menu.addItem(withTitle: error.message, action: nil, keyEquivalent: "")
+                }
             }
-            if let chatmix = device["chatmix"] {
-                menu.addItem(withTitle: String(format: "%@: %@", NSLocalizedString("Chatmix", comment: "Chatmix label"), String(describing: chatmix)), action: nil, keyEquivalent: "")
+            if let chatmix = device["chatmix"] as? Result<Int, HeadsetFailure> {
+                switch chatmix {
+                case .success(let level): menu.addItem(withTitle: "\(NSLocalizedString("Chatmix", comment: "Chatmix label")): \(level)", action: nil, keyEquivalent: "")
+                case .failure(let error): menu.addItem(withTitle: error.message, action: nil, keyEquivalent: "")
+                }
             }
             // Add menu items for selected capabilities
             if let capabilities = device["capabilities"] as? [String] {
@@ -390,7 +410,7 @@ import UserNotifications
                                 if levelValue == -1 { continue }
                                 let item = NSMenuItem(title: levelTitle, action: #selector(setSidetoneLevel(_:)), keyEquivalent: "")
                                 item.target = self
-                                item.representedObject = HeadsetMenuAction(target: controlTarget, value: levelValue)
+                                item.representedObject = HeadsetMenuAction(target: controlTarget, value: levelValue, deviceName: deviceName)
                                 if controlTarget == nil { item.action = nil }
                                 sidetoneMenu.addItem(item)
                             }
@@ -406,7 +426,7 @@ import UserNotifications
                             for (optionTitle, optionValue) in lightsOptions {
                                 let item = NSMenuItem(title: optionTitle, action: #selector(setLights(_:)), keyEquivalent: "")
                                 item.target = self
-                                item.representedObject = HeadsetMenuAction(target: controlTarget, value: optionValue)
+                                item.representedObject = HeadsetMenuAction(target: controlTarget, value: optionValue, deviceName: deviceName)
                                 if controlTarget == nil { item.action = nil }
                                 lightsMenu.addItem(item)
                             }
@@ -422,7 +442,7 @@ import UserNotifications
                             for (optionTitle, optionValue) in voicePromptsOptions {
                                 let item = NSMenuItem(title: optionTitle, action: #selector(setVoicePrompts(_:)), keyEquivalent: "")
                                 item.target = self
-                                item.representedObject = HeadsetMenuAction(target: controlTarget, value: optionValue)
+                                item.representedObject = HeadsetMenuAction(target: controlTarget, value: optionValue, deviceName: deviceName)
                                 if controlTarget == nil { item.action = nil }
                                 voicePromptsMenu.addItem(item)
                             }
@@ -438,7 +458,7 @@ import UserNotifications
                             for (optionTitle, optionValue) in rotateToMuteOptions {
                                 let item = NSMenuItem(title: optionTitle, action: #selector(setRotateToMute(_:)), keyEquivalent: "")
                                 item.target = self
-                                item.representedObject = HeadsetMenuAction(target: controlTarget, value: optionValue)
+                                item.representedObject = HeadsetMenuAction(target: controlTarget, value: optionValue, deviceName: deviceName)
                                 if controlTarget == nil { item.action = nil }
                                 rotateToMuteMenu.addItem(item)
                             }
@@ -454,7 +474,7 @@ import UserNotifications
                             for (optionTitle, optionValue) in inactiveOptions {
                                 let item = NSMenuItem(title: optionTitle, action: #selector(setInactiveTime(_:)), keyEquivalent: "")
                                 item.target = self
-                                item.representedObject = HeadsetMenuAction(target: controlTarget, value: optionValue)
+                                item.representedObject = HeadsetMenuAction(target: controlTarget, value: optionValue, deviceName: deviceName)
                                 if controlTarget == nil { item.action = nil }
                                 inactiveTimeMenu.addItem(item)
                             }
@@ -463,43 +483,22 @@ import UserNotifications
                             menu.setSubmenu(inactiveTimeMenu, for: inactiveTimeMenuItem)
                         case "CAP_EQUALIZER_PRESET":
                             let eqPresetMenu = NSMenu(title: NSLocalizedString("Equalizer Preset", comment: "Equalizer Preset capability"))
-                            var presetNames: [String] = []
-                            if let count = device["equalizer_presets_count"] as? Int,
-                               let presets = device["equalizer_presets"] as? [String: Any],
-                               count > 0 {
-                                // Preserve device-reported preset order (do not sort)
-                                let reportedKeys = Array(presets.keys).map { String($0) }
-
-                                // Read stored presets (support both comma and comma+space formats) and normalize
-                                let storedRaw = UserDefaults.standard.string(forKey: "equalizerPresets") ?? "Preset 1,Preset 2,Preset 3,Preset 4"
-                                let storedParts = storedRaw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                                let normalizedStored = storedParts.joined(separator: ",")
-                                if normalizedStored != storedRaw {
-                                    UserDefaults.standard.set(normalizedStored, forKey: "equalizerPresets")
-                                    #if DEBUG
-                                    NSLog("HeadsetControl: normalized equalizerPresets in UserDefaults to '%@'", normalizedStored)
-                                    #endif
+                            let metadata = device["equalizerPresets"] as? Result<[HeadsetEqualizerPreset], HeadsetFailure>
+                            if case .success(let presets) = metadata, !presets.isEmpty {
+                                let fallback = AppDefaults.standard.string(forKey: "equalizerPresets") ?? AppDefaults.equalizerPresets
+                                for preset in presets {
+                                    let name = preset.name ?? AppDefaults.presetName(index: preset.index, fallbackNames: fallback)
+                                    let item = NSMenuItem(title: name, action: #selector(setEqualizerPreset(_:)), keyEquivalent: "")
+                                    item.target = self
+                                    item.representedObject = HeadsetMenuAction(target: controlTarget, value: preset.index, deviceName: deviceName)
+                                    if controlTarget == nil { item.action = nil }
+                                    eqPresetMenu.addItem(item)
                                 }
-
-                                // Localize preset names from device (preserve device order)
-                                presetNames = reportedKeys.map { NSLocalizedString($0, comment: "Equalizer preset from device") }
                             } else {
-                                // Use user-defined preset names from settings, fallback to defaults if empty
-                                let stored = UserDefaults.standard.string(forKey: "equalizerPresets") ?? "Preset 1,Preset 2,Preset 3,Preset 4"
-                                let names = stored.split(separator: ",").map { NSLocalizedString($0.trimmingCharacters(in: .whitespacesAndNewlines), comment: "User-defined equalizer preset") }.filter { !$0.isEmpty }
-                                presetNames = names.isEmpty ? [
-                                    NSLocalizedString("Preset 1", comment: "Equalizer preset 1"),
-                                    NSLocalizedString("Preset 2", comment: "Equalizer preset 2"),
-                                    NSLocalizedString("Preset 3", comment: "Equalizer preset 3"),
-                                    NSLocalizedString("Preset 4", comment: "Equalizer preset 4")
-                                ] : names
-                            }
-                            for (idx, name) in presetNames.enumerated() {
-                                let item = NSMenuItem(title: name, action: #selector(setEqualizerPreset(_:)), keyEquivalent: "")
-                                item.target = self
-                                item.representedObject = HeadsetMenuAction(target: controlTarget, value: idx)
-                                if controlTarget == nil { item.action = nil }
-                                eqPresetMenu.addItem(item)
+                                let message: String
+                                if case .failure(let error) = metadata { message = error.message }
+                                else { message = NSLocalizedString("Preset metadata unavailable", comment: "No supported preset indices available") }
+                                eqPresetMenu.addItem(withTitle: message, action: nil, keyEquivalent: "")
                             }
                             let eqPresetMenuItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
                             menu.addItem(eqPresetMenuItem)
@@ -529,16 +528,6 @@ import UserNotifications
             NSApp.activate(ignoringOtherApps: true)
             NSApp.sendAction(action, to: settingsItem.target, from: settingsItem)
         }
-    }
-
-    func showLowBatteryNotification(level: Int) {
-        let content = UNMutableNotificationContent()
-        content.title = NSLocalizedString("HeadsetControl-MacOSTray", comment: "App title")
-        content.body = String(format: NSLocalizedString("Low battery notification message", comment: "Low battery notification message"), level)
-        content.sound = UNNotificationSound.default
-        // App icon is shown by default in notification banner
-        let request = UNNotificationRequest(identifier: "lowBatteryNotification", content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
     }
 
     // UNUserNotificationCenterDelegate: Show notifications when app is in foreground

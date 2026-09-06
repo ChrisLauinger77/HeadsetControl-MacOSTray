@@ -78,3 +78,28 @@
 
 /* Cannot safely select a USB attachment */
 "Controls unavailable: device connection is not unique" = "Controls unavailable: device connection is not unique";
+
+/* Settings validation and device feedback */
+"Discovery" = "Discovery";
+"Control" = "Control";
+"Not supported" = "Not supported";
+"Device offline" = "Device offline";
+"Timed out" = "Timed out";
+"HID communication failed" = "HID communication failed";
+"Invalid parameter" = "Invalid parameter";
+"Native operation failed" = "Native operation failed";
+"Invalid device response" = "Invalid device response";
+"Invalid test profile" = "Invalid test profile";
+"Device connection changed or is ambiguous" = "Device connection changed or is ambiguous";
+"Preset is not supported" = "Preset is not supported";
+"Operation cancelled" = "Operation cancelled";
+"Operation already in progress" = "Operation already in progress";
+"Charging" = "Charging";
+"Unavailable" = "Unavailable";
+"Unknown" = "Unknown";
+"Preset %d" = "Preset %d";
+"Low-battery notifications are not authorized" = "Low-battery notifications are not authorized";
+"Low-battery notification could not be sent" = "Low-battery notification could not be sent";
+"Retry refresh" = "Retry refresh";
+"Preset metadata unavailable" = "Preset metadata unavailable";
+"Fallback names are used only for supported presets without a device-reported name." = "Fallback names are used only for supported presets without a device-reported name.";

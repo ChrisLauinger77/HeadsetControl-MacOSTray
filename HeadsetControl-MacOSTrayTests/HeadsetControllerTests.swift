@@ -24,15 +24,17 @@ final class RecordingHeadsetProvider: HeadsetControlProviding, @unchecked Sendab
     var shutdownCount = 0
     var onFetch: (() -> Void)?
     var devices: [HeadsetDevice] = []
+    var fetchFailure: HeadsetFailure?
+    var commandResult: Result<Void, HeadsetFailure> = .success(())
 
-    func fetchDevices(testProfile: Int) -> [HeadsetDevice] {
+    func fetchDevices(testProfile: Int) -> Result<[HeadsetDevice], HeadsetFailure> {
         profiles.append(testProfile)
         onFetch?()
-        return devices
+        return fetchFailure.map { .failure($0) } ?? .success(devices)
     }
-    func perform(_ command: HeadsetCommand, on target: HeadsetTarget, testProfile: Int) -> Bool {
+    func perform(_ command: HeadsetCommand, on target: HeadsetTarget, testProfile: Int) -> Result<Void, HeadsetFailure> {
         commands.append((command, target, testProfile))
-        return true
+        return commandResult
     }
     func shutdown() { shutdownCount += 1 }
 }
@@ -43,7 +45,7 @@ final class HeadsetControllerTests: XCTestCase {
         let provider = RecordingHeadsetProvider()
         let controller = HeadsetController(provider: provider, executor: executor)
         var publications = 0
-        controller.onDevices = { _ in publications += 1 }
+        controller.onRefresh = { _ in publications += 1 }
 
         controller.refresh(testProfile: 0)
         for _ in 0..<20 { controller.refresh(testProfile: 0) }
@@ -93,7 +95,7 @@ final class HeadsetControllerTests: XCTestCase {
         let controller = HeadsetController(provider: provider, executor: executor)
         var publications = 0
         var stopped = false
-        controller.onDevices = { _ in publications += 1 }
+        controller.onRefresh = { _ in publications += 1 }
         controller.refresh(testProfile: 0)
         executor.runNext() // Its main-actor completion is still pending.
         controller.refresh(testProfile: 0)
@@ -114,7 +116,7 @@ final class HeadsetControllerTests: XCTestCase {
         let provider = RecordingHeadsetProvider()
         let controller = HeadsetController(provider: provider, executor: executor)
         var publications = 0
-        controller.onDevices = { _ in publications += 1 }
+        controller.onRefresh = { _ in publications += 1 }
         controller.refresh(testProfile: 0)
         controller.perform(.lights(false), on: .physical(HeadsetUSBID(vendor: 1, product: 2), attachmentID: 3), testProfile: 0)
         controller.refresh(testProfile: 7)
@@ -133,7 +135,7 @@ final class HeadsetControllerTests: XCTestCase {
         let executor = ManualHeadsetExecutor()
         let provider = RecordingHeadsetProvider()
         let controller = HeadsetController(provider: provider, executor: executor)
-        controller.onDevices = { _ in
+        controller.onRefresh = { _ in
             controller.refresh(testProfile: 0)
             controller.refresh(testProfile: 0)
         }
@@ -142,7 +144,7 @@ final class HeadsetControllerTests: XCTestCase {
         executor.runNext()
         await drainMainQueue()
         XCTAssertEqual(executor.jobs.count, 1)
-        controller.onDevices = nil
+        controller.onRefresh = nil
         executor.runNext()
         await drainMainQueue()
         XCTAssertTrue(executor.jobs.isEmpty)
@@ -155,14 +157,97 @@ final class HeadsetControllerTests: XCTestCase {
         let controller = HeadsetController(provider: provider, executor: executor)
         controller.refresh(testProfile: 0)
         controller.refresh(testProfile: 7)
-        controller.perform(.lights(false), on: .test(profile: 8), testProfile: 8)
+        controller.perform(.lights(false), on: .test(profile: 6), testProfile: 6)
         executor.runNext() // Obsolete physical refresh is skipped.
         executor.runNext() // Current test command.
         await drainMainQueue()
         executor.runNext()
         await drainMainQueue()
-        XCTAssertEqual(provider.profiles, [8])
-        XCTAssertEqual(provider.commands.first?.2, 8)
+        XCTAssertEqual(provider.profiles, [6])
+        XCTAssertEqual(provider.commands.first?.2, 6)
+    }
+
+    @MainActor func testEmptyDiscoveryAndFailureStayDistinctThroughCoordinator() async {
+        let executor = ManualHeadsetExecutor()
+        let provider = RecordingHeadsetProvider()
+        let controller = HeadsetController(provider: provider, executor: executor)
+        var results: [Result<[HeadsetDevice], HeadsetFailure>] = []
+        controller.onRefresh = { results.append($0) }
+        let error = HeadsetFailure(operation: .discovery, kind: .native(-5))
+        provider.fetchFailure = error
+        controller.refresh(testProfile: 0)
+        executor.runNext()
+        await drainMainQueue()
+        provider.fetchFailure = nil
+        controller.refresh(testProfile: 0)
+        executor.runNext()
+        await drainMainQueue()
+        XCTAssertEqual(results[0].failureValue, error)
+        XCTAssertEqual(results[1].successValue?.count, 0)
+    }
+
+    @MainActor func testCommandErrorReachesCallerAndStopCancelsLateCompletionOnce() async {
+        let executor = ManualHeadsetExecutor()
+        let provider = RecordingHeadsetProvider()
+        let controller = HeadsetController(provider: provider, executor: executor)
+        let error = HeadsetFailure(operation: .command, kind: .native(-4))
+        provider.commandResult = .failure(error)
+        var results: [Result<Void, HeadsetFailure>] = []
+        controller.perform(.lights(false), on: .test(profile: 7), testProfile: 7) { result in
+            XCTAssertTrue(Thread.isMainThread)
+            results.append(result)
+        }
+        executor.runNext()
+        await drainMainQueue()
+        XCTAssertEqual(results.first?.failureValue, error)
+        controller.perform(.lights(false), on: .test(profile: 7), testProfile: 7) { results.append($0) }
+        executor.runNext()
+        controller.stop()
+        await drainMainQueue()
+        XCTAssertEqual(results.count, 2)
+        XCTAssertEqual(results.last?.failureValue?.kind, .cancelled)
+        executor.finishStop()
+        await drainMainQueue()
+    }
+
+    @MainActor func testInvalidProfileDoesNotEnqueueOrConvertForNativeCode() async {
+        let executor = ManualHeadsetExecutor()
+        let provider = RecordingHeadsetProvider()
+        let controller = HeadsetController(provider: provider, executor: executor)
+        var failure: HeadsetFailure?
+        controller.onRefresh = { failure = $0.failureValue }
+        controller.refresh(testProfile: Int.max)
+        XCTAssertEqual(failure?.kind, .invalidTestProfile(Int.max))
+        controller.perform(.lights(false), on: .test(profile: Int.max), testProfile: Int.max) { failure = $0.failureValue }
+        XCTAssertEqual(failure?.kind, .invalidTestProfile(Int.max))
+        XCTAssertTrue(executor.jobs.isEmpty)
+        XCTAssertTrue(provider.profiles.isEmpty)
+    }
+
+    @MainActor func testCancellationCallbackCanStopWithoutLeavingAnUnresolvedCommand() async {
+        let executor = ManualHeadsetExecutor()
+        let provider = RecordingHeadsetProvider()
+        let controller = HeadsetController(provider: provider, executor: executor)
+        controller.perform(.lights(false), on: .test(profile: 7), testProfile: 7) { _ in controller.stop() }
+        var result: Result<Void, HeadsetFailure>?
+        controller.perform(.lights(false), on: .test(profile: 6), testProfile: 6) { result = $0 }
+        XCTAssertEqual(result?.failureValue?.kind, .cancelled)
+        XCTAssertTrue(executor.jobs.isEmpty)
+        executor.finishStop()
+        await drainMainQueue()
+    }
+
+    @MainActor func testCancellationCallbackCanChangeModeWithoutRestoringOldRefresh() async {
+        let executor = ManualHeadsetExecutor()
+        let provider = RecordingHeadsetProvider()
+        let controller = HeadsetController(provider: provider, executor: executor)
+        controller.perform(.lights(false), on: .test(profile: 7), testProfile: 7) { _ in controller.refresh(testProfile: 3) }
+        controller.refresh(testProfile: 6)
+        executor.runNext() // Cancelled command.
+        executor.runNext() // Refresh requested by the cancellation callback.
+        await drainMainQueue()
+        XCTAssertEqual(provider.profiles, [3])
+        XCTAssertTrue(executor.jobs.isEmpty)
     }
 
     @MainActor private func drainMainQueue() async {
