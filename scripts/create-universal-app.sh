@@ -38,6 +38,7 @@ xcrun lipo -create \
   "$x86_64_app/$executable_path" \
   -output "$universal_app/$executable_path"
 chmod +x "$universal_app/$executable_path"
+python3 "$script_dir/release-artifact.py" merge "$arm64_app" --other-bundle "$x86_64_app" --output-bundle "$universal_app" ${tag_arguments[@]+"${tag_arguments[@]}"}
 
 codesign --force --deep --sign - "$universal_app"
 codesign --verify --deep --strict --verbose=4 "$universal_app"
@@ -47,7 +48,7 @@ done
 
 candidate_archive="$work_dir/HeadsetControl-MacOSTray.zip"
 ditto -c -k --sequesterRsrc --keepParent "$universal_app" "$candidate_archive"
-python3 "$script_dir/release-artifact.py" archive "$candidate_archive" --match-bundle "$arm64_app" ${tag_arguments[@]+"${tag_arguments[@]}"}
+python3 "$script_dir/release-artifact.py" archive "$candidate_archive" --universal --match-bundle "$arm64_app" ${tag_arguments[@]+"${tag_arguments[@]}"}
 mkdir "$work_dir/final"
 ditto -x -k "$candidate_archive" "$work_dir/final"
 final_app="$work_dir/final/HeadsetControl-MacOSTray.app"

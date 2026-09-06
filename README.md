@@ -11,19 +11,19 @@ HeadsetControl-MacOSTray is a macOS background application that uses the [headse
 
 ## Preconditions
 
-1. MacOS 14 or later
+1. macOS 14.0 (Sonoma) or later, on Apple Silicon or Intel
 2. [Homebrew](https://brew.sh/) to install headsetcontrol and the app
 
 ## Installation
 
-1. Install [headsetcontrol](https://github.com/Sapd/HeadsetControl) via [Homebrew](https://brew.sh/). The app links against the installed library and headers:
+1. Install [headsetcontrol](https://github.com/Sapd/HeadsetControl) via [Homebrew](https://brew.sh/). This preserves the supported Homebrew installation model and installs the external HIDAPI runtime dependency:
    ```sh
    brew tap sapd/headsetcontrol
    brew trust --formula sapd/headsetcontrol/headsetcontrol
    brew install sapd/headsetcontrol/headsetcontrol
    ```
 
-(brew install sapd/headsetcontrol/headsetcontrol --HEAD) when release is not yet available via Homebrew.
+The released app embeds a pinned headsetcontrol version. Installing a newer formula does not change its embedded headset support.
 
 2. Install headsetcontrol-macostray via [Homebrew](https://brew.sh/)
    ```sh
@@ -31,7 +31,7 @@ HeadsetControl-MacOSTray is a macOS background application that uses the [headse
    brew trust --cask chrislauinger77/cask/headsetcontrol-macostray
    brew install --cask chrislauinger77/cask/headsetcontrol-macostray
    ```
-3. Restart the app after installing or updating headsetcontrol so macOS loads the current library.
+3. Restart the app after updating HIDAPI so macOS loads the updated runtime library.
 4. Follow the first-launch instructions below if macOS blocks the app.
 
 ## macOS Security Notice
@@ -56,11 +56,9 @@ xattr -dr com.apple.quarantine "/Applications/HeadsetControl-MacOSTray.app"
    ```sh
    brew upgrade
    ```
-2. headsetcontrol
-   ```sh
-   brew reinstall headsetcontrol
-   ```
-   headsetcontrol is used as a library to talk to supported headsets. It should be updated occasionally even when the app has no updates. The app will use the updated library after restart of the app. Additional headsets might be added as well as new features for existing ones.
+The app statically embeds headsetcontrol. New headset support and headsetcontrol fixes reach users through a new app release built with an updated pinned revision. Reinstalling or updating the headsetcontrol formula does **not** add support to an already-built app.
+
+HIDAPI remains a dynamically loaded Homebrew dependency and can be updated independently with `brew upgrade hidapi`; restart the app afterward. Keep the standard Homebrew installation prefix (`/opt/homebrew` on Apple Silicon, `/usr/local` on Intel). The app expects HIDAPI's `libhidapi.0.dylib` ABI. See [the build contract](docs/build-contract.md) for exact build inputs and compatibility validation.
 
 ## Screenshots
 
@@ -115,8 +113,8 @@ If you like my work, please consider supporting me ! <br><br>
    ```sh
    git clone https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray.git
    ```
-2. Install headsetcontrol so Xcode can find `headsetcontrol_c.h` and `libheadsetcontrol`.
-3. Open the project in Xcode and build.
+2. For the same native inputs as CI/release, install Xcode 26.3 and CMake, then run the [shared build helper](docs/build-contract.md#building-and-testing). It fetches exact source revisions, builds native libraries at the supported macOS floor, runs Debug and Release tests, and creates a validated app archive.
+3. Opening the project directly in Xcode still supports locally installed Homebrew headers/libraries. Such development builds are not release artifacts and do not establish the pinned dependency contract. SwiftPM source compilation requires Swift 6.1 or later; the release toolchain is fixed separately.
 
 ## Usage
 
@@ -127,7 +125,7 @@ If you like my work, please consider supporting me ! <br><br>
 
 ## Troubleshooting
 
-- **No headset data appears:** Ensure headsetcontrol is installed, restart the app, and check that your headset is supported by the installed headsetcontrol version.
+- **No headset data appears:** Check that your headset is supported by the headsetcontrol version embedded in this app release. Updating the app may be necessary. Check HIDAPI installation if the app cannot launch.
 - **Build fails with `headsetcontrol_c.h not found`:** Install headsetcontrol through Homebrew and make sure the headers are available in `/opt/homebrew/include` or `/usr/local/include`.
 
 ## License

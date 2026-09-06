@@ -14,6 +14,10 @@ on:
       - "**/*.md"
       - "LICENSE"
 
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+  PYTHONDONTWRITEBYTECODE: '1'
+
 jobs:
   build:
     strategy:
@@ -33,55 +37,26 @@ jobs:
         run: |
           node --test scripts/tests/*.test.cjs
           python3 -B -m unittest discover -s scripts/tests -p 'test_*.py' -v
-      - name: Install Homebrew dependencies
-        run: |
-          brew untap aws/tap 2>/dev/null || true
-          brew tap sapd/headsetcontrol
-          brew install sapd/headsetcontrol/headsetcontrol --HEAD
-      - name: Test
-        run: |
-          homebrew_prefix="$(brew --prefix)"
-          swift test \
-            -Xcc "-I${homebrew_prefix}/include" \
-            -Xlinker "-L${homebrew_prefix}/lib" \
-            -Xlinker -lheadsetcontrol \
-            -Xlinker -lhidapi \
-            -Xlinker -lc++
-      - name: Build
+      - name: Build and test pinned native contract
         env:
-          DERIVED_DATA: ${{ runner.temp }}/DerivedData
+          DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+          PYTHONDONTWRITEBYTECODE: '1'
         run: |
-          xcodebuild \
-            -scheme HeadsetControl-MacOSTray \
-            -project HeadsetControl-MacOSTray.xcodeproj \
-            -configuration Release \
-            -destination 'platform=macOS' \
-            -derivedDataPath "$DERIVED_DATA" \
-            build
-      - name: Verify app signature and architecture
-        env:
-          APP_PATH: ${{ runner.temp }}/DerivedData/Build/Products/Release/HeadsetControl-MacOSTray.app
-          EXPECTED_ARCH: ${{ matrix.arch }}
-        run: |
-          executable="$APP_PATH/Contents/MacOS/HeadsetControl-MacOSTray"
-          codesign --verify --deep --strict --verbose=4 "$APP_PATH"
-          lipo "$executable" -verify_arch "$EXPECTED_ARCH"
-      - name: Create architecture archive
-        env:
-          APP_PATH: ${{ runner.temp }}/DerivedData/Build/Products/Release/HeadsetControl-MacOSTray.app
-          ARCHIVE_PATH: ${{ runner.temp }}/HeadsetControl-MacOSTray-${{ matrix.arch }}.zip
-        run: ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ARCHIVE_PATH"
+          python3 -B scripts/build-native-app.py \
+            --workspace "${{ runner.temp }}/native-contract" \
+            --arch "${{ matrix.arch }}"
+
       - name: Upload architecture archive
         uses: actions/upload-artifact@v7
         with:
           name: app-${{ matrix.arch }}
-          path: ${{ runner.temp }}/HeadsetControl-MacOSTray-${{ matrix.arch }}.zip
+          path: ${{ runner.temp }}/native-contract/HeadsetControl-MacOSTray-${{ matrix.arch }}.zip
           if-no-files-found: error
           retention-days: 1
 
   verify-universal:
     needs: build
-    runs-on: macos-26
+    runs-on: macos-15
 
     steps:
       - uses: actions/checkout@v7

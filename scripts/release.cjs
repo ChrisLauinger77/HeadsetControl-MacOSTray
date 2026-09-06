@@ -14,8 +14,9 @@ function validateArchive(data, tag) {
     try {
         const archive = path.join(directory, ASSET_NAME);
         fs.writeFileSync(archive, data);
-        return JSON.parse(execFileSync('python3', [path.join(__dirname, 'release-artifact.py'),
-            'archive', archive, '--tag', tag], { encoding: 'utf8' }));
+        const revision = process.env.GITHUB_SHA ? ['--source-revision', process.env.GITHUB_SHA] : [];
+        return JSON.parse(execFileSync('python3', ['-B', path.join(__dirname, 'release-artifact.py'),
+            'archive', archive, '--tag', tag, '--universal', ...revision], { encoding: 'utf8' }));
     } finally {
         fs.rmSync(directory, { recursive: true, force: true });
     }
