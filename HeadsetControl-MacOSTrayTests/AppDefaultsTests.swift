@@ -2,6 +2,17 @@ import XCTest
 @testable import HeadsetControl_MacOSTray
 
 final class AppDefaultsTests: XCTestCase {
+    func testSnapshotAgeUsesTheValidatedIntervalAndGrace() {
+        for (interval, threshold) in [(60, 120), (300, 360), (900, 960), (3600, 3660)] {
+            XCTAssertEqual(AppDefaults.snapshotMaximumAge(for: interval), Double(threshold))
+        }
+        XCTAssertEqual(AppDefaults.snapshotMaximumAge(for: -1), 120)
+        XCTAssertEqual(AppDefaults.snapshotMaximumAge(for: Int.max), 3660)
+        for invalid: Any? in [nil, Double.nan, Double.infinity, "invalid", true] {
+            XCTAssertEqual(AppDefaults.snapshotMaximumAge(for: invalid), 660)
+        }
+    }
+
     func testRegistrationSuppliesIntendedSidetoneValuesBeforeAnySettingsUI() throws {
         let name = "HeadsetDefaultsTests.\(UUID())"
         let store = try XCTUnwrap(UserDefaults(suiteName: name))

@@ -7,6 +7,7 @@ nonisolated enum AppDefaults {
     static let sidetoneRange = -1...128
     static let updateInterval = 600
     static let updateIntervalRange = 60...3600
+    static let snapshotFreshnessGrace: TimeInterval = 60
     static let testProfile = 0
     static let testProfileRange = 0...7
     static let lowBatteryThreshold = 25
@@ -48,6 +49,10 @@ nonisolated enum AppDefaults {
 
     static func validatedUpdateInterval(_ value: Any?) -> Int {
         boundedInteger(value, range: updateIntervalRange, fallback: updateInterval)
+    }
+
+    static func snapshotMaximumAge(for updateInterval: Any?) -> TimeInterval {
+        TimeInterval(validatedUpdateInterval(updateInterval)) + snapshotFreshnessGrace
     }
 
     static func validatedLowBatteryThreshold(_ value: Any?) -> Int {

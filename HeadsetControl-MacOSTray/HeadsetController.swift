@@ -4,7 +4,8 @@ import Foundation
     var onRefresh: ((Result<[HeadsetDevice], HeadsetFailure>) -> Void)?
     var onSnapshotInvalidated: (() -> Void)?
     private(set) var snapshot = HeadsetSnapshot()
-    var snapshotState: HeadsetSnapshot.State { snapshot.state(at: now()) }
+    var snapshotState: HeadsetSnapshot.State { snapshot.state(at: now(), maximumAge: snapshotMaximumAge) }
+    private var snapshotMaximumAge: TimeInterval
 
     private let scheduler: HeadsetScheduling
     private let now: @Sendable () -> Date
@@ -29,11 +30,25 @@ import Foundation
     private var commands: [UUID: (Result<Void, HeadsetFailure>) -> Void] = [:]
 
     init(provider: HeadsetControlProviding, executor: HeadsetWorkExecuting,
-         scheduler: HeadsetScheduling? = nil, now: @escaping @Sendable () -> Date = { Date() }) {
+         scheduler: HeadsetScheduling? = nil, now: @escaping @Sendable () -> Date = { Date() },
+         refreshInterval: Int = AppDefaults.updateInterval) {
         self.provider = provider
         self.executor = executor
         self.scheduler = scheduler ?? MainRunLoopHeadsetScheduler()
         self.now = now
+        snapshotMaximumAge = AppDefaults.snapshotMaximumAge(for: refreshInterval)
+    }
+
+    func updateRefreshInterval(_ interval: Int) {
+        guard !stopped else { return }
+        let maximumAge = AppDefaults.snapshotMaximumAge(for: interval)
+        guard maximumAge != snapshotMaximumAge else { return }
+        snapshotMaximumAge = maximumAge
+        scheduleExpiration()
+        // Age expiration is computed, never latched into explicit invalidation.
+        // Extending the interval can therefore make an otherwise valid cache fresh.
+        // The old deadline may have passed without its callback being delivered.
+        if snapshotState == .stale { onSnapshotInvalidated?() }
     }
 
     // Menu opening shares existing work; it must not create a perpetual
@@ -120,11 +135,12 @@ import Foundation
     private func scheduleExpiration() {
         expirationTask?.cancel()
         expirationTask = nil
-        guard let observedAt = snapshot.observedAt else { return }
-        let generation = observationGeneration
         expirationToken = UUID()
+        guard let observedAt = snapshot.observedAt,
+              snapshotState == .fresh || snapshotState == .empty else { return }
+        let generation = observationGeneration
         let token = expirationToken
-        expirationTask = scheduler.schedule(after: max(0, HeadsetSnapshot.maximumAge - now().timeIntervalSince(observedAt))) { [weak self] in
+        expirationTask = scheduler.schedule(after: max(0, snapshotMaximumAge - now().timeIntervalSince(observedAt))) { [weak self] in
             guard let self, !self.stopped, self.observationGeneration == generation,
                   self.expirationToken == token, self.snapshot.observedAt == observedAt,
                   self.snapshotState != .fresh && self.snapshotState != .empty else { return }
