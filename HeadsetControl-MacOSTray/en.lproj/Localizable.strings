@@ -75,3 +75,6 @@
 "Vendor" = "Vendor";
 "Version" = "Version";
 "Voice Prompts" = "Voice Prompts";
+
+/* Cannot safely select a USB attachment */
+"Controls unavailable: device connection is not unique" = "Controls unavailable: device connection is not unique";

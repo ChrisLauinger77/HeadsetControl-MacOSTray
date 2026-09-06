@@ -75,3 +75,6 @@
 "Vendor" = "Hersteller";
 "Version" = "Version";
 "Voice Prompts" = "Sprachansagen";
+
+/* Cannot safely select a USB attachment */
+"Controls unavailable: device connection is not unique" = "Steuerung nicht verfügbar: Geräteverbindung ist nicht eindeutig";
