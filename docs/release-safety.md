@@ -70,5 +70,7 @@ CI runs these checks for workflow-only changes as well as application changes.
 
 The build contract now pins native inputs and Xcode and validates deployment and
 linkage. Publication still never replaces assets. Older archives lacking required
-provenance are rejected for manual inspection, without mutation. Signing, archive
-format, external HIDAPI and Homebrew distribution policy remain unchanged.
+provenance are rejected for manual inspection, without mutation. The static HIDAPI
+contract also rejects old dynamic-linkage provenance and requires the bundled
+redistribution notice. Signing, archive format and Homebrew distribution policy
+remain unchanged.

@@ -9,6 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = json.loads((ROOT / "build-contract.json").read_text())
 PROVENANCE = "Contents/Resources/BuildProvenance.json"
+PROVENANCE_SCHEMA = 2
+HIDAPI_LICENSE = "Contents/Resources/HIDAPI-LICENSE.txt"
 ARCHES = {"arm64", "x86_64"}
 FRAMEWORKS = {"AppKit", "Foundation", "CoreFoundation", "IOKit", "SwiftUI", "UserNotifications"}
 SWIFT_LIBRARIES = {
@@ -76,21 +78,13 @@ def system_dependency(name):
 
 
 def check_linkage(info, arch, kind):
-    hid = CONTRACT["hidapi"]["install_names"][arch]
-    hid_system = {"/usr/lib/libSystem.B.dylib",
-                  "/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit",
-                  "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation"}
+    if kind != "app":
+        raise ValueError(f"Unexpected linked artifact kind: {kind}")
     for name in info["dependencies"]:
-        allowed = (system_dependency(name) or name == hid) if kind == "app" else name in hid_system
-        if not allowed:
+        if not system_dependency(name):
             raise ValueError(f"Unexpected {arch} {kind} dependency: {name}")
-    if kind == "app":
-        if info["dependencies"].get(hid) != CONTRACT["hidapi"]["version"]:
-            raise ValueError(f"Missing or inconsistent HIDAPI dependency version for {arch}")
-        if not re.fullmatch(r"[0-9A-Fa-f-]{36}", info.get("uuid", "")):
-            raise ValueError("Missing application Mach-O UUID")
-    elif (info.get("install_name") != hid or info.get("version") != CONTRACT["hidapi"]["version"]):
-        raise ValueError(f"Unexpected HIDAPI install name/version for {arch}")
+    if not re.fullmatch(r"[0-9A-Fa-f-]{36}", info.get("uuid", "")):
+        raise ValueError("Missing application Mach-O UUID")
     if set(info["rpaths"]) - {"/usr/lib/swift", "@executable_path/../Frameworks"}:
         raise ValueError(f"Unexpected runtime search paths: {info['rpaths']}")
 
@@ -105,35 +99,46 @@ def inspect(path, arch, kind):
     if kind == "app":
         # These must be defined in the executable, not imported from a dylib.
         symbols = run("xcrun", "nm", "-arch", arch, "-gU", path)
-        for symbol in ("hsc_discover", "hsc_free_headsets", "hsc_get_battery"):
-            if not re.search(rf"\b[Tt] _{symbol}$", symbols, re.MULTILINE):
-                raise ValueError(f"headsetcontrol is not embedded: missing defined {symbol}")
+        for library, required in (
+            ("headsetcontrol", ("hsc_discover", "hsc_free_headsets", "hsc_get_battery")),
+            ("HIDAPI", ("hid_init", "hid_exit", "hid_enumerate", "hid_open_path", "hid_close")),
+        ):
+            for symbol in required:
+                if len(re.findall(rf"\b[Tt] _{symbol}$", symbols, re.MULTILINE)) != 1:
+                    raise ValueError(f"{library} is not embedded exactly once: {symbol}")
+        undefined = run("xcrun", "nm", "-arch", arch, "-gu", path)
+        if re.search(r"\b_hid_\w+", undefined):
+            raise ValueError("Unexpected unresolved HIDAPI symbol")
     return info
 
 
-def inspect_native(prefix, arch):
-    static = Path(prefix) / "lib/libheadsetcontrol.a"
-    hid = Path(prefix) / "lib/libhidapi.0.dylib"
-    for path in (static, hid):
-        if architectures(path) != {arch}:
-            raise ValueError(f"Unexpected native architecture: {path}")
+def inspect_static_archive(static, arch):
+    if not static.is_file():
+        raise ValueError(f"Missing static archive: {static}")
+    if architectures(static) != {arch}:
+        raise ValueError(f"Unexpected native architecture: {static}")
     if not static.read_bytes().startswith(b"!<arch>\n"):
-        raise ValueError("headsetcontrol must be a static archive")
+        raise ValueError(f"Expected a static archive: {static}")
     output = run("xcrun", "otool", "-l", static)
     # Every archive member must be inspectable. No unverified LTO objects.
     objects = re.split(r"^.+\([^\n]+\):\n", output, flags=re.MULTILINE)[1:]
     members = [name for name in run("xcrun", "ar", "-t", static).splitlines() if not name.startswith("__.SYMDEF")]
     if not objects or len(objects) != len(members):
-        raise ValueError("Not every headsetcontrol archive object is inspectable")
-    minimums = [load_commands(obj)["minimum_macos"] for obj in objects]
-    return {
-        "headsetcontrol": {"sha256": digest(static), "minimum_macos": max(minimums, key=version)},
-        "hidapi": {"sha256": digest(hid), **inspect(hid, arch, "hidapi")},
-    }
+        raise ValueError(f"Not every static archive object is inspectable: {static}")
+    inspected = [load_commands(obj) for obj in objects]
+    if any(obj["dependencies"] or obj["rpaths"] or "install_name" in obj for obj in inspected):
+        raise ValueError(f"Unexpected dynamic linkage in static archive: {static}")
+    return {"kind": "static-archive", "architecture": arch, "object_count": len(objects),
+            "sha256": digest(static), "minimum_macos": max((obj["minimum_macos"] for obj in inspected), key=version)}
+
+
+def inspect_native(prefix, arch):
+    return {name: inspect_static_archive(Path(prefix) / f"lib/lib{name}.a", arch)
+            for name in ("headsetcontrol", "hidapi")}
 
 
 def validate_provenance(data, identity, expected_revision=None):
-    if not isinstance(data, dict) or data.get("schema") != 1:
+    if not isinstance(data, dict) or data.get("schema") != PROVENANCE_SCHEMA:
         raise ValueError("Missing or unsupported build provenance")
     if data.get("audit_only"):
         raise ValueError("Audit-only build is not eligible for release")
@@ -157,11 +162,13 @@ def validate_provenance(data, identity, expected_revision=None):
         if set(item.get("native", {})) != {"headsetcontrol", "hidapi"}:
             raise ValueError("Missing or unexpected native artifact provenance")
         check_linkage(item["application"], arch, "app")
-        check_linkage(item["native"]["hidapi"], arch, "hidapi")
         for info in (item["application"], *item["native"].values()):
             if version(info["minimum_macos"]) > version(CONTRACT["macos"]):
                 raise ValueError("Native/application deployment target exceeds advertised floor")
         for info in item["native"].values():
+            if (info.get("kind") != "static-archive" or info.get("architecture") != arch
+                    or type(info.get("object_count")) is not int or info["object_count"] < 1):
+                raise ValueError("Missing or inconsistent static archive provenance")
             if not re.fullmatch(r"[a-f0-9]{64}", info.get("sha256", "")):
                 raise ValueError("Missing native artifact checksum")
     return data
