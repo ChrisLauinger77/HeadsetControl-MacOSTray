@@ -32,12 +32,14 @@ test('HeadsetControl uses official releases and retains digest pinning without a
     }
 });
 
-test('actual Handlebars rendering updates version, commit and channel atomically', { skip: !tools }, () => {
+test('actual RE2 extraction and Handlebars rendering update the release atomically', { skip: !tools }, () => {
     const requireTool = createRequire(path.join(tools, 'package.json'));
     const handlebars = requireTool('handlebars');
+    const RE2 = requireTool('re2');
+    assert.throws(() => new RE2('(?=unsupported)'), 'require native RE2 rather than RegExp fallback');
     for (const channel of ['release', 'snapshot']) {
         const source = contents.replace(/"channel": "(?:release|snapshot)"/, `"channel": "${channel}"`);
-        const regex = new RegExp(manager.matchStrings[0]);
+        const regex = new RE2(manager.matchStrings[0]);
         const extracted = source.match(regex).groups;
         const replacement = handlebars.compile(manager.autoReplaceStringTemplate)({ ...extracted, newDigest: 'b'.repeat(40), newValue: '4.2.0' });
         const updated = JSON.parse(source.replace(regex, () => replacement));
@@ -74,4 +76,5 @@ test('workflow YAML is valid, actions are SHA-pinned, and snapshot selection is 
     const ciSteps = workflows['swift.yml'].jobs.build.steps;
     assert.ok(ciSteps.some(step => step.run?.includes('dependency_channels.py --base-branch "$BASE_BRANCH"')));
     assert.ok(ciSteps.some(step => step.env?.BASE_BRANCH === '${{ github.base_ref }}'));
+    assert.ok(ciSteps.some(step => step.with?.script?.includes("'--strict', '--no-global', 'renovate.json'")));
 });
