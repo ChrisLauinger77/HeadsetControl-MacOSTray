@@ -10,6 +10,7 @@ import shutil
 import subprocess
 
 from native_contract import CONTRACT, ROOT, PROVENANCE, PROVENANCE_SCHEMA, inspect, inspect_native, run, validate_provenance
+from dependency_channels import validate_contract, verify_release_tag
 
 
 def command(*args, **kwargs):
@@ -30,6 +31,8 @@ def source(work, name, offline):
         raise ValueError(f"Wrong {name} source revision")
     if run("git", "-C", path, "status", "--porcelain", "--untracked-files=all"):
         raise ValueError(f"Dirty {name} source tree")
+    if name == "headsetcontrol":
+        verify_release_tag(path, dependency, offline)
     return path
 
 
@@ -69,6 +72,7 @@ int main(void) {
 
 
 def build(args):
+    validate_contract(CONTRACT)
     work = Path(args.workspace).resolve()
     work.mkdir(parents=True, exist_ok=True)
     if args.fetch_only:

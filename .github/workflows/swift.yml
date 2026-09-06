@@ -33,6 +33,25 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Validate dependency channels against the current base
+        env:
+          BASE_BRANCH: ${{ github.base_ref }}
+        run: python3 -B scripts/dependency_channels.py --base-branch "$BASE_BRANCH"
+      - name: Validate Renovate configuration and workflow syntax
+        if: matrix.arch == 'arm64'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const { execFileSync } = require('node:child_process');
+            const path = require('node:path');
+            const tools = path.join(process.env.RUNNER_TEMP, 'dependency-validation');
+            // Use this pinned action's Node runtime for the validator, not the runner default.
+            const env = { ...process.env, PATH: path.dirname(process.execPath) + path.delimiter + process.env.PATH };
+            execFileSync('npm', ['install', '--prefix', tools, '--ignore-scripts', '--no-audit', '--no-fund', 'renovate@44.65.5'], { env, stdio: 'inherit' });
+            // Build only the required native regex engine; do not accept RegExp fallback.
+            execFileSync('npm', ['rebuild', '--prefix', tools, 're2'], { env, stdio: 'inherit' });
+            execFileSync(process.execPath, [path.join(tools, 'node_modules/renovate/dist/config-validator.js'), '--strict', '--no-global', 'renovate.json'], { env, stdio: 'inherit' });
+            execFileSync(process.execPath, ['--test', 'scripts/tests/renovate-config.test.cjs'], { env: { ...env, DEPENDENCY_TOOLS: tools }, stdio: 'inherit' });
       - name: Test release publication and packaging
         run: |
           node --test scripts/tests/*.test.cjs
