@@ -75,3 +75,6 @@
 "Vendor" = "Fabricant";
 "Version" = "Version";
 "Voice Prompts" = "Invites vocales";
+
+/* Cannot safely select a USB attachment */
+"Controls unavailable: device connection is not unique" = "Commandes indisponibles : la connexion du périphérique n’est pas unique";

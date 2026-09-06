@@ -1,17 +1,7 @@
 import Foundation
 import HeadsetControlCLib
 
-protocol HeadsetControlProviding {
-    func fetchDevices() -> [[String: Any]]
-    func setSidetone(level: Int) -> Bool
-    func setLights(enabled: Bool) -> Bool
-    func setInactiveTime(minutes: Int) -> Bool
-    func setVoicePrompts(enabled: Bool) -> Bool
-    func setRotateToMute(enabled: Bool) -> Bool
-    func setEqualizerPreset(index: Int) -> Bool
-}
-
-struct HeadsetCapability {
+nonisolated struct HeadsetCapability {
     let rawValue: hsc_capability_t
 
     static let sidetone = HeadsetCapability(rawValue: HSC_CAP_SIDETONE)
@@ -63,7 +53,7 @@ struct HeadsetCapability {
     ]
 }
 
-private func legacyBatteryStatusString(_ status: hsc_battery_status_t) -> String? {
+nonisolated func legacyBatteryStatusString(_ status: hsc_battery_status_t) -> String? {
     switch status.rawValue {
     case HSC_BATTERY_AVAILABLE.rawValue, 2:
         return "BATTERY_AVAILABLE"
@@ -80,177 +70,120 @@ private func legacyBatteryStatusString(_ status: hsc_battery_status_t) -> String
     }
 }
 
-final class HeadsetControlService: HeadsetControlProviding {
-    private let libraryLock = NSLock()
+// All mutable state, including the injected adapter, belongs to one executor.
+// Production adapters assert the shared HID thread at the transaction boundary.
+nonisolated final class HeadsetControlService: HeadsetControlProviding, @unchecked Sendable {
+    private let library: HeadsetLibraryAccess
+    private let inventory: HeadsetUSBInventoryProviding
+    private let checkExecutionContext: () -> Void
+    private var inTransaction = false
+    private var stopped = false
 
-    func setTestProfile(_ profile: Int) {
-        let normalizedProfile = max(0, profile)
-
-        libraryLock.lock()
-        defer { libraryLock.unlock() }
-
-        hsc_set_test_profile(Int32(normalizedProfile))
-        hsc_enable_test_device(normalizedProfile != 0)
+    convenience init() {
+        self.init(library: NativeHeadsetLibrary(), inventory: HeadsetUSBInventory()) {
+            precondition(HeadsetIOWorker.shared.isCurrentThread, "Native transactions require the HID worker")
+        }
     }
 
-    func fetchDevices() -> [[String: Any]] {
-        return withDiscoveredHeadsets { headsets in
-            var devices: [[String: Any]] = []
-            devices.reserveCapacity(headsets.count)
+    // Injection is for deterministic tests; a native adapter always uses the
+    // production initializer and therefore the process-wide execution context.
+    init(library: HeadsetLibraryAccess, inventory: HeadsetUSBInventoryProviding,
+         checkExecutionContext: @escaping () -> Void = {}) {
+        self.library = library
+        self.inventory = inventory
+        self.checkExecutionContext = checkExecutionContext
+    }
 
-            for headset in headsets {
-                var device: [String: Any] = [:]
-                device["status"] = "success"
-                device["device"] = stringFromC(hsc_get_name(headset))
-                device["vendor"] = stringFromC(hsc_get_vendor_name(headset))
-                device["vendor_id"] = String(format: "0x%04x", hsc_get_vendor_id(headset))
-                device["product"] = stringFromC(hsc_get_product_name(headset))
-                device["product_id"] = String(format: "0x%04x", hsc_get_product_id(headset))
-
-                let capabilities = HeadsetCapability.menuCapabilities.compactMap { cap -> String? in
-                    hsc_supports(headset, cap.rawValue) ? cap.legacyCapabilityString : nil
+    func fetchDevices(testProfile: Int) -> [HeadsetDevice] {
+        withTransaction(testProfile: testProfile) {
+            let before = testProfile > 0 ? nil : inventory.attachments()
+            let connections = library.discover()
+            let after = testProfile > 0 ? nil : inventory.attachments()
+            return connections.compactMap { connection in
+                // The library adds its test device to physical discovery. Filter
+                // BEFORE battery/chatmix calls so fake mode never queries hardware.
+                guard (connection.usbID == .testDevice) == (testProfile > 0) else { return nil }
+                var device = library.readDevice(connection)
+                if testProfile > 0 {
+                    device.target = .test(profile: testProfile)
+                } else if let ids = before?[connection.usbID], ids.count == 1,
+                          after?[connection.usbID] == ids,
+                          connections.filter({ $0.usbID == connection.usbID }).count == 1 {
+                    device.target = .physical(connection.usbID, attachmentID: ids[0])
                 }
-                device["capabilities"] = capabilities
-
-                if hsc_supports(headset, HeadsetCapability.batteryStatus.rawValue) {
-                    var battery = hsc_battery_t()
-                    let result = hsc_get_battery(headset, &battery)
-                    if result == HSC_RESULT_OK {
-                        var batteryInfo: [String: Any] = [
-                            "level": Int(battery.level_percent)
-                        ]
-                        if let status = legacyBatteryStatusString(battery.status) {
-                            batteryInfo["status"] = status
-                        }
-                        if battery.time_to_empty_min >= 0 {
-                            batteryInfo["time_to_empty_min"] = Int(battery.time_to_empty_min)
-                        }
-                        device["battery"] = batteryInfo
-                    }
-                }
-
-                if hsc_supports(headset, HeadsetCapability.chatmixStatus.rawValue) {
-                    var chatmix = hsc_chatmix_t()
-                    if hsc_get_chatmix(headset, &chatmix) == HSC_RESULT_OK {
-                        device["chatmix"] = Int(chatmix.level)
-                    }
-                }
-
-                devices.append(device)
+                return device
             }
-
-            return devices
         } ?? []
     }
 
-    func setSidetone(level: Int) -> Bool {
-        let clamped = max(0, min(128, level))
-        return performOnHeadsets { headset in
-            guard hsc_supports(headset, HeadsetCapability.sidetone.rawValue) else { return false }
-            return hsc_set_sidetone(headset, UInt8(clamped), nil) == HSC_RESULT_OK
-        }
-    }
-
-    func setLights(enabled: Bool) -> Bool {
-        return performOnHeadsets { headset in
-            guard hsc_supports(headset, HeadsetCapability.lights.rawValue) else { return false }
-            return hsc_set_lights(headset, enabled) == HSC_RESULT_OK
-        }
-    }
-
-    func setInactiveTime(minutes: Int) -> Bool {
-        let clamped = max(0, min(90, minutes))
-        return performOnHeadsets { headset in
-            guard hsc_supports(headset, HeadsetCapability.inactiveTime.rawValue) else { return false }
-            return hsc_set_inactive_time(headset, UInt8(clamped), nil) == HSC_RESULT_OK
-        }
-    }
-
-    func setVoicePrompts(enabled: Bool) -> Bool {
-        return performOnHeadsets { headset in
-            guard hsc_supports(headset, HeadsetCapability.voicePrompts.rawValue) else { return false }
-            return hsc_set_voice_prompts(headset, enabled) == HSC_RESULT_OK
-        }
-    }
-
-    func setRotateToMute(enabled: Bool) -> Bool {
-        return performOnHeadsets { headset in
-            guard hsc_supports(headset, HeadsetCapability.rotateToMute.rawValue) else { return false }
-            return hsc_set_rotate_to_mute(headset, enabled) == HSC_RESULT_OK
-        }
-    }
-
-    func setEqualizerPreset(index: Int) -> Bool {
-        let clamped = max(0, min(255, index))
-        return performOnHeadsets { headset in
-            guard hsc_supports(headset, HeadsetCapability.equalizerPreset.rawValue) else { return false }
-            return hsc_set_equalizer_preset(headset, UInt8(clamped)) == HSC_RESULT_OK
-        }
-    }
-
-    private func performOnHeadsets(_ action: (hsc_headset_t) -> Bool) -> Bool {
-        return withDiscoveredHeadsets { headsets in
-            var success = false
-            for headset in headsets {
-                if action(headset) {
-                    success = true
-                }
+    func perform(_ command: HeadsetCommand, on target: HeadsetTarget, testProfile: Int) -> Bool {
+        guard target.accepts(testProfile: testProfile) else { return false }
+        return withTransaction(testProfile: testProfile) {
+            guard targetIsAttached(target) else { return false }
+            let connections = library.discover()
+            let usbID: HeadsetUSBID
+            switch target {
+            case .physical(let id, _): usbID = id
+            case .test: usbID = .testDevice
             }
-            return success
+            let matches = connections.filter { $0.usbID == usbID }
+            guard matches.count == 1, let connection = matches.first,
+                  targetIsAttached(target) else { return false }
+            // Exactly one selected handle; there is deliberately no broadcast loop.
+            // The C API opens by VID/PID inside this call. Atomic binding across
+            // a replacement AFTER our last check requires a dependency path API.
+            return library.perform(command, on: connection)
         } ?? false
     }
 
-    private func withDiscoveredHeadsets<T>(_ body: ([hsc_headset_t]) -> T) -> T? {
-        libraryLock.lock()
-        defer { libraryLock.unlock() }
-
-        var headsetsPtr: UnsafeMutablePointer<hsc_headset_t?>?
-        let count = hsc_discover(&headsetsPtr)
-        guard count > 0, let headsetsPtr else { return nil }
-        defer { hsc_free_headsets(headsetsPtr, count) }
-
-        let buffer = UnsafeBufferPointer(start: headsetsPtr, count: Int(count))
-        let headsets = buffer.compactMap { $0 }
-        return body(headsets)
+    func shutdown() {
+        checkExecutionContext()
+        guard !stopped else { return }
+        precondition(!inTransaction, "Shutdown must follow the active transaction")
+        stopped = true
+        library.shutdown()
     }
 
-    private func stringFromC(_ pointer: UnsafePointer<CChar>?) -> String {
-        guard let pointer else { return "" }
-        return String(cString: pointer)
+    private func targetIsAttached(_ target: HeadsetTarget) -> Bool {
+        switch target {
+        case .test: return true
+        case .physical(let id, let attachmentID):
+            // The dependency selects by VID/PID, not by path or serial number.
+            // Only a unique, unchanged USB attachment can be offered controls.
+            return id != .testDevice && inventory.attachments()?[id] == [attachmentID]
+        }
+    }
+
+    private func withTransaction<T>(testProfile: Int, _ body: () -> T) -> T? {
+        checkExecutionContext()
+        guard !stopped, !inTransaction else { return nil }
+        inTransaction = true
+        defer {
+            library.releaseDevices()
+            library.configure(testProfile: 0)
+            inTransaction = false
+        }
+        library.configure(testProfile: testProfile)
+        return body()
     }
 }
 
-final class MockHeadsetControlService: HeadsetControlProviding {
+nonisolated final class MockHeadsetControlService: HeadsetControlProviding, Sendable {
     private let deviceIndex: Int
 
-    init(deviceIndex: Int) {
-        self.deviceIndex = deviceIndex
+    init(deviceIndex: Int) { self.deviceIndex = deviceIndex }
+
+    func fetchDevices(testProfile: Int) -> [HeadsetDevice] {
+        [HeadsetDevice(
+            usbID: .testDevice, name: "Test Device \(deviceIndex)", vendor: "HeadsetControl", product: "Test Device",
+            capabilities: HeadsetCapability.menuCapabilities.map { $0.legacyCapabilityString },
+            battery: .init(level: max(5, min(95, 10 * deviceIndex)), status: "BATTERY_AVAILABLE", timeToEmpty: 120),
+            chatmix: 50, target: .test(profile: testProfile)
+        )]
     }
 
-    func fetchDevices() -> [[String: Any]] {
-        let deviceName = "Test Device \(deviceIndex)"
-        let batteryLevel = max(5, min(95, 10 * deviceIndex))
-        return [[
-            "status": "success",
-            "device": deviceName,
-            "vendor": "HeadsetControl",
-            "vendor_id": "0xf00b",
-            "product": "Test Device",
-            "product_id": "0xa00c",
-            "capabilities": HeadsetCapability.menuCapabilities.map { $0.legacyCapabilityString },
-            "battery": [
-                "status": "BATTERY_AVAILABLE",
-                "level": batteryLevel,
-                "time_to_empty_min": 120
-            ],
-            "chatmix": 50
-        ]]
+    func perform(_ command: HeadsetCommand, on target: HeadsetTarget, testProfile: Int) -> Bool {
+        target == .test(profile: testProfile) && testProfile > 0
     }
-
-    func setSidetone(level: Int) -> Bool { true }
-    func setLights(enabled: Bool) -> Bool { true }
-    func setInactiveTime(minutes: Int) -> Bool { true }
-    func setVoicePrompts(enabled: Bool) -> Bool { true }
-    func setRotateToMute(enabled: Bool) -> Bool { true }
-    func setEqualizerPreset(index: Int) -> Bool { true }
+    func shutdown() {}
 }

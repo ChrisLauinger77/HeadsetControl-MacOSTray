@@ -1,7 +1,7 @@
 import Cocoa
 import UserNotifications
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotificationCenterDelegate {
+@MainActor class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotificationCenterDelegate {
     // Sidetone level values from UserDefaults
     var sidetoneLevelsFromSettings: [(String, Int)] {
         let off = UserDefaults.standard.integer(forKey: "sidetoneOff")
@@ -17,67 +17,57 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifi
             (NSLocalizedString("Maximum", comment: "Sidetone level Maximum"), max)
         ]
     }
-    private let headsetControlService = HeadsetControlService()
+    private let headsetController: HeadsetController
+    private var stopping = false
+    private var lastRequestedProfile: Int?
 
-    private func activeHeadsetControlProvider() -> HeadsetControlProviding {
-        let testMode = UserDefaults.standard.integer(forKey: "testMode")
-        headsetControlService.setTestProfile(testMode)
-        return headsetControlService
+    override init() {
+        headsetController = HeadsetController(provider: HeadsetControlService(), executor: HeadsetIOWorker.shared)
+        super.init()
+        bindHeadsetController()
     }
 
-    private func runControlAction(_ action: @escaping (HeadsetControlProviding) -> Void) {
-        let provider = activeHeadsetControlProvider()
-        DispatchQueue.main.async {
-            action(provider)
+    init(headsetController: HeadsetController) {
+        self.headsetController = headsetController
+        super.init()
+        bindHeadsetController()
+    }
+
+    private func bindHeadsetController() {
+        headsetController.onDevices = { [weak self] devices in
+            self?.applyDevices(devices.map(\.menuDictionary))
         }
     }
 
-    // Handle Equalizer Preset selection
+    private func runControlAction(_ sender: NSMenuItem, command: (Int) -> HeadsetCommand) {
+        guard !stopping, let action = sender.representedObject as? HeadsetMenuAction,
+              let target = action.target else { return }
+        headsetController.perform(command(action.value), on: target,
+                                  testProfile: UserDefaults.standard.integer(forKey: "testMode"))
+    }
+
     @objc func setEqualizerPreset(_ sender: NSMenuItem) {
-        guard let index = sender.representedObject as? Int else { return }
-        runControlAction { provider in
-            _ = provider.setEqualizerPreset(index: index)
-        }
+        runControlAction(sender) { .equalizerPreset($0) }
     }
 
-    // Handle Rotate to Mute on/off selection
     @objc func setRotateToMute(_ sender: NSMenuItem) {
-        guard let value = sender.representedObject as? Int else { return }
-        runControlAction { provider in
-            _ = provider.setRotateToMute(enabled: value != 0)
-        }
+        runControlAction(sender) { .rotateToMute($0 != 0) }
     }
 
-    // Handle Voice Prompts on/off selection
     @objc func setVoicePrompts(_ sender: NSMenuItem) {
-        guard let value = sender.representedObject as? Int else { return }
-        runControlAction { provider in
-            _ = provider.setVoicePrompts(enabled: value != 0)
-        }
+        runControlAction(sender) { .voicePrompts($0 != 0) }
     }
 
-    // Handle Inactive Time selection
     @objc func setInactiveTime(_ sender: NSMenuItem) {
-        guard let value = sender.representedObject as? Int else { return }
-        runControlAction { provider in
-            _ = provider.setInactiveTime(minutes: value)
-        }
+        runControlAction(sender) { .inactiveTime($0) }
     }
 
-    // Handle Lights on/off selection
     @objc func setLights(_ sender: NSMenuItem) {
-        guard let value = sender.representedObject as? Int else { return }
-        runControlAction { provider in
-            _ = provider.setLights(enabled: value != 0)
-        }
+        runControlAction(sender) { .lights($0 != 0) }
     }
 
-    // Handle Sidetone level selection
     @objc func setSidetoneLevel(_ sender: NSMenuItem) {
-        guard let level = sender.representedObject as? Int else { return }
-        runControlAction { provider in
-            _ = provider.setSidetone(level: level)
-        }
+        runControlAction(sender) { .sidetone($0) }
     }
 
     var updateInterval: Int {
@@ -173,6 +163,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifi
     }
 
     private func updateApplicationIcon() {
+        guard !stopping else { return }
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
 
         if let icon = AppIconProvider.image(isDark: isDark) {
@@ -181,63 +172,101 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifi
     }
 
     func startStatusUpdateTimer() {
+        guard !stopping else { return }
         statusUpdateTimer?.invalidate()
 
         let interval = updateInterval
         activeTimerInterval = interval
 
         statusUpdateTimer = Timer.scheduledTimer(withTimeInterval: Double(interval), repeats: true) { [weak self] _ in
-            self?.updateStatusItem()
+            DispatchQueue.main.async { self?.updateStatusItem() }
         }
     }
 
-    @objc func handleRefreshNotification() {
-        updateStatusItem()
+    // Notifications may be posted from any thread. Read defaults and touch
+    // AppKit/coordinator state only after entering the main actor.
+    @objc nonisolated func handleRefreshNotification() {
+        DispatchQueue.main.async { [weak self] in self?.updateStatusItem() }
     }
 
-    @objc func handleUserDefaultsChanged(_ notification: Notification) {
-        let newInterval = updateInterval
-        guard newInterval != activeTimerInterval else { return }
-
+    @objc nonisolated func handleUserDefaultsChanged(_ notification: Notification) {
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            guard self.updateInterval != self.activeTimerInterval else { return }
-            self.startStatusUpdateTimer()
+            guard let self, !self.stopping else { return }
+            if self.updateInterval != self.activeTimerInterval { self.startStatusUpdateTimer() }
+            if UserDefaults.standard.integer(forKey: "testMode") != self.lastRequestedProfile {
+                self.updateStatusItem()
+            }
         }
     }
 
     func updateStatusItem() {
-        let provider = activeHeadsetControlProvider()
-        DispatchQueue.main.async {
-            let devicesResult = provider.fetchDevices()
-            var batteryLevelText: String? = nil
-            if let device = devicesResult.first,
-               let battery = device["battery"] as? [String: Any] {
-                batteryLevelText = self.batteryChargeText(from: battery)
-                let status = battery["status"] as? String ?? ""
-                if let level = battery["level"] as? Int {
-                    let notifyOnLowBattery = UserDefaults.standard.object(forKey: "notifyOnLowBattery") as? Bool ?? true
-                    let lowBatteryThreshold = self.lowBatteryThreshold
-                    if notifyOnLowBattery && status == "BATTERY_AVAILABLE" && level <= lowBatteryThreshold && !self.lowBatteryNotificationShown {
-                        self.showLowBatteryNotification(level: level)
-                        self.lowBatteryNotificationShown = true
-                    }
-                    if status == "BATTERY_AVAILABLE" && level > lowBatteryThreshold {
-                        self.lowBatteryNotificationShown = false
-                    }
+        guard !stopping else { return }
+        let profile = UserDefaults.standard.integer(forKey: "testMode")
+        if profile != lastRequestedProfile {
+            latestDevices = []
+            statusItem?.button?.title = ""
+        }
+        lastRequestedProfile = profile
+        headsetController.refresh(testProfile: profile)
+    }
+
+    private func applyDevices(_ devicesResult: [[String: Any]]) {
+        guard !stopping else { return }
+        // A defaults notification can still be queued behind this result.
+        guard UserDefaults.standard.integer(forKey: "testMode") == lastRequestedProfile else {
+            updateStatusItem()
+            return
+        }
+        var batteryLevelText: String? = nil
+        if let device = devicesResult.first,
+           let battery = device["battery"] as? [String: Any] {
+            batteryLevelText = batteryChargeText(from: battery)
+            let status = battery["status"] as? String ?? ""
+            if let level = battery["level"] as? Int {
+                let notifyOnLowBattery = UserDefaults.standard.object(forKey: "notifyOnLowBattery") as? Bool ?? true
+                let lowBatteryThreshold = self.lowBatteryThreshold
+                if notifyOnLowBattery && status == "BATTERY_AVAILABLE" && level <= lowBatteryThreshold && !lowBatteryNotificationShown {
+                    showLowBatteryNotification(level: level)
+                    lowBatteryNotificationShown = true
                 }
-            }
-            DispatchQueue.main.async {
-                if let button = self.statusItem?.button {
-                    if let batteryText = batteryLevelText {
-                        button.title = " " + batteryText
-                    } else {
-                        button.title = ""
-                    }
+                if status == "BATTERY_AVAILABLE" && level > lowBatteryThreshold {
+                    lowBatteryNotificationShown = false
                 }
-                self.latestDevices = devicesResult
             }
         }
+        statusItem?.button?.title = batteryLevelText.map { " " + $0 } ?? ""
+        latestDevices = devicesResult
+    }
+
+    // Never join the HID thread or take a lock around native work on the main
+    // actor. AppKit defers process exit until handles and HID have been closed.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        stop {
+            DispatchQueue.main.async { sender.reply(toApplicationShouldTerminate: true) }
+        }
+        return .terminateLater
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        stop()
+    }
+
+    func stop(completion: @escaping () -> Void = {}) {
+        if !stopping {
+            stopping = true
+            statusUpdateTimer?.invalidate()
+            statusUpdateTimer = nil
+            NotificationCenter.default.removeObserver(self)
+            appearanceObservation?.invalidate()
+            appearanceObservation = nil
+            statusMenu?.delegate = nil
+            statusItem?.menu = nil
+            if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
+            statusItem = nil
+            statusMenu = nil
+            latestDevices = nil
+        }
+        headsetController.stop(completion: completion)
     }
 
     private func batteryChargeText(from battery: [String: Any]) -> String? {
@@ -323,6 +352,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifi
             return
         }
         for (idx, device) in devices.enumerated() {
+            let controlTarget = device["control_target"] as? HeadsetTarget
             let deviceName = device["device"] as? String ?? NSLocalizedString("Unknown Device", comment: "Unknown device fallback")
             let vendor = device["vendor"] as? String ?? NSLocalizedString("Unknown Vendor", comment: "Unknown vendor fallback")
             let product = device["product"] as? String ?? NSLocalizedString("Unknown Product", comment: "Unknown product fallback")
@@ -340,6 +370,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifi
             }
             // Add menu items for selected capabilities
             if let capabilities = device["capabilities"] as? [String] {
+                if controlTarget == nil && !capabilities.isEmpty {
+                    menu.addItem(withTitle: NSLocalizedString("Controls unavailable: device connection is not unique", comment: "Cannot safely select a USB attachment"), action: nil, keyEquivalent: "")
+                }
                 let capabilityMap: [(String, String)] = [
                     ("CAP_SIDETONE", NSLocalizedString("Sidetone", comment: "Sidetone capability")),
                     ("CAP_LIGHTS", NSLocalizedString("Lights", comment: "Lights capability")),
@@ -357,7 +390,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifi
                                 if levelValue == -1 { continue }
                                 let item = NSMenuItem(title: levelTitle, action: #selector(setSidetoneLevel(_:)), keyEquivalent: "")
                                 item.target = self
-                                item.representedObject = levelValue
+                                item.representedObject = HeadsetMenuAction(target: controlTarget, value: levelValue)
+                                if controlTarget == nil { item.action = nil }
                                 sidetoneMenu.addItem(item)
                             }
                             let sidetoneMenuItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
@@ -372,7 +406,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifi
                             for (optionTitle, optionValue) in lightsOptions {
                                 let item = NSMenuItem(title: optionTitle, action: #selector(setLights(_:)), keyEquivalent: "")
                                 item.target = self
-                                item.representedObject = optionValue
+                                item.representedObject = HeadsetMenuAction(target: controlTarget, value: optionValue)
+                                if controlTarget == nil { item.action = nil }
                                 lightsMenu.addItem(item)
                             }
                             let lightsMenuItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
@@ -387,7 +422,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifi
                             for (optionTitle, optionValue) in voicePromptsOptions {
                                 let item = NSMenuItem(title: optionTitle, action: #selector(setVoicePrompts(_:)), keyEquivalent: "")
                                 item.target = self
-                                item.representedObject = optionValue
+                                item.representedObject = HeadsetMenuAction(target: controlTarget, value: optionValue)
+                                if controlTarget == nil { item.action = nil }
                                 voicePromptsMenu.addItem(item)
                             }
                             let voicePromptsMenuItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
@@ -402,7 +438,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifi
                             for (optionTitle, optionValue) in rotateToMuteOptions {
                                 let item = NSMenuItem(title: optionTitle, action: #selector(setRotateToMute(_:)), keyEquivalent: "")
                                 item.target = self
-                                item.representedObject = optionValue
+                                item.representedObject = HeadsetMenuAction(target: controlTarget, value: optionValue)
+                                if controlTarget == nil { item.action = nil }
                                 rotateToMuteMenu.addItem(item)
                             }
                             let rotateToMuteMenuItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
@@ -417,7 +454,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifi
                             for (optionTitle, optionValue) in inactiveOptions {
                                 let item = NSMenuItem(title: optionTitle, action: #selector(setInactiveTime(_:)), keyEquivalent: "")
                                 item.target = self
-                                item.representedObject = optionValue
+                                item.representedObject = HeadsetMenuAction(target: controlTarget, value: optionValue)
+                                if controlTarget == nil { item.action = nil }
                                 inactiveTimeMenu.addItem(item)
                             }
                             let inactiveTimeMenuItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
@@ -459,7 +497,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifi
                             for (idx, name) in presetNames.enumerated() {
                                 let item = NSMenuItem(title: name, action: #selector(setEqualizerPreset(_:)), keyEquivalent: "")
                                 item.target = self
-                                item.representedObject = idx
+                                item.representedObject = HeadsetMenuAction(target: controlTarget, value: idx)
+                                if controlTarget == nil { item.action = nil }
                                 eqPresetMenu.addItem(item)
                             }
                             let eqPresetMenuItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
@@ -503,7 +542,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifi
     }
 
     // UNUserNotificationCenterDelegate: Show notifications when app is in foreground
-    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         completionHandler([.banner, .sound, .badge, .list])
     }
 }

@@ -72,7 +72,9 @@ git push origin v3.0.0
 ## Architecture Notes
 
 - `AppDelegate` is the runtime coordinator. It owns the status item, builds the menu in `menuNeedsUpdate(_:)`, schedules status refreshes, and sends commands to the active `HeadsetControlProviding` implementation.
-- `HeadsetControlService` serializes access to the C library with an `NSLock`. Keep C-library calls behind this service or another `HeadsetControlProviding` implementation.
+- `HeadsetController` is main-actor isolated and coalesces refresh requests. `HeadsetIOWorker.shared` runs complete C/HID transactions on one dedicated thread. Keep C-library calls behind `HeadsetControlService` / `HeadsetControlProviding`; never call the native provider from AppKit callbacks or nest transactions. The queue/cancellation locks must never surround native calls.
+- Control menu items carry their device target. Physical controls require a unique, unchanged USB attachment; identical devices cannot be selected by the dependency. Test-mode reads and commands must select only the dependency's reserved test device.
+- Shutdown cancels pending work and discards late results, then frees native resources on the HID thread. AppKit uses `terminateLater`; never synchronously wait for HID on the main actor.
 - Test mode is controlled by the `testMode` user default and routed through `hsc_set_test_profile` / `hsc_enable_test_device`. Use it for development without a connected headset.
 - Settings are stored in `UserDefaults` through `@AppStorage`. Keep new persisted keys documented by using clear names and sensible defaults.
 - Menu capabilities are driven by `HeadsetCapability.menuCapabilities` and legacy capability strings such as `CAP_SIDETONE`. If adding a headset feature, update the capability mapping, provider calls, menu construction, settings as needed, and localization files.
