@@ -29,6 +29,15 @@ Load command 1
 
 
 class NativeContractTests(unittest.TestCase):
+    def test_build_number_validation(self):
+        for value in ("260906.1700", "1", "1.2.3"):
+            with self.subTest(value=value):
+                self.assertEqual(builder.build_number(value), value)
+        for value in ("", "260906.1700.1.2", "v3.1.0", "260906-1700", "1.two"):
+            with self.subTest(value=value), self.assertRaisesRegex(
+                    builder.argparse.ArgumentTypeError, "dot-separated numeric"):
+                builder.build_number(value)
+
     def test_deployment_commands(self):
         self.assertEqual(native.load_commands(commands())["minimum_macos"], "14.0")
         for minimum in ("14.6", "15.0", "26.0"):
@@ -165,6 +174,10 @@ class NativeContractTests(unittest.TestCase):
         project = (root / "HeadsetControl-MacOSTray.xcodeproj/project.pbxproj").read_text()
         import re
         self.assertEqual(set(re.findall(r"MACOSX_DEPLOYMENT_TARGET = ([^;]+);", project)), {native.CONTRACT["macos"]})
+        release = (root / ".github/workflows/release.yml").read_text()
+        self.assertIn("build_number: ${{ steps.build-number.outputs.value }}", release)
+        self.assertIn('TZ: Europe/Berlin', release)
+        self.assertIn('--build-number "${{ needs.validate-tag.outputs.build_number }}"', release)
 
 
 @unittest.skipUnless(sys.platform == "darwin", "Archive inspection requires Mach-O tooling")

@@ -213,6 +213,14 @@ probe executable itself, and rejects any loaded HIDAPI dylib. The helper invokes
 the selected Swift toolchain directly. Existing deterministic and C-library
 profile tests remain intact.
 
+`--build-number` optionally overrides `CURRENT_PROJECT_VERSION` for the Xcode
+build without modifying `BuildNumber.xcconfig`. The release workflow generates
+one `YYMMDD.HHMM` value in the `Europe/Berlin` timezone and supplies that same
+value to both architecture jobs, so their `CFBundleVersion` values match during
+universal packaging. Direct development builds that omit the option continue to
+use the value from `BuildNumber.xcconfig`, including the existing Xcode scheme
+pre-actions that update it for local launch, profile and archive actions.
+
 `--fetch-only` prepares sources; `--offline` requires already verified checkouts.
 For local cross-compilation, `--skip-tests` skips execution on the wrong CPU.
 `--audit-toolchain` permits a different toolchain/dirty application checkout for
