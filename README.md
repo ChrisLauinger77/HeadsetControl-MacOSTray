@@ -12,26 +12,36 @@ HeadsetControl-MacOSTray is a macOS background application that uses the [headse
 ## Preconditions
 
 1. macOS 14.0 (Sonoma) or later, on Apple Silicon or Intel
-2. [Homebrew](https://brew.sh/) to install headsetcontrol and the app
+2. [Homebrew](https://brew.sh/) only if you install the app with Homebrew Cask or want the optional standalone HeadsetControl CLI
+
+Current release builds are self-contained: they statically embed the pinned
+HeadsetControl and HIDAPI versions recorded in
+[`build-contract.json`](build-contract.json). Neither library needs to be
+installed separately for the tray app to run.
 
 ## Installation
 
-1. Install [headsetcontrol](https://github.com/Sapd/HeadsetControl) via [Homebrew](https://brew.sh/). This preserves the supported Cask installation model and provides the standalone CLI:
+1. Optional: Install the standalone [HeadsetControl](https://github.com/Sapd/HeadsetControl)
+   CLI if you also want to use it outside the tray app:
    ```sh
    brew tap sapd/headsetcontrol
    brew trust --formula sapd/headsetcontrol/headsetcontrol
    brew install sapd/headsetcontrol/headsetcontrol
    ```
-
-The app built from current source statically embeds pinned headsetcontrol and HIDAPI versions. The Cask still depends on the headsetcontrol formula, which installs HIDAPI for the CLI; neither formula supplies this app's native runtime. Installing a newer formula does not change its embedded headset support.
-
-2. Install headsetcontrol-macostray via [Homebrew](https://brew.sh/)
+2. Install HeadsetControl-MacOSTray via [Homebrew](https://brew.sh/):
    ```sh
    brew tap ChrisLauinger77/cask
    brew trust --cask chrislauinger77/cask/headsetcontrol-macostray
    brew install --cask chrislauinger77/cask/headsetcontrol-macostray
    ```
 3. Follow the first-launch instructions below if macOS blocks the app.
+
+The current Cask also installs the official HeadsetControl formula. That formula
+provides the standalone `headsetcontrol` command and its own dependencies; the
+tray app does not load them at runtime. No separate formula installation is
+required for the app. If you install the app directly from
+[GitHub Releases](https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray/releases),
+you can skip step 1 entirely.
 
 ## macOS Security Notice
 
@@ -51,13 +61,19 @@ xattr -dr com.apple.quarantine "/Applications/HeadsetControl-MacOSTray.app"
 
 ## Update
 
-1. This app
-   ```sh
-   brew upgrade
-   ```
-The app statically embeds headsetcontrol and HIDAPI. New headset support and fixes to either library reach users through a new app release built with updated pinned revisions. Reinstalling or updating the formulas does **not** change an already-built app.
+Update the app through Homebrew Cask:
 
-Builds from current source no longer load a Homebrew HIDAPI dylib on either architecture. Older releases retain their original runtime requirements. See [the build contract](docs/build-contract.md) for exact build inputs and compatibility validation. The application bundle includes HIDAPI's [BSD-style redistribution notice](HeadsetControl-MacOSTray/HIDAPI-LICENSE.txt).
+```sh
+brew upgrade --cask headsetcontrol-macostray
+```
+
+New headset support and native-library fixes reach users through a new app
+release built with updated pinned HeadsetControl or HIDAPI revisions. Updating
+the standalone HeadsetControl formula does **not** update the versions embedded
+in an already-built app. Current builds load no Homebrew HeadsetControl or
+HIDAPI library on either architecture. See [the build contract](docs/build-contract.md)
+for exact inputs and compatibility validation. The application bundle includes
+HIDAPI's [BSD-style redistribution notice](HeadsetControl-MacOSTray/HIDAPI-LICENSE.txt).
 
 ## Screenshots
 
@@ -112,8 +128,18 @@ If you like my work, please consider supporting me ! <br><br>
    ```sh
    git clone https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray.git
    ```
-2. For the same native inputs as CI/release, install Xcode 26.3 and CMake, then run the [shared build helper](docs/build-contract.md#building-and-testing). It fetches exact source revisions, builds native libraries at the supported macOS floor, runs Debug and Release tests, and creates a validated app archive.
-3. Opening the project directly in Xcode still supports locally installed Homebrew headers/libraries. Such development builds are not release artifacts and do not establish the pinned dependency contract. SwiftPM source compilation requires Swift 6.1 or later; the release toolchain is fixed separately.
+2. For the same native inputs as CI and release, install Xcode 26.3 and CMake,
+   then run the [shared build helper](docs/build-contract.md#building-and-testing).
+   It fetches the revisions pinned in `build-contract.json`, builds static
+   HeadsetControl and HIDAPI archives for the macOS 14.0 floor, runs Debug and
+   Release tests, and creates a validated app archive. This path does not use
+   Homebrew-provided HeadsetControl or HIDAPI headers and libraries.
+3. For quick local development, opening the project directly in Xcode still
+   intentionally supports HeadsetControl and HIDAPI headers/libraries installed
+   through Homebrew. Install the official HeadsetControl formula when using this
+   path. These direct builds are not release artifacts and do not establish the
+   pinned dependency contract. SwiftPM source compilation requires Swift 6.1 or
+   later; the release toolchain is fixed separately.
 
 ## Usage
 
@@ -125,7 +151,13 @@ If you like my work, please consider supporting me ! <br><br>
 ## Troubleshooting
 
 - **No headset data appears:** Check that your headset is supported by the headsetcontrol version embedded in this app release. Updating the app may be necessary.
-- **Build fails with `headsetcontrol_c.h not found`:** Install headsetcontrol through Homebrew and make sure the headers are available in `/opt/homebrew/include` or `/usr/local/include`.
+- **The pinned build helper fails while preparing native dependencies:** Use the
+  exact Xcode and CMake prerequisites above and follow the diagnostics from the
+  helper. Installing a Homebrew library is not a substitute for its pinned input.
+- **A direct local Xcode build fails with `headsetcontrol_c.h not found`:** Install
+  the official HeadsetControl formula and make sure its headers are available in
+  `/opt/homebrew/include` or `/usr/local/include`. This applies only to the direct
+  development path, not to released app bundles or the pinned build helper.
 
 ## License
 
