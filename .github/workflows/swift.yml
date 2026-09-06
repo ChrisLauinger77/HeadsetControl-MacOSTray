@@ -7,14 +7,12 @@ on:
       - "*.md"
       - "**/*.md"
       - "LICENSE"
-      - ".github/**"
   pull_request:
     branches: ["main"]
     paths-ignore:
       - "*.md"
       - "**/*.md"
       - "LICENSE"
-      - ".github/**"
 
 jobs:
   build:
@@ -31,6 +29,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+      - name: Test release publication and packaging
+        run: |
+          node --test scripts/tests/*.test.cjs
+          python3 -B -m unittest discover -s scripts/tests -p 'test_*.py' -v
       - name: Install Homebrew dependencies
         run: |
           brew untap aws/tap 2>/dev/null || true
