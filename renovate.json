@@ -4,5 +4,36 @@
     "github>ChrisLauinger77/ChrisLauinger77//renovate-config/default",
     "helpers:pinGitHubActionDigests"
   ],
-  "automerge": false
+  "automerge": false,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update the complete pinned HeadsetControl release contract atomically",
+      "managerFilePatterns": ["/^build-contract\\.json$/"],
+      "matchStrings": [
+        "\"headsetcontrol\"\\s*:\\s*\\{\\s*\"repository\"\\s*:\\s*\"https://github\\.com/(?<depName>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)\\.git\",\\s*\"revision\"\\s*:\\s*\"(?<currentDigest>[a-f0-9]{40})\",\\s*\"version\"\\s*:\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\",\\s*\"channel\"\\s*:\\s*\"(?:release|snapshot)\"\\s*\\}"
+      ],
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver",
+      "autoReplaceStringTemplate": "\"headsetcontrol\": {\n    \"repository\": \"https://github.com/{{{depName}}}.git\",\n    \"revision\": \"{{{newDigest}}}\",\n    \"version\": \"{{{newValue}}}\",\n    \"channel\": \"release\"\n  }"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchManagers": ["custom.regex"],
+      "matchFileNames": ["build-contract.json"],
+      "matchDatasources": ["github-releases"],
+      "pinDigests": true,
+      "ignoreUnstable": true,
+      "automerge": false
+    },
+    {
+      "description": "Do not replace a selected snapshot with its old baseline release digest",
+      "matchManagers": ["custom.regex"],
+      "matchFileNames": ["build-contract.json"],
+      "matchDatasources": ["github-releases"],
+      "matchUpdateTypes": ["digest", "pinDigest", "pin", "rollback"],
+      "enabled": false
+    }
+  ]
 }

@@ -5,6 +5,7 @@ import json
 import re
 import subprocess
 from pathlib import Path
+from dependency_channels import validate_contract, validate_headsetcontrol
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = json.loads((ROOT / "build-contract.json").read_text())
@@ -138,10 +139,12 @@ def inspect_native(prefix, arch):
 
 
 def validate_provenance(data, identity, expected_revision=None):
+    validate_contract(CONTRACT)
     if not isinstance(data, dict) or data.get("schema") != PROVENANCE_SCHEMA:
         raise ValueError("Missing or unsupported build provenance")
     if data.get("audit_only"):
         raise ValueError("Audit-only build is not eligible for release")
+    validate_headsetcontrol(data.get("headsetcontrol"))
     for key in ("headsetcontrol", "hidapi", "xcode", "macos"):
         if data.get(key) != CONTRACT[key]:
             raise ValueError(f"Build provenance does not match contract: {key}")

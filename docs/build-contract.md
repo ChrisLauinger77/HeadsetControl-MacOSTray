@@ -42,6 +42,65 @@ headsetcontrol symbols were inspected. The repeatable release build uses Xcode
 | Deployment target | macOS 14.0 for application, headsetcontrol and HIDAPI |
 | Architectures | arm64 and x86_64, built/tested on their native CI runners |
 
+### HeadsetControl release and snapshot channels
+
+`headsetcontrol.revision` always identifies the exact commit being built.
+`channel` is required and accepts only `release` or `snapshot`:
+
+- `release`: `version` names the official upstream release tag, and `revision`
+  must equal that tag's commit (annotated tags are dereferenced).
+- `snapshot`: `revision` is a deliberately selected upstream commit; `version`
+  remains the last official baseline release. It does **not** describe the exact
+  snapshot source state. The native version string still uses that baseline;
+  use the revision and channel in build provenance to identify the actual source.
+
+Builds fetch only the recorded commit and validate the named baseline tag. They
+never resolve upstream HEAD or switch source selection based on the channel.
+Offline builds require both the pinned checkout and a previously verified tag;
+prepare them using the existing helper's `--fetch-only` option while online.
+
+To select a snapshot, run **Actions → Update HeadsetControl snapshot → Run workflow**
+from the default branch. The workflow reads the repository URL from this contract,
+resolves HEAD once to a full SHA, and opens a PR changing only `revision` and
+`channel`. The version is preserved. The branch name contains the complete target
+SHA; repeated requests reuse an open PR or exit if that snapshot is already
+selected. Runs are serialized. An interrupted run can reuse an unchanged branch;
+conflicting branch content is never force-pushed or deleted automatically.
+
+The workflow uses the repository's `GITHUB_TOKEN`, so repository settings must
+permit Actions to create PRs. If GitHub shows **Approve workflows to run**, approve
+those runs, then review normal CI and Codex feedback before merging. See
+[GitHub's workflow-trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
+No repository settings are changed by this workflow.
+
+Renovate uses official GitHub releases, not branch/HEAD tracking. One replacement
+updates `version`, the release tag's exact commit digest, and `channel: release`
+together. Digest-only, rollback and pin-only updates are disabled for this entry
+so the snapshot is not continually proposed for replacement by its old baseline.
+The inherited schedule/review settings, Actions digest pinning and `automerge: false`
+remain in place. HIDAPI dependency management is unchanged.
+
+| Transition | Behavior |
+| --- | --- |
+| release → release | Renovate proposes a newer official release and its exact tag commit. |
+| release → snapshot | The manual workflow selects a SHA and preserves the baseline version. |
+| snapshot → snapshot | Another manual request selects a SHA, preserving the baseline and avoiding duplicate PRs. |
+| snapshot → release | Renovate proposes a newer official release; CI requires that its commit contains the currently selected snapshot. |
+
+Both existing architecture build checks fetch the current PR base contract and
+run `git merge-base --is-ancestor` against the exact upstream snapshot/release
+commits. History is fetched shallowly for those two tips and deepened only as
+needed. Divergent releases fail CI even if their version/date is newer. Fetch
+errors or incomplete ancestry evidence also fail closed. If the base changes
+during validation, rerun CI; if it changes afterward, rebase/rerun before merging.
+Branch-protection policy is unchanged. Return to release mode by merging a
+reviewed, passing Renovate PR once an official release contains the snapshot.
+
+The first adoption PR may only add `channel: release` to the old contract; this
+one-time base comparison never permits a missing channel in a build or proposed
+contract. Channel metadata is copied into provenance and compared across both
+architectures as part of the complete HeadsetControl contract.
+
 Both [Apple Silicon](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md)
 and [Intel](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-Readme.md)
 runner inventories expose Xcode 26.3 at `/Applications/Xcode_26.3.app`.
