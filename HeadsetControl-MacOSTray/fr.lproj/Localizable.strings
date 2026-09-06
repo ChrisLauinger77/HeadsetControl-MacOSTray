@@ -97,6 +97,7 @@
 "Charging" = "En charge";
 "Unavailable" = "Indisponible";
 "Unknown" = "Inconnu";
+"%@ snapshot (%@)" = "%@ instantané (%@)";
 "Preset %d" = "Préréglage %d";
 "Low-battery notifications are not authorized" = "Les notifications de batterie faible ne sont pas autorisées";
 "Low-battery notification could not be sent" = "Impossible d’envoyer la notification de batterie faible";

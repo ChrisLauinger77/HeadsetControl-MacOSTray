@@ -56,6 +56,36 @@ nonisolated struct HeadsetCapability {
 // All mutable state, including the injected adapter, belongs to one executor.
 // Production adapters assert the shared HID thread at the transaction boundary.
 nonisolated final class HeadsetControlService: HeadsetControlProviding, @unchecked Sendable {
+    /// Version APIs do not initialize HID, but hsc_version lazily mutates a string.
+    /// Keep even this metadata read on the existing native worker.
+    static func nativeVersions(provenance: Data?) -> NativeDependencyVersions {
+        precondition(HeadsetIOWorker.shared.isCurrentThread)
+        return NativeDependencyVersions(
+            headsetControl: hsc_version().flatMap { String(validatingCString: $0) },
+            hidapi: hid_version_str().flatMap { String(validatingCString: $0) },
+            provenance: provenance
+        )
+    }
+
+    @MainActor static func requestNativeVersions(completion: @escaping @MainActor @Sendable (NativeDependencyVersions) -> Void) {
+        HeadsetIOWorker.shared.enqueue {
+            let result = bundledNativeVersions
+            RunLoop.main.perform(inModes: [.common]) {
+                MainActor.assumeIsolated { completion(result) }
+            }
+        }
+    }
+
+    // Loaded once off the main actor. Shutdown can discard the queued read without
+    // leaking an async continuation; there is no wait, discovery or HID initialization.
+    private static let bundledNativeVersions: NativeDependencyVersions = {
+        let data = Bundle.main.url(forResource: "BuildProvenance", withExtension: "json")
+            .flatMap { try? Data(contentsOf: $0) }
+        let result = nativeVersions(provenance: data)
+        for diagnostic in result.diagnostics { NSLog("Native dependency versions: %@", diagnostic) }
+        return result
+    }()
+
     private let library: HeadsetLibraryAccess
     private let inventory: HeadsetUSBInventoryProviding
     private let checkExecutionContext: () -> Void

@@ -156,6 +156,22 @@ Schema 2 explicitly records static HIDAPI linkage; old dynamic-HIDAPI provenance
 cannot pass the new packaging gate. Published archives are never migrated or
 replaced automatically.
 
+Settings → About reads `hsc_version()` and `hid_version_str()` from the linked
+libraries on the existing native worker, without device discovery or HID access.
+Its small dependency block shows those runtime values. Snapshot builds append
+the localized snapshot label and the first 12 characters of the HeadsetControl
+revision from the bundled `BuildProvenance.json`; release builds have no suffix.
+Nothing reads the current source checkout for display. Missing/malformed API
+values use localized **Unknown**. Missing or invalid provenance and mismatched
+versions retain diagnostics in the application log; direct development builds
+without provenance show the runtime versions without an inferred channel/SHA.
+
+The shared build helper also runs the Swift About reader against the completed
+bundle's provenance using tests linked to the same explicit archives. Missing or
+malformed metadata and runtime/provenance version mismatches fail that check on
+each native architecture, before archive creation. Final executable inspection
+requires both version API symbols to be defined exactly once in each slice.
+
 Before `lipo`, packaging validates both thin inputs and compares all common
 provenance, including the source revision and bundle/build versions. It combines
 only the per-architecture records, signs the universal app using the existing

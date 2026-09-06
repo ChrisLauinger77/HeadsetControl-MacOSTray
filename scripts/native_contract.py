@@ -101,8 +101,8 @@ def inspect(path, arch, kind):
         # These must be defined in the executable, not imported from a dylib.
         symbols = run("xcrun", "nm", "-arch", arch, "-gU", path)
         for library, required in (
-            ("headsetcontrol", ("hsc_discover", "hsc_free_headsets", "hsc_get_battery")),
-            ("HIDAPI", ("hid_init", "hid_exit", "hid_enumerate", "hid_open_path", "hid_close")),
+            ("headsetcontrol", ("hsc_discover", "hsc_free_headsets", "hsc_get_battery", "hsc_version")),
+            ("HIDAPI", ("hid_init", "hid_exit", "hid_enumerate", "hid_open_path", "hid_close", "hid_version_str")),
         ):
             for symbol in required:
                 if len(re.findall(rf"\b[Tt] _{symbol}$", symbols, re.MULTILINE)) != 1:

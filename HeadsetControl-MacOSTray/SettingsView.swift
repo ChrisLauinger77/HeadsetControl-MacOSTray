@@ -34,6 +34,8 @@ struct SettingsSection<Content: View>: View {
 }
 
 struct SettingsView: View {
+    @State private var nativeVersions: NativeDependencyVersions?
+    @State private var requestedNativeVersions = false
     @AppStorage("sidetoneOff", store: AppDefaults.standard) var sidetoneOff: Int = AppDefaults.sidetoneValues[0]
     @AppStorage("sidetoneLow", store: AppDefaults.standard) var sidetoneLow: Int = AppDefaults.sidetoneValues[1]
     @AppStorage("sidetoneMid", store: AppDefaults.standard) var sidetoneMid: Int = AppDefaults.sidetoneValues[2]
@@ -115,13 +117,7 @@ struct SettingsView: View {
         }
     }
 
-    private var appVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-"
-    }
-
-    private var appBuild: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "-"
-    }
+    private var appVersionInfo: ApplicationVersionInfo { ApplicationVersionInfo() }
 
     private var updateIntervalSecondsBinding: Binding<Int> {
         Binding(
@@ -368,10 +364,17 @@ struct SettingsView: View {
                 .bold()
 
             VStack(spacing: 6) {
-                Text("\(NSLocalizedString("Version", comment: "App version label")): \(appVersion)")
-                Text("\(NSLocalizedString("Build", comment: "App build label")): \(appBuild)")
+                Text(appVersionInfo.versionLine)
+                Text(appVersionInfo.buildLine)
             }
             .font(.subheadline)
+            .foregroundColor(.secondary)
+
+            VStack(spacing: 4) {
+                Text(verbatim: "HeadsetControl: \(nativeVersions?.headsetControlDisplay ?? NSLocalizedString("Unknown", comment: "Unknown native version"))")
+                Text(verbatim: "HIDAPI: \(nativeVersions?.hidapiDisplay ?? NSLocalizedString("Unknown", comment: "Unknown native version"))")
+            }
+            .font(.caption)
             .foregroundColor(.secondary)
 
             Link(
@@ -382,6 +385,11 @@ struct SettingsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
+        .onAppear {
+            guard !requestedNativeVersions else { return }
+            requestedNativeVersions = true
+            HeadsetControlService.requestNativeVersions { nativeVersions = $0 }
+        }
     }
 
     var body: some View {

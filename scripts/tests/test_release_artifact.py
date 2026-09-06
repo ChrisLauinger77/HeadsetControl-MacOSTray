@@ -134,9 +134,11 @@ class MacPackagingTests(unittest.TestCase):
         source = cls.directory / "main.c"
         source.write_text("int hid_init(void); void hsc_discover(void) {}\n"
                           "void hsc_free_headsets(void) {} void hsc_get_battery(void) {}\n"
+                          "const char *hsc_version(void) { return \"fixture\"; }\n"
                           "int main(void) { return hid_init(); }\n")
         hid_source = cls.directory / "hid.c"
         hid_source.write_text("int hid_init(void) { return 0; }\n"
+                              "const char *hid_version_str(void) { return \"fixture\"; }\n"
                               "void hid_exit(void) {} void hid_enumerate(void) {}\n"
                               "void hid_open_path(void) {} void hid_close(void) {}\n")
         cls.archives = []
