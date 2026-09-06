@@ -112,15 +112,17 @@ nonisolated enum NotificationFailure: Error, Equatable, Sendable {
         entry.pending = attempt
         entries[notice.target] = entry
         delivery.authorize { [weak self] result in
-            guard let self, self.isCurrent(notice, attempt: attempt) else { return }
+            guard let self, self.isCurrent(notice, attempt: attempt), let currentNotice = self.eligible else { return }
+            // Keep the coalesced attempt, but use the latest eligible reading:
+            // authorization may span several refreshes for the same attachment.
             switch result {
-            case .failure(let error): self.finish(notice, attempt: attempt, result: .failure(error))
-            case .success(false): self.finish(notice, attempt: attempt, result: .failure(.denied))
+            case .failure(let error): self.finish(currentNotice, attempt: attempt, result: .failure(error))
+            case .success(false): self.finish(currentNotice, attempt: attempt, result: .failure(.denied))
             case .success(true):
                 // Preferences can change before their queued observer runs.
-                guard self.isStillAllowed?(notice) != false else { self.suspend(); return }
-                self.delivery.submit(notice) { [weak self] result in
-                    self?.finish(notice, attempt: attempt, result: result)
+                guard self.isStillAllowed?(currentNotice) != false else { self.suspend(); return }
+                self.delivery.submit(currentNotice) { [weak self] result in
+                    self?.finish(currentNotice, attempt: attempt, result: result)
                 }
             }
         }

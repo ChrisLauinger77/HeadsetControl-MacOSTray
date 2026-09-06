@@ -384,6 +384,47 @@ import XCTest
         XCTAssertTrue(delivery.submissions.isEmpty)
     }
 
+    func testPendingAuthorizationChecksLatestBatteryAgainstChangedThreshold() async throws {
+        UserDefaults.standard.set(7, forKey: "testMode")
+        UserDefaults.standard.set(true, forKey: "notifyOnLowBattery")
+        UserDefaults.standard.set(25, forKey: "lowBatteryThreshold")
+        let provider = RecordingHeadsetProvider()
+        provider.devices = [HeadsetDevice(usbID: .testDevice, name: "Fake", vendor: "Vendor", product: "Product", capabilities: [],
+                                          battery: .success(.init(level: 10, status: .available)), target: .test(profile: 7))]
+        let executor = ManualHeadsetExecutor()
+        let delivery = RecordingNotificationDelivery()
+        let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor), notificationDelivery: delivery)
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+        provider.devices[0].battery = .success(.init(level: 20, status: .available))
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+        XCTAssertEqual(delivery.authorizations.count, 1)
+
+        // Complete authorization before a defaults observer can suspend it.
+        UserDefaults.standard.set(15, forKey: "lowBatteryThreshold")
+        let authorize = try XCTUnwrap(delivery.authorizations.first)
+        authorize(.success(true))
+        XCTAssertTrue(delivery.submissions.isEmpty)
+
+        // Rejecting the old attempt must leave the next genuine low reading
+        // eligible, rather than keeping an unresolved pending authorization.
+        provider.devices[0].battery = .success(.init(level: 10, status: .available))
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+        XCTAssertEqual(delivery.authorizations.count, 2)
+        if delivery.authorizations.count == 2 {
+            delivery.authorizations[1](.success(true))
+            XCTAssertEqual(delivery.submissions, [LowBatteryNotice(target: .test(profile: 7), level: 10)])
+        }
+        delegate.stop()
+        executor.finishStop()
+        await drainResults()
+    }
+
     func testDisablingAlertsClearsFailuresBeforeRefreshAndRejectsLateWarnings() async {
         for failure in [NotificationFailure.denied, .system(domain: "Test", code: 1, description: "Rejected")] {
             UserDefaults.standard.set(7, forKey: "testMode")

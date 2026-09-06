@@ -83,6 +83,30 @@ import XCTest
         XCTAssertTrue(delivery.submissions.isEmpty)
     }
 
+    func testPendingAuthorizationSubmitsLatestReadingWithoutRestartingAttempt() async throws {
+        for (initialLevel, latestLevel) in [(10, 20), (20, 10)] {
+            let delivery = RecordingNotificationDelivery()
+            let notifier = LowBatteryNotifications(delivery: delivery)
+            var checked: [LowBatteryNotice] = []
+            notifier.isStillAllowed = { checked.append($0); return true }
+            notifier.update(devices: [device(a, initialLevel)], enabled: true, threshold: 25, testProfile: 0)
+            notifier.update(devices: [device(a, latestLevel)], enabled: true, threshold: 25, testProfile: 0)
+            XCTAssertEqual(delivery.authorizations.count, 1)
+            delivery.authorizations[0](.success(true))
+            let expected = LowBatteryNotice(target: a, level: latestLevel)
+            XCTAssertEqual(checked, [expected])
+            XCTAssertEqual(delivery.submissions, [expected])
+
+            // A later low reading belongs to the same attempt while submission
+            // is pending; it must not discard a successful acknowledgement.
+            notifier.update(devices: [device(a, 5)], enabled: true, threshold: 25, testProfile: 0)
+            let completion = try XCTUnwrap(delivery.completions.first)
+            completion(.success(()))
+            notifier.update(devices: [device(a, 0)], enabled: true, threshold: 25, testProfile: 0)
+            XCTAssertEqual(delivery.authorizations.count, 1)
+        }
+    }
+
     func testRecoveryWhileSubmissionPendingIgnoresItsLateSuccess() async {
         let delivery = RecordingNotificationDelivery()
         let notifier = LowBatteryNotifications(delivery: delivery)
