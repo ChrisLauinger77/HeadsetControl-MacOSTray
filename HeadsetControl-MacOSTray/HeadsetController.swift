@@ -50,6 +50,9 @@ import Foundation
     func invalidateSnapshot() {
         guard !stopped else { return }
         observationGeneration += 1
+        // Coalesced requests also belong to the pre-event observation. Do not
+        // let completion of old work relaunch them under the new generation.
+        pendingProfile = nil
         snapshot.invalidate()
         expirationTask?.cancel()
         expirationTask = nil

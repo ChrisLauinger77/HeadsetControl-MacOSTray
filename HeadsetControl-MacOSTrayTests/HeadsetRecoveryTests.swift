@@ -177,6 +177,54 @@ import XCTest
         XCTAssertEqual(f.controller.snapshotState, .fresh)
     }
 
+    func testSleepDropsCoalescedRecoveryBeforeCompletingOldRefresh() async {
+        for completionAlreadyQueued in [false, true] {
+            let f = Fixture()
+            f.provider.devices = [headset()]
+            f.controller.refresh(testProfile: 7)
+            f.controller.recover(testProfile: 7)
+            f.scheduler.advance(by: 0.75) // Recovery is now coalesced behind the first refresh.
+            if completionAlreadyQueued { f.executor.runNext() }
+            f.controller.invalidateSnapshot()
+            if !completionAlreadyQueued { f.executor.runNext() }
+            await withCheckedContinuation { continuation in HeadsetMainRunLoop.perform { continuation.resume() } }
+            XCTAssertTrue(f.executor.jobs.isEmpty)
+            // Expose an illicit followup's publication as well as its enqueue.
+            if !f.executor.jobs.isEmpty { await f.finishRefresh() }
+            XCTAssertNil(f.controller.snapshot.observedAt)
+            XCTAssertEqual(f.provider.profiles, [7])
+            XCTAssertTrue(f.scheduler.pending.isEmpty)
+
+            f.controller.recover(testProfile: 7)
+            f.scheduler.advance(by: 0.75)
+            await f.finishRefresh()
+            XCTAssertEqual(f.controller.snapshotState, .fresh)
+            XCTAssertEqual(f.provider.profiles, [7, 7])
+            f.controller.stop()
+            f.executor.finishStop()
+        }
+    }
+
+    func testRefreshRequestedAfterInvalidationBoundaryStillCoalesces() async {
+        let f = Fixture()
+        f.provider.devices = [headset()]
+        f.controller.refresh(testProfile: 7)
+        f.controller.refresh(testProfile: 7)
+        // Callback code can request new work before invalidation returns.
+        f.controller.onSnapshotInvalidated = {
+            for _ in 0..<20 { f.controller.refresh(testProfile: 7) }
+        }
+        f.controller.invalidateSnapshot()
+        await f.finishRefresh()
+        XCTAssertNil(f.controller.snapshot.observedAt)
+        await f.finishRefresh()
+        XCTAssertEqual(f.controller.snapshotState, .fresh)
+        XCTAssertEqual(f.provider.profiles, [7, 7])
+        XCTAssertTrue(f.executor.jobs.isEmpty)
+        f.controller.stop()
+        f.executor.finishStop()
+    }
+
     func testWakeRetriesUnreadyTelemetryEvenWhenReceiverIsDiscoverable() async {
         let f = Fixture()
         var device = headset()
