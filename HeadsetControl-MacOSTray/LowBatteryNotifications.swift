@@ -81,8 +81,8 @@ nonisolated enum NotificationFailure: Error, Equatable, Sendable {
     private var eligible: LowBatteryNotice?
     private var stopped = false
     var isStillAllowed: ((LowBatteryNotice) -> Bool)?
-    var onFailure: ((NotificationFailure) -> Void)?
-    var onSuccess: (() -> Void)?
+    var onFailure: ((HeadsetTarget, NotificationFailure) -> Void)?
+    var onSuccess: ((HeadsetTarget) -> Void)?
 
     init(delivery: LowBatteryNotificationDelivering) { self.delivery = delivery }
 
@@ -167,10 +167,12 @@ nonisolated enum NotificationFailure: Error, Equatable, Sendable {
         switch result {
         case .success:
             entries[notice.target]?.submitted = true
-            if eligible?.target == notice.target { onSuccess?() }
+            // The caller owns displayed feedback. Report the successful target
+            // even after reordering so it can clear only that target's warning.
+            onSuccess?(notice.target)
         case .failure(let error):
             // Keep the opportunity available for a subsequent refresh/retry.
-            if eligible?.target == notice.target { onFailure?(error) }
+            if eligible?.target == notice.target { onFailure?(notice.target, error) }
         }
     }
 }

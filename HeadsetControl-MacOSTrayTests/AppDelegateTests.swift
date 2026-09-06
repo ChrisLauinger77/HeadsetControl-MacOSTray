@@ -478,6 +478,71 @@ import XCTest
         }
     }
 
+    func testNotificationWarningClearsOnlyAfterItsOwnDeviceSucceeds() async throws {
+        for failsAuthorization in [true, false] {
+            for retryCompletesWhileEligible in [true, false] {
+                UserDefaults.standard.set(0, forKey: "testMode")
+                UserDefaults.standard.set(true, forKey: "notifyOnLowBattery")
+                UserDefaults.standard.set(25, forKey: "lowBatteryThreshold")
+                let a = HeadsetDevice(usbID: .init(vendor: 1, product: 2), name: "A", vendor: "Vendor", product: "Product", capabilities: [],
+                                      battery: .success(.init(level: 10, status: .available)),
+                                      target: .physical(.init(vendor: 1, product: 2), attachmentID: 11))
+                let b = HeadsetDevice(usbID: .init(vendor: 3, product: 4), name: "B", vendor: "Vendor", product: "Product", capabilities: [],
+                                      battery: .success(.init(level: 10, status: .available)),
+                                      target: .physical(.init(vendor: 3, product: 4), attachmentID: 22))
+                let provider = RecordingHeadsetProvider()
+                let executor = ManualHeadsetExecutor()
+                let delivery = RecordingNotificationDelivery()
+                let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor), notificationDelivery: delivery)
+                func refresh(_ devices: [HeadsetDevice]) async {
+                    provider.devices = devices
+                    delegate.updateStatusItem()
+                    executor.runNext()
+                    await drainResults()
+                }
+
+                await refresh([a, b])
+                let authorizeA = try XCTUnwrap(delivery.authorizations.first)
+                authorizeA(.success(true))
+                await refresh([b, a])
+                let authorizeB = try XCTUnwrap(delivery.authorizations.dropFirst().first)
+                let failure: NotificationFailure = failsAuthorization ? .denied : .system(domain: "Test", code: 1, description: "Rejected")
+                if failsAuthorization {
+                    authorizeB(.success(false))
+                } else {
+                    authorizeB(.success(true))
+                    let failB = try XCTUnwrap(delivery.completions.dropFirst().first)
+                    failB(.failure(failure))
+                }
+                XCTAssertEqual(delegate.notificationFailure, failure)
+
+                // A becomes eligible again before its older submission succeeds.
+                // That success must not clear the warning produced by B.
+                await refresh([a, b])
+                let completeA = try XCTUnwrap(delivery.completions.first)
+                completeA(.success(()))
+                XCTAssertEqual(delegate.notificationFailure, failure)
+                let menu = NSMenu()
+                delegate.menuNeedsUpdate(menu)
+                XCTAssertTrue(menu.items.contains { $0.title == failure.message })
+
+                await refresh([b, a])
+                XCTAssertEqual(delivery.authorizations.count, 3)
+                let retryB = try XCTUnwrap(delivery.authorizations.dropFirst(2).first)
+                retryB(.success(true))
+                if !retryCompletesWhileEligible { await refresh([a, b]) }
+                let completeB = try XCTUnwrap(delivery.completions.last)
+                completeB(.success(()))
+                XCTAssertNil(delegate.notificationFailure)
+                delegate.menuNeedsUpdate(menu)
+                XCTAssertFalse(menu.items.contains { $0.title == failure.message })
+                delegate.stop()
+                executor.finishStop()
+                await drainResults()
+            }
+        }
+    }
+
     private func drainResults() async {
         await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
     }

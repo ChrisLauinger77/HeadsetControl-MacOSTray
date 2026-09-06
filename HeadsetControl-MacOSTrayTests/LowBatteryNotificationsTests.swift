@@ -36,7 +36,7 @@ import XCTest
         let delivery = RecordingNotificationDelivery()
         let notifier = LowBatteryNotifications(delivery: delivery)
         var failures: [NotificationFailure] = []
-        notifier.onFailure = { failures.append($0) }
+        notifier.onFailure = { _, error in failures.append(error) }
         let update = { notifier.update(devices: [self.device(self.a, 0)], enabled: true, threshold: 25, testProfile: 0) }
         update()
         delivery.authorizations[0](.success(false))
@@ -233,7 +233,7 @@ import XCTest
         let delivery = RecordingNotificationDelivery()
         let notifier = LowBatteryNotifications(delivery: delivery)
         var failures: [NotificationFailure] = []
-        notifier.onFailure = { failures.append($0) }
+        notifier.onFailure = { _, error in failures.append(error) }
         notifier.update(devices: [device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
         delivery.authorizations[0](.success(true))
         notifier.update(devices: [], enabled: true, threshold: 25, testProfile: 0)
@@ -265,13 +265,17 @@ import XCTest
         XCTAssertEqual(delivery.authorizations.count, 3)
     }
 
-    func testStartedSubmissionSuccessDoesNotClearAnotherDevicesFailure() async throws {
+    func testFeedbackReportsTheOriginatingTargetAfterReordering() async throws {
         let delivery = RecordingNotificationDelivery()
         let notifier = LowBatteryNotifications(delivery: delivery)
-        var successes = 0
+        var successes: [HeadsetTarget] = []
         var failures: [NotificationFailure] = []
-        notifier.onSuccess = { successes += 1 }
-        notifier.onFailure = { failures.append($0) }
+        var failureTargets: [HeadsetTarget] = []
+        notifier.onSuccess = { successes.append($0) }
+        notifier.onFailure = { target, error in
+            failureTargets.append(target)
+            failures.append(error)
+        }
         notifier.update(devices: [device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
         delivery.authorizations[0](.success(true))
         notifier.update(devices: [device(b, 10), device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
@@ -279,7 +283,8 @@ import XCTest
         authorize(.success(false))
         delivery.completions[0](.success(()))
         XCTAssertEqual(failures, [.denied])
-        XCTAssertEqual(successes, 0)
+        XCTAssertEqual(failureTargets, [b])
+        XCTAssertEqual(successes, [a])
         notifier.update(devices: [device(a, 10), device(b, 10)], enabled: true, threshold: 25, testProfile: 0)
         XCTAssertEqual(delivery.authorizations.count, 2)
     }
@@ -290,8 +295,8 @@ import XCTest
             let delivery = RecordingNotificationDelivery()
             let notifier = LowBatteryNotifications(delivery: delivery)
             var callbacks = 0
-            notifier.onSuccess = { callbacks += 1 }
-            notifier.onFailure = { _ in callbacks += 1 }
+            notifier.onSuccess = { _ in callbacks += 1 }
+            notifier.onFailure = { _, _ in callbacks += 1 }
             notifier.update(devices: [device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
             delivery.authorizations[0](.success(true))
             notifier.stop()

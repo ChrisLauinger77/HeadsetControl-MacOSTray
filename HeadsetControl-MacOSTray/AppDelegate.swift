@@ -27,7 +27,9 @@ import UserNotifications
     private var telemetryFailures: [HeadsetFailure] = []
     private(set) var refreshFailure: HeadsetFailure?
     private(set) var commandFailure: String?
-    private(set) var notificationFailure: NotificationFailure?
+    // A nil target represents the app-wide startup authorization request.
+    private var notificationIssue: (target: HeadsetTarget?, failure: NotificationFailure)?
+    var notificationFailure: NotificationFailure? { notificationIssue?.failure }
 
     override init() {
         _ = AppDefaults.standard
@@ -52,13 +54,15 @@ import UserNotifications
             return AppDefaults.standard.bool(forKey: "notifyOnLowBattery") && notice.level <= self.lowBatteryThreshold
                 && notice.target.accepts(testProfile: self.currentTestProfile)
         }
-        lowBatteryNotifications.onFailure = { [weak self] error in
-            self?.notificationFailure = error
+        lowBatteryNotifications.onFailure = { [weak self] target, error in
+            self?.notificationIssue = (target, error)
             self?.updateStatusPresentation()
         }
-        lowBatteryNotifications.onSuccess = { [weak self] in
-            self?.notificationFailure = nil
-            self?.updateStatusPresentation()
+        lowBatteryNotifications.onSuccess = { [weak self] target in
+            guard let self, let issue = self.notificationIssue,
+                  issue.target == nil || issue.target == target else { return }
+            self.notificationIssue = nil
+            self.updateStatusPresentation()
         }
     }
 
@@ -135,7 +139,7 @@ import UserNotifications
         SystemLowBatteryNotificationDelivery().authorize { [weak self] result in
             guard let self, !self.stopping else { return }
             if case .failure(let error) = result {
-                self.notificationFailure = error
+                self.notificationIssue = (nil, error)
                 self.updateStatusPresentation()
             }
         }
@@ -230,7 +234,7 @@ import UserNotifications
             telemetryFailures = []
             refreshFailure = nil
             commandFailure = nil
-            notificationFailure = nil
+            notificationIssue = nil
             lowBatteryNotifications.suspend()
         }
         lastRequestedProfile = profile
@@ -271,7 +275,7 @@ import UserNotifications
     private func updateStatusPresentation() {
         guard !stopping else { return }
         // Also reject failures delivered before the queued defaults observer.
-        if !AppDefaults.standard.bool(forKey: "notifyOnLowBattery") { notificationFailure = nil }
+        if !AppDefaults.standard.bool(forKey: "notifyOnLowBattery") { notificationIssue = nil }
         let messages = feedbackMessages + telemetryFailures.map(\.message)
         statusItem?.button?.title = (statusBatteryText.map { " " + $0 } ?? "") + (messages.isEmpty ? "" : " ⚠︎")
         statusItem?.button?.toolTip = messages.isEmpty ? nil : messages.joined(separator: "\n")
