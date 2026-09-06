@@ -103,3 +103,9 @@
 "Retry refresh" = "Reintentar actualización";
 "Preset metadata unavailable" = "Metadatos de preajustes no disponibles";
 "Fallback names are used only for supported presets without a device-reported name." = "Los nombres alternativos solo se usan para preajustes compatibles cuyo dispositivo no proporciona un nombre.";
+
+/* Device snapshot freshness */
+"Checking devices…" = "Comprobando dispositivos…";
+"Device data may be out of date" = "Los datos del dispositivo pueden estar desactualizados";
+"Last checked: %@" = "Última comprobación: %@";
+"No devices in last check" = "No había dispositivos en la última comprobación";

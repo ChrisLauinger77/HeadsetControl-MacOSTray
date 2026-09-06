@@ -252,7 +252,7 @@ final class HeadsetControllerTests: XCTestCase {
 
     @MainActor private func drainMainQueue() async {
         await withCheckedContinuation { continuation in
-            DispatchQueue.main.async { continuation.resume() }
+            HeadsetMainRunLoop.perform { continuation.resume() }
         }
     }
 }
