@@ -123,12 +123,15 @@ jobs:
           path: ${{ runner.temp }}/HeadsetControl-MacOSTray-${{ matrix.arch }}.zip
           if-no-files-found: error
           retention-days: 1
+          # These are private build intermediates, never GitHub release assets.
+          overwrite: true
 
   package:
     needs: build
     runs-on: macos-26
     outputs:
       archive_sha256: ${{ steps.checksum.outputs.archive_sha256 }}
+      artifact_id: ${{ steps.candidate.outputs.artifact-id }}
 
     steps:
       - name: Checkout repository
@@ -161,9 +164,10 @@ jobs:
 
       # Publication retries must use these exact ZIP bytes, not repackage them.
       - name: Retain publication candidate
+        id: candidate
         uses: actions/upload-artifact@v7
         with:
-          name: release-candidate
+          name: release-candidate-${{ github.run_attempt }}
           path: ${{ runner.temp }}/HeadsetControl-MacOSTray.zip
           if-no-files-found: error
           retention-days: 7
@@ -180,8 +184,9 @@ jobs:
         if: needs.prepare-release.outputs.published != 'true'
         uses: actions/download-artifact@v8
         with:
-          name: release-candidate
+          artifact-ids: ${{ needs.package.outputs.artifact_id }}
           path: ${{ runner.temp }}
+          merge-multiple: true
 
       - name: Verify archive and resume publication
         uses: actions/github-script@v9

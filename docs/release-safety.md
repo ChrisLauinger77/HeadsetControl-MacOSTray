@@ -12,8 +12,9 @@ minimum is compared, not changed. Packaging still combines the executables,
 ad-hoc signs the app, and uses the existing `ditto` ZIP format. It validates the
 finished ZIP and extracted bundle, including signature and both architectures.
 
-The exact ZIP and its SHA-256 are retained as the `release-candidate` Actions
-artifact for seven days. Publication checks that checksum before any upload and
+The exact ZIP and its SHA-256 are retained as a `release-candidate-<attempt>`
+Actions artifact for seven days. Publication downloads that artifact by ID and
+checks its checksum before any upload and
 downloads the server copy to check its size, checksum and tag/bundle identity.
 An existing draft asset is reusable only if its bytes match the candidate.
 There is no asset deletion or replacement operation in the publisher.
@@ -46,6 +47,10 @@ inputs are not pinned. A resulting checksum conflict is intentional. Expired
 Actions artifacts require manual recovery; the publisher never silently accepts
 a replacement candidate. The concurrency lock coordinates this workflow, not
 manual edits or other publishers outside its concurrency group.
+
+Rerun builds may replace their private architecture intermediates in Actions.
+Each packaging attempt retains a separate final candidate; it never overwrites
+an earlier candidate or a GitHub release asset.
 
 ## Validation
 
