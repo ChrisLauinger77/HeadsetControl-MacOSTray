@@ -3,6 +3,7 @@
 import argparse
 import copy
 import json
+import os
 import re
 import subprocess
 import tempfile
@@ -93,6 +94,23 @@ def transition(base, proposed):
     return previous["channel"] == "snapshot" and current["channel"] == "release"
 
 
+def validate_snapshot_pr(base, proposed, event, repository):
+    """Changed snapshots must come from the manual updater's same-repository bot PR."""
+    current = validate_contract(proposed)
+    previous = base.get("headsetcontrol", {})
+    if current["channel"] != "snapshot" or all(previous.get(key) == current[key] for key in ("revision", "channel")):
+        return
+    expected = copy.deepcopy(base)
+    expected["headsetcontrol"].update(revision=current["revision"], channel="snapshot")
+    pr = event.get("pull_request", {})
+    head = pr.get("head", {})
+    if (proposed != expected or pr.get("user", {}).get("login") != "github-actions[bot]"
+            or head.get("ref") != "codex/headsetcontrol-snapshot-" + current["revision"]
+            or head.get("repo", {}).get("full_name") != repository or not repository):
+        raise ValueError("Select snapshots through the manual Update HeadsetControl snapshot workflow; "
+                         "its PR may change only revision and channel")
+
+
 def require_ancestor(repository, snapshot, release, directory):
     """Deepen only the two exact tips until ancestry is proven or history is complete."""
     if not SHA.fullmatch(snapshot) or not SHA.fullmatch(release):
@@ -153,6 +171,9 @@ def main():
             git(ROOT, "fetch", "--no-tags", "--depth=1", "origin", ref)
             base_revision = git(ROOT, "rev-parse", "FETCH_HEAD").stdout.strip()
             base = json.loads(git(ROOT, "show", f"{base_revision}:build-contract.json").stdout)
+            event_path = os.environ.get("GITHUB_EVENT_PATH")
+            event = json.loads(Path(event_path).read_text()) if event_path else {}
+            validate_snapshot_pr(base, contract, event, os.environ.get("GITHUB_REPOSITORY"))
         validate_remote(contract, base)
         if args.base_branch:
             current = git(ROOT, "ls-remote", "origin", ref).stdout.split()

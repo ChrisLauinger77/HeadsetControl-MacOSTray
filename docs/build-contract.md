@@ -66,6 +66,9 @@ resolves HEAD once to a full SHA, and opens a PR changing only `revision` and
 SHA; repeated requests reuse an open PR or exit if that snapshot is already
 selected. Runs are serialized. An interrupted run can reuse an unchanged branch;
 conflicting branch content is never force-pushed or deleted automatically.
+CI accepts snapshot selection only from the updater's same-repository bot PR
+with that deterministic branch name and the two allowed contract-field changes.
+Ordinary feature PRs can still build against an already selected snapshot.
 
 The workflow uses the repository's `GITHUB_TOKEN`, so repository settings must
 permit Actions to create PRs. If GitHub shows **Approve workflows to run**, approve

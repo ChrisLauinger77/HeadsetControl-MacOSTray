@@ -75,6 +75,28 @@ class ChannelContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "first add only"):
                 channels.transition(base, altered)
 
+    def test_only_manual_workflow_prs_can_select_a_snapshot(self):
+        selected = contract("snapshot", "b" * 40)
+        event = {"pull_request": {"user": {"login": "github-actions[bot]"}, "head": {
+            "ref": "codex/headsetcontrol-snapshot-" + "b" * 40,
+            "repo": {"full_name": "owner/app"}}}}
+        for previous in (contract(), contract("snapshot", "c" * 40)):
+            channels.validate_snapshot_pr(previous, selected, event, "owner/app")
+            for field, value in (("user", {"login": "someone"}), ("head", {"ref": "another-branch"})):
+                altered = copy.deepcopy(event)
+                altered["pull_request"][field] = value
+                with self.assertRaisesRegex(ValueError, "manual Update HeadsetControl"):
+                    channels.validate_snapshot_pr(previous, selected, altered, "owner/app")
+            with self.assertRaises(ValueError):
+                channels.validate_snapshot_pr(previous, selected, event, "different/fork")
+            altered = copy.deepcopy(selected)
+            altered["macos"] = "15.0"
+            with self.assertRaisesRegex(ValueError, "only revision and channel"):
+                channels.validate_snapshot_pr(previous, altered, event, "owner/app")
+        # Feature PRs while a snapshot is already selected need no bot identity.
+        channels.validate_snapshot_pr(selected, selected, {}, "owner/app")
+        channels.validate_snapshot_pr(selected, contract("release", "c" * 40, "4.2.0"), {}, "owner/app")
+
     def test_provenance_records_and_compares_both_channels(self):
         for channel in ("release", "snapshot"):
             selected = contract(channel)
