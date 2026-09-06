@@ -162,6 +162,13 @@ def build(args):
     (app / PROVENANCE).write_text(json.dumps(provenance, indent=2, sort_keys=True) + "\n")
     command("codesign", "--force", "--deep", "--sign", "-", app)
     command("codesign", "--verify", "--deep", "--strict", app)
+    if not args.skip_tests:
+        # Exercise the About reader against the provenance actually embedded in this
+        # bundle, using the already-built tests linked to the app's exact archives.
+        command(swift, "test", "--skip-build", "--configuration", "release",
+                "--scratch-path", work / ("swift-" + arch),
+                "--filter", "NativeDependencyVersionsTests/testLinkedVersionsMatchEmbeddedProvenance",
+                env={**environment, "HEADSETCONTROL_PROVENANCE_PATH": str(app / PROVENANCE)}, cwd=ROOT)
     archive = work / f"HeadsetControl-MacOSTray-{arch}.zip"
     command("ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", app, archive)
     if not args.audit_toolchain:

@@ -117,8 +117,8 @@ class NativeContractTests(unittest.TestCase):
 
     def test_static_embedding_requires_defined_symbols(self):
         info = provenance_fixture()["slices"]["arm64"]["application"]
-        names = ("hsc_discover", "hsc_free_headsets", "hsc_get_battery", "hid_init", "hid_exit",
-                 "hid_enumerate", "hid_open_path", "hid_close")
+        names = ("hsc_discover", "hsc_free_headsets", "hsc_get_battery", "hsc_version", "hid_init", "hid_exit",
+                 "hid_enumerate", "hid_open_path", "hid_close", "hid_version_str")
         defined = "\n".join(f"000000 T _{name}" for name in names)
         with patch.object(native, "load_commands", return_value=info):
             with patch.object(native, "run", side_effect=["load commands", defined, ""]):
