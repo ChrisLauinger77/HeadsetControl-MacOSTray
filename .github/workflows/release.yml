@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
@@ -46,10 +46,10 @@ jobs:
       published: ${{ steps.prepare.outputs.published }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Find or create release
         id: prepare
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         with:
@@ -75,7 +75,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Build and test pinned native contract
         env:
@@ -87,7 +87,7 @@ jobs:
             --arch "${{ matrix.arch }}"
 
       - name: Upload architecture archive
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: app-${{ matrix.arch }}
           path: ${{ runner.temp }}/native-contract/HeadsetControl-MacOSTray-${{ matrix.arch }}.zip
@@ -105,10 +105,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Download architecture archives
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: app-*
           path: ${{ runner.temp }}/architecture-archives
@@ -124,7 +124,7 @@ jobs:
 
       - name: Record publication candidate checksum
         id: checksum
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           ARCHIVE_PATH: ${{ runner.temp }}/HeadsetControl-MacOSTray.zip
         with:
@@ -135,7 +135,7 @@ jobs:
       # Publication retries must use these exact ZIP bytes, not repackage them.
       - name: Retain publication candidate
         id: candidate
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-candidate-${{ github.run_attempt }}
           path: ${{ runner.temp }}/HeadsetControl-MacOSTray.zip
@@ -149,17 +149,17 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Download exact publication candidate
         if: needs.prepare-release.outputs.published != 'true'
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           artifact-ids: ${{ needs.package.outputs.artifact_id }}
           path: ${{ runner.temp }}
           merge-multiple: true
 
       - name: Verify archive and resume publication
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
           ALREADY_PUBLISHED: ${{ needs.prepare-release.outputs.published }}
@@ -183,9 +183,9 @@ jobs:
     if: ${{ !cancelled() && needs.publish.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Request Homebrew cask update
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           github-token: ${{ secrets.HOMEBREW_CASK_PUSH_TOKEN }}
           script: |

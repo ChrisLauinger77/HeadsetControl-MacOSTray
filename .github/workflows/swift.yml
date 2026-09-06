@@ -32,7 +32,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Test release publication and packaging
         run: |
           node --test scripts/tests/*.test.cjs
@@ -47,7 +47,7 @@ jobs:
             --arch "${{ matrix.arch }}"
 
       - name: Upload architecture archive
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: app-${{ matrix.arch }}
           path: ${{ runner.temp }}/native-contract/HeadsetControl-MacOSTray-${{ matrix.arch }}.zip
@@ -59,9 +59,9 @@ jobs:
     runs-on: macos-15
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Download architecture archives
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: app-*
           path: ${{ runner.temp }}/architecture-archives
@@ -73,7 +73,7 @@ jobs:
             "${{ runner.temp }}/architecture-archives/HeadsetControl-MacOSTray-x86_64.zip" \
             "${{ runner.temp }}/HeadsetControl-MacOSTray.zip"
       - name: Upload universal archive
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: HeadsetControl-MacOSTray-universal
           path: ${{ runner.temp }}/HeadsetControl-MacOSTray.zip
