@@ -66,9 +66,14 @@ nonisolated enum NotificationFailure: Error, Equatable, Sendable {
 }
 
 @MainActor final class LowBatteryNotifications {
+    private enum PendingAttempt: Equatable {
+        case authorizing(UUID)
+        case submitting(UUID)
+    }
+
     private struct Entry {
         var submitted = false
-        var pending: UUID?
+        var pending: PendingAttempt?
     }
 
     private let delivery: LowBatteryNotificationDelivering
@@ -84,8 +89,9 @@ nonisolated enum NotificationFailure: Error, Equatable, Sendable {
     func update(devices: [HeadsetDevice], enabled: Bool, threshold: Int, testProfile: Int) {
         guard !stopped else { return }
         // Discovery can temporarily omit a headset while its receiver keeps the
-        // same attachment ID. Absence cancels pending work below, but must not
-        // erase submitted suppression. A new attachment has its own target.
+        // same attachment ID. Absence cancels authorization below, but must not
+        // erase a started submission or its suppression. A new attachment has
+        // its own target.
         // Preserve the existing rearming rule: an explicitly available reading
         // above the threshold. Unknown/error/charging readings do not rearm.
         for device in devices {
@@ -102,27 +108,26 @@ nonisolated enum NotificationFailure: Error, Equatable, Sendable {
            battery.status == .available, let level = battery.percentage, level <= threshold {
             eligible = LowBatteryNotice(target: target, level: level)
         }
-        for target in Array(entries.keys) where target != eligible?.target {
-            entries[target]?.pending = nil
-        }
+        cancelAuthorizations(except: eligible?.target)
         guard let notice = eligible else { return }
         var entry = entries[notice.target] ?? Entry()
         guard !entry.submitted, entry.pending == nil else { return }
         let attempt = UUID()
-        entry.pending = attempt
+        entry.pending = .authorizing(attempt)
         entries[notice.target] = entry
         delivery.authorize { [weak self] result in
-            guard let self, self.isCurrent(notice, attempt: attempt), let currentNotice = self.eligible else { return }
+            guard let self, self.isAuthorizing(notice, attempt: attempt), let currentNotice = self.eligible else { return }
             // Keep the coalesced attempt, but use the latest eligible reading:
             // authorization may span several refreshes for the same attachment.
             switch result {
-            case .failure(let error): self.finish(currentNotice, attempt: attempt, result: .failure(error))
-            case .success(false): self.finish(currentNotice, attempt: attempt, result: .failure(.denied))
+            case .failure(let error): self.finish(currentNotice, attempt: .authorizing(attempt), result: .failure(error))
+            case .success(false): self.finish(currentNotice, attempt: .authorizing(attempt), result: .failure(.denied))
             case .success(true):
                 // Preferences can change before their queued observer runs.
                 guard self.isStillAllowed?(currentNotice) != false else { self.suspend(); return }
+                self.entries[currentNotice.target]?.pending = .submitting(attempt)
                 self.delivery.submit(currentNotice) { [weak self] result in
-                    self?.finish(currentNotice, attempt: attempt, result: result)
+                    self?.finish(currentNotice, attempt: .submitting(attempt), result: result)
                 }
             }
         }
@@ -131,7 +136,7 @@ nonisolated enum NotificationFailure: Error, Equatable, Sendable {
     // Discovery failure or a mode switch is not proof that a headset recovered.
     func suspend() {
         eligible = nil
-        for target in Array(entries.keys) { entries[target]?.pending = nil }
+        cancelAuthorizations()
     }
 
     func stop() {
@@ -143,20 +148,29 @@ nonisolated enum NotificationFailure: Error, Equatable, Sendable {
         onSuccess = nil
     }
 
-    private func isCurrent(_ notice: LowBatteryNotice, attempt: UUID) -> Bool {
-        !stopped && eligible?.target == notice.target && entries[notice.target]?.pending == attempt
+    private func cancelAuthorizations(except eligibleTarget: HeadsetTarget? = nil) {
+        for target in Array(entries.keys) where target != eligibleTarget {
+            if case .authorizing = entries[target]?.pending { entries[target]?.pending = nil }
+        }
     }
 
-    private func finish(_ notice: LowBatteryNotice, attempt: UUID, result: Result<Void, NotificationFailure>) {
-        guard isCurrent(notice, attempt: attempt) else { return }
+    private func isAuthorizing(_ notice: LowBatteryNotice, attempt: UUID) -> Bool {
+        !stopped && eligible?.target == notice.target && entries[notice.target]?.pending == .authorizing(attempt)
+    }
+
+    private func finish(_ notice: LowBatteryNotice, attempt: PendingAttempt, result: Result<Void, NotificationFailure>) {
+        // Once submission starts, its outcome belongs to the attachment even if
+        // it is no longer eligible. Recovery removes the entry, so its old token
+        // cannot consume a newly rearmed opportunity. Stop discards all entries.
+        guard !stopped, entries[notice.target]?.pending == attempt else { return }
         entries[notice.target]?.pending = nil
         switch result {
         case .success:
             entries[notice.target]?.submitted = true
-            onSuccess?()
+            if eligible?.target == notice.target { onSuccess?() }
         case .failure(let error):
             // Keep the opportunity available for a subsequent refresh/retry.
-            onFailure?(error)
+            if eligible?.target == notice.target { onFailure?(error) }
         }
     }
 }

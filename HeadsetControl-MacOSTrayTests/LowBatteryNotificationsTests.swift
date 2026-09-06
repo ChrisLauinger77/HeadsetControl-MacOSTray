@@ -195,6 +195,113 @@ import XCTest
         XCTAssertEqual(delivery.submissions.map(\.target), [a, .test(profile: 7)])
     }
 
+    func testStartedSubmissionSurvivesTemporaryLossOfEligibility() async {
+        var failed = device(a, 10)
+        failed.battery = .failure(.init(operation: .battery, kind: .native(-4)))
+        let transitions: [(String, [HeadsetDevice]?, Bool, Int)] = [
+            ("reordered", [device(b, 80), device(a, 10)], true, 0),
+            ("absent", [], true, 0),
+            ("unavailable", [device(a, 0, status: .unavailable)], true, 0),
+            ("charging", [device(a, 80, status: .charging)], true, 0),
+            ("failed telemetry", [failed], true, 0),
+            ("ambiguous", [device(nil, 10)], true, 0),
+            ("disabled", [device(a, 10)], false, 0),
+            ("discovery failure", nil, true, 0),
+            ("test mode", [device(.test(profile: 7), 80)], true, 7)
+        ]
+        for (name, devices, enabled, profile) in transitions {
+            for completesBeforeReturn in [true, false] {
+                let delivery = RecordingNotificationDelivery()
+                let notifier = LowBatteryNotifications(delivery: delivery)
+                notifier.update(devices: [device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
+                delivery.authorizations[0](.success(true))
+                if let devices { notifier.update(devices: devices, enabled: enabled, threshold: 25, testProfile: profile) }
+                else { notifier.suspend() }
+
+                if completesBeforeReturn { delivery.completions[0](.success(())) }
+                notifier.update(devices: [device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
+                XCTAssertEqual(delivery.authorizations.count, 1, name)
+                if !completesBeforeReturn { delivery.completions[0](.success(())) }
+                notifier.update(devices: [device(a, 5)], enabled: true, threshold: 25, testProfile: 0)
+                XCTAssertEqual(delivery.authorizations.count, 1, name)
+                XCTAssertEqual(delivery.submissions.count, 1, name)
+            }
+        }
+    }
+
+    func testStartedSubmissionFailureWhileAbsentAllowsRetry() async throws {
+        let delivery = RecordingNotificationDelivery()
+        let notifier = LowBatteryNotifications(delivery: delivery)
+        var failures: [NotificationFailure] = []
+        notifier.onFailure = { failures.append($0) }
+        notifier.update(devices: [device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
+        delivery.authorizations[0](.success(true))
+        notifier.update(devices: [], enabled: true, threshold: 25, testProfile: 0)
+        delivery.completions[0](.failure(.system(domain: "Test", code: 1, description: "Rejected")))
+        XCTAssertTrue(failures.isEmpty) // No obsolete warning for an absent device.
+        notifier.update(devices: [device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
+        XCTAssertEqual(delivery.authorizations.count, 2)
+        let retry = try XCTUnwrap(delivery.authorizations.dropFirst().first)
+        retry(.success(true))
+        let completion = try XCTUnwrap(delivery.completions.dropFirst().first)
+        completion(.success(()))
+        notifier.update(devices: [device(a, 5)], enabled: true, threshold: 25, testProfile: 0)
+        XCTAssertEqual(delivery.authorizations.count, 2)
+    }
+
+    func testOldSubmissionAfterRecoveryCannotConsumeNewAttempt() async throws {
+        let delivery = RecordingNotificationDelivery()
+        let notifier = LowBatteryNotifications(delivery: delivery)
+        notifier.update(devices: [device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
+        delivery.authorizations[0](.success(true))
+        notifier.update(devices: [device(a, 50)], enabled: true, threshold: 25, testProfile: 0)
+        notifier.update(devices: [device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
+        let authorize = try XCTUnwrap(delivery.authorizations.dropFirst().first)
+        authorize(.success(true))
+        delivery.completions[0](.success(())) // Belongs to the recovered episode.
+        let completion = try XCTUnwrap(delivery.completions.dropFirst().first)
+        completion(.failure(.system(domain: "Test", code: 1, description: "Rejected")))
+        notifier.update(devices: [device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
+        XCTAssertEqual(delivery.authorizations.count, 3)
+    }
+
+    func testStartedSubmissionSuccessDoesNotClearAnotherDevicesFailure() async throws {
+        let delivery = RecordingNotificationDelivery()
+        let notifier = LowBatteryNotifications(delivery: delivery)
+        var successes = 0
+        var failures: [NotificationFailure] = []
+        notifier.onSuccess = { successes += 1 }
+        notifier.onFailure = { failures.append($0) }
+        notifier.update(devices: [device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
+        delivery.authorizations[0](.success(true))
+        notifier.update(devices: [device(b, 10), device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
+        let authorize = try XCTUnwrap(delivery.authorizations.dropFirst().first)
+        authorize(.success(false))
+        delivery.completions[0](.success(()))
+        XCTAssertEqual(failures, [.denied])
+        XCTAssertEqual(successes, 0)
+        notifier.update(devices: [device(a, 10), device(b, 10)], enabled: true, threshold: 25, testProfile: 0)
+        XCTAssertEqual(delivery.authorizations.count, 2)
+    }
+
+    func testStopIgnoresStartedSubmissionCompletions() async {
+        let results: [Result<Void, NotificationFailure>] = [.success(()), .failure(.denied)]
+        for result in results {
+            let delivery = RecordingNotificationDelivery()
+            let notifier = LowBatteryNotifications(delivery: delivery)
+            var callbacks = 0
+            notifier.onSuccess = { callbacks += 1 }
+            notifier.onFailure = { _ in callbacks += 1 }
+            notifier.update(devices: [device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
+            delivery.authorizations[0](.success(true))
+            notifier.stop()
+            delivery.completions[0](result)
+            notifier.update(devices: [device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
+            XCTAssertEqual(callbacks, 0)
+            XCTAssertEqual(delivery.authorizations.count, 1)
+        }
+    }
+
     private func device(_ target: HeadsetTarget?, _ level: Int, status: HeadsetBattery.Status = .available) -> HeadsetDevice {
         HeadsetDevice(usbID: .init(vendor: 1, product: 2), name: "Headset", vendor: "Vendor", product: "Product", capabilities: [],
                       battery: .success(.init(level: level, status: status)), target: target)
