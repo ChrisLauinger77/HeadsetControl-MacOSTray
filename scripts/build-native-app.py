@@ -33,6 +33,33 @@ def source(work, name, offline):
     return path
 
 
+def verify_test_runtime(work, prefix, compiler, arch, environment):
+    """Query versions/loaded image only; never enumerate or control hardware."""
+    probe = work / ("native-probe-" + arch)
+    code = probe.with_suffix(".c")
+    code.write_text('''#include <stdio.h>
+#include <dlfcn.h>
+#include <headsetcontrol/headsetcontrol_c.h>
+#include <hidapi/hidapi.h>
+int main(void) {
+    Dl_info image;
+    if (!dladdr((void *)hid_version_str, &image)) return 1;
+    printf("%s\\n%s\\n%s\\n", hsc_version(), hid_version_str(), image.dli_fname);
+    return 0;
+}
+''')
+    command(compiler, "-isysroot", run("xcrun", "--show-sdk-path"),
+            "-arch", arch, f"-mmacosx-version-min={CONTRACT['macos']}",
+            f"-I{prefix}/include", code, prefix / "lib/libheadsetcontrol.a",
+            f"-L{prefix}/lib", "-lhidapi", "-lc++", "-framework", "IOKit",
+            "-framework", "CoreFoundation", "-o", probe)
+    actual = run(probe, env=environment).splitlines()
+    if (len(actual) != 3 or actual[:2] != [CONTRACT["headsetcontrol"]["version"], CONTRACT["hidapi"]["version"]]
+            or Path(actual[2]).resolve() != (prefix / "lib/libhidapi.0.dylib").resolve()):
+        raise ValueError(f"Native test runtime differs from staged contract: {actual}")
+    print("Verified native API versions and staged HIDAPI runtime", flush=True)
+
+
 def build(args):
     work = Path(args.workspace).resolve()
     work.mkdir(parents=True, exist_ok=True)
@@ -80,8 +107,11 @@ def build(args):
         if platform.machine() != arch:
             raise ValueError("Run native integration tests on a runner of the requested architecture")
         environment = {**os.environ, "DYLD_LIBRARY_PATH": str(prefix / "lib")}
+        verify_test_runtime(work, prefix, compiler, arch, environment)
+        # Invoke the selected toolchain directly; system shims can strip DYLD_* variables.
+        swift = run("xcrun", "--find", "swift")
         for configuration in ("debug", "release"):
-            command("swift", "test", "--configuration", configuration,
+            command(swift, "test", "--configuration", configuration,
                     "--scratch-path", work / ("swift-" + arch),
                     "-Xcc", f"-I{prefix}/include",
                     "-Xlinker", prefix / "lib/libheadsetcontrol.a",

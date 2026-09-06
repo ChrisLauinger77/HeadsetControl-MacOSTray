@@ -1,13 +1,17 @@
 import copy
-import json
+import importlib.util
 from pathlib import Path
 import sys
 import unittest
+import tempfile
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import native_contract as native
 from test_release_artifact import PLIST, provenance_fixture
+spec = importlib.util.spec_from_file_location("native_builder", Path(native.__file__).with_name("build-native-app.py"))
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
 
 
 def commands(minimum="14.0", platform="1"):
@@ -111,6 +115,24 @@ class NativeContractTests(unittest.TestCase):
                 patch.object(native, "run", return_value="                 U _hsc_discover"):
             with self.assertRaisesRegex(ValueError, "not embedded"):
                 native.inspect("fixture", "arm64", "app")
+
+    def test_native_probe_checks_versions_and_loaded_runtime(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            prefix = work / "arm64"
+            loaded = prefix / "lib/libhidapi.0.dylib"
+            environment = {"DYLD_LIBRARY_PATH": str(prefix / "lib")}
+            valid = f"4.1.0\n0.15.0\n{loaded}"
+            with patch.object(builder, "command") as command, \
+                    patch.object(builder, "run", side_effect=["/fixture/SDK", valid]) as run:
+                builder.verify_test_runtime(work, prefix, "/fixture/clang", "arm64", environment)
+                self.assertIn("-mmacosx-version-min=14.0", command.call_args.args)
+                self.assertEqual(run.call_args.kwargs["env"], environment)
+            for wrong in (valid.replace("4.1.0", "4.2.0"), valid.replace("0.15.0", "0.14.0"),
+                          "4.1.0\n0.15.0\n/opt/homebrew/lib/libhidapi.0.dylib"):
+                with patch.object(builder, "command"), patch.object(builder, "run", side_effect=["/fixture/SDK", wrong]):
+                    with self.assertRaisesRegex(ValueError, "runtime differs"):
+                        builder.verify_test_runtime(work, prefix, "/fixture/clang", "arm64", environment)
 
     def test_workflows_share_build_contract(self):
         root = Path(__file__).resolve().parents[2]

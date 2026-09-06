@@ -113,7 +113,10 @@ It stages dependencies in the workspace without modifying Homebrew, runs **Debug
 and Release `swift test`**, builds the Release app, writes provenance, signs, and
 validates the architecture ZIP. Tests load the staged HIDAPI using
 `DYLD_LIBRARY_PATH`, so the pinned native profile checks do not silently exercise
-an unrelated installed HIDAPI. Existing deterministic and C-library profile tests
+an unrelated installed HIDAPI. A hardware-free probe checks both native API
+version strings and the actual loaded HIDAPI image path first. The helper invokes
+the selected Swift toolchain directly to avoid system shims stripping `DYLD_*`.
+Existing deterministic and C-library profile tests
 remain intact. Production applications keep their external Homebrew load paths.
 
 `--fetch-only` prepares sources; `--offline` requires already verified checkouts.
