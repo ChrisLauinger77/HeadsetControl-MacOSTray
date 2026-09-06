@@ -14,6 +14,13 @@ again inside the final ZIP. No deployment metadata is rewritten. Packaging still
 ad-hoc signs the app, and uses the existing `ditto` ZIP format. It validates the
 finished ZIP and extracted bundle, including signature and both architectures.
 
+Tag validation generates the release build number once in `YYMMDD.HHMM` format
+using the `Europe/Berlin` timezone. Both architecture jobs receive that exact
+value as `CURRENT_PROJECT_VERSION`; they never generate independent timestamps.
+An entire workflow rerun before publication may generate a different build number
+and therefore a different candidate, while retries that reuse the retained
+candidate keep its original build identity.
+
 The exact ZIP and its SHA-256 are retained as a `release-candidate-<attempt>`
 Actions artifact for seven days. Publication downloads that artifact by ID and
 checks its checksum before any upload and

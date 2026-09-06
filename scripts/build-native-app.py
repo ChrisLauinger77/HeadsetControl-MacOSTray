@@ -6,11 +6,22 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 
 from native_contract import CONTRACT, ROOT, PROVENANCE, PROVENANCE_SCHEMA, inspect, inspect_native, run, validate_provenance
 from dependency_channels import validate_contract, verify_release_tag
+
+
+BUILD_NUMBER = re.compile(r"[0-9]+(?:\.[0-9]+){0,2}")
+
+
+def build_number(value):
+    if not BUILD_NUMBER.fullmatch(value):
+        raise argparse.ArgumentTypeError(
+            "build number must contain one to three dot-separated numeric components")
+    return value
 
 
 def command(*args, **kwargs):
@@ -131,13 +142,19 @@ def build(args):
                     env=environment, cwd=ROOT)
 
     derived = work / ("app-" + arch)
+    xcode_settings = [
+        f"ARCHS={arch}",
+        f"MACOSX_DEPLOYMENT_TARGET={CONTRACT['macos']}",
+        f'HEADER_SEARCH_PATHS="{ROOT}/HeadsetControlCLib" "{prefix}/include"',
+        f'LIBRARY_SEARCH_PATHS="{prefix}/lib"',
+        f'OTHER_LDFLAGS="{prefix}/lib/libheadsetcontrol.a" "{prefix}/lib/libhidapi.a" -lc++ -framework IOKit -framework CoreFoundation',
+    ]
+    if args.build_number is not None:
+        xcode_settings.append(f"CURRENT_PROJECT_VERSION={args.build_number}")
     command("xcodebuild", "-scheme", "HeadsetControl-MacOSTray",
             "-project", ROOT / "HeadsetControl-MacOSTray.xcodeproj", "-configuration", "Release",
-            "-destination", "platform=macOS", "-derivedDataPath", derived, f"ARCHS={arch}",
-            f"MACOSX_DEPLOYMENT_TARGET={CONTRACT['macos']}",
-            f'HEADER_SEARCH_PATHS="{ROOT}/HeadsetControlCLib" "{prefix}/include"',
-            f'LIBRARY_SEARCH_PATHS="{prefix}/lib"',
-            f'OTHER_LDFLAGS="{prefix}/lib/libheadsetcontrol.a" "{prefix}/lib/libhidapi.a" -lc++ -framework IOKit -framework CoreFoundation', "build")
+            "-destination", "platform=macOS", "-derivedDataPath", derived,
+            *xcode_settings, "build")
     app = derived / "Build/Products/Release/HeadsetControl-MacOSTray.app"
     # Import the existing identity validator without triggering provenance validation while stamping.
     import plistlib
@@ -181,6 +198,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--arch", choices=("arm64", "x86_64"), required=True)
+    parser.add_argument("--build-number", type=build_number,
+                        help="Override CURRENT_PROJECT_VERSION without changing BuildNumber.xcconfig")
     parser.add_argument("--fetch-only", action="store_true")
     parser.add_argument("--offline", action="store_true")
     parser.add_argument("--skip-tests", action="store_true", help="Local cross-compilation only; CI runs tests on each architecture")

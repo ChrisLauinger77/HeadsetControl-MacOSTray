@@ -20,6 +20,8 @@ env:
 jobs:
   validate-tag:
     runs-on: ubuntu-latest
+    outputs:
+      build_number: ${{ steps.build-number.outputs.value }}
 
     steps:
       - name: Checkout repository
@@ -35,6 +37,12 @@ jobs:
 
       - name: Check tag matches application version
         run: python3 scripts/release-artifact.py project HeadsetControl-MacOSTray.xcodeproj/project.pbxproj --tag "$GITHUB_REF_NAME"
+
+      - name: Generate release build number
+        id: build-number
+        env:
+          TZ: Europe/Berlin
+        run: echo "value=$(date +'%y%m%d.%H%M')" >> "$GITHUB_OUTPUT"
 
   prepare-release:
     needs: validate-tag
@@ -60,7 +68,7 @@ jobs:
             core.setOutput('published', result.published);
 
   build:
-    needs: prepare-release
+    needs: [validate-tag, prepare-release]
     if: needs.prepare-release.outputs.published != 'true'
     strategy:
       fail-fast: false
@@ -84,7 +92,8 @@ jobs:
         run: |
           python3 -B scripts/build-native-app.py \
             --workspace "${{ runner.temp }}/native-contract" \
-            --arch "${{ matrix.arch }}"
+            --arch "${{ matrix.arch }}" \
+            --build-number "${{ needs.validate-tag.outputs.build_number }}"
 
       - name: Upload architecture archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
