@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "macos": "14.0",
+  "xcode": {"version": "26.3", "build": "17C529"},
+  "headsetcontrol": {
+    "repository": "https://github.com/Sapd/HeadsetControl.git",
+    "revision": "a6e15cc8bc701a9c4dab8ae4e33363f3040628e9",
+    "version": "4.1.0"
+  },
+  "hidapi": {
+    "repository": "https://github.com/libusb/hidapi.git",
+    "revision": "d6b2a974608dec3b76fb1e36c189f22b9cf3650c",
+    "version": "0.15.0",
+    "install_names": {
+      "arm64": "/opt/homebrew/opt/hidapi/lib/libhidapi.0.dylib",
+      "x86_64": "/usr/local/opt/hidapi/lib/libhidapi.0.dylib"
+    }
+  }
+}

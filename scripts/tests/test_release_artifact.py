@@ -7,10 +7,13 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 import warnings
 import zipfile
 
 SCRIPTS = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(SCRIPTS))
+from native_contract import CONTRACT, PROVENANCE, inspect
 spec = importlib.util.spec_from_file_location("release_artifact", SCRIPTS / "release-artifact.py")
 artifact = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(artifact)
@@ -22,8 +25,28 @@ PLIST = {
     "CFBundlePackageType": "APPL",
     "CFBundleShortVersionString": "3.1.0",
     "CFBundleVersion": "260906.1244",
-    "LSMinimumSystemVersion": "14.6",
+    "LSMinimumSystemVersion": "14.0",
 }
+
+
+def provenance_fixture(plist=None, arch="arm64", application=None):
+    # Synthetic provenance is for fixtures only; production metadata comes from the build helper.
+    hid = CONTRACT["hidapi"]["install_names"][arch]
+    return {
+        "schema": 1, "application_revision": "a" * 40,
+        **{key: CONTRACT[key] for key in ("headsetcontrol", "hidapi", "xcode", "macos")},
+        "swift": "fixture Swift", "clang": "fixture Clang", "sdk": "26.2",
+        "bundle": PLIST if plist is None else plist,
+        "slices": {arch: {
+            "application": application or {"uuid": "12345678-1234-1234-1234-123456789ABC",
+                "minimum_macos": "14.0", "dependencies": {hid: "0.15.0"}, "rpaths": []},
+            "native": {
+                "headsetcontrol": {"sha256": "b" * 64, "minimum_macos": "14.0"},
+                "hidapi": {"sha256": "c" * 64, "minimum_macos": "14.0", "install_name": hid,
+                           "version": "0.15.0", "dependencies": {}, "rpaths": []},
+            },
+        }},
+    }
 
 
 def zip_fixture(plist=None, root=artifact.APP_NAME):
@@ -31,11 +54,18 @@ def zip_fixture(plist=None, root=artifact.APP_NAME):
     with zipfile.ZipFile(data, "w") as archive:
         archive.writestr(f"{root}/Contents/Info.plist", plistlib.dumps(PLIST if plist is None else plist))
         archive.writestr(f"{root}/Contents/MacOS/{artifact.EXECUTABLE}", b"executable fixture")
+        archive.writestr(f"{root}/{PROVENANCE}", json.dumps(provenance_fixture(plist)))
     data.seek(0)
     return data
 
 
 class ArtifactTests(unittest.TestCase):
+    def setUp(self):
+        # Identity-only fixtures; real Mach-O inspection is exercised below.
+        self.inspection = patch.object(artifact, "validate_executable")
+        self.inspection.start()
+        self.addCleanup(self.inspection.stop)
+
     def test_project_version_gate(self):
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory) / "project.pbxproj"
@@ -84,21 +114,6 @@ class ArtifactTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 artifact.archive_identity(fixture)
 
-    def test_publication_uses_real_archive_validator(self):
-        with tempfile.TemporaryDirectory() as directory:
-            filename = Path(directory) / "HeadsetControl-MacOSTray.zip"
-            filename.write_bytes(zip_fixture().getvalue())
-            program = "const {validateArchive} = require(process.argv[1]); " \
-                      "const fs = require('node:fs'); " \
-                      "console.log(JSON.stringify(validateArchive(fs.readFileSync(process.argv[2]), process.argv[3])));"
-            command = ["node", "-e", program, str(SCRIPTS / "release.cjs"), str(filename)]
-            valid = subprocess.run([*command, "v3.1.0"], capture_output=True, text=True, check=True)
-            self.assertEqual(json.loads(valid.stdout), PLIST)
-            invalid = subprocess.run([*command, "v3.0.0"], capture_output=True, text=True)
-            self.assertNotEqual(invalid.returncode, 0)
-            self.assertIn("Tag/version mismatch", invalid.stderr)
-
-
 @unittest.skipUnless(sys.platform == "darwin", "ditto/lipo/codesign integration requires macOS")
 class MacPackagingTests(unittest.TestCase):
     @classmethod
@@ -107,14 +122,26 @@ class MacPackagingTests(unittest.TestCase):
         cls.addClassCleanup(cls.temporary.cleanup)
         cls.directory = Path(cls.temporary.name)
         source = cls.directory / "main.c"
-        source.write_text("int main(void) { return 0; }\n")
+        source.write_text("int hid_init(void); void hsc_discover(void) {}\n"
+                          "void hsc_free_headsets(void) {} void hsc_get_battery(void) {}\n"
+                          "int main(void) { return hid_init(); }\n")
+        hid_source = cls.directory / "hid.c"
+        hid_source.write_text("int hid_init(void) { return 0; }\n")
         cls.archives = []
         for arch in ("arm64", "x86_64"):
             app = cls.directory / arch / artifact.APP_NAME
             (app / "Contents/MacOS").mkdir(parents=True)
             (app / "Contents/Info.plist").write_bytes(plistlib.dumps(PLIST))
-            cls.run_command(["xcrun", "clang", "-arch", arch, str(source),
-                             "-o", str(app / "Contents/MacOS" / artifact.EXECUTABLE)])
+            hid = cls.directory / arch / "libhidapi.0.dylib"
+            cls.run_command(["xcrun", "clang", "-arch", arch, "-mmacosx-version-min=14.0",
+                             "-dynamiclib", str(hid_source), "-o", str(hid),
+                             "-install_name", CONTRACT["hidapi"]["install_names"][arch],
+                             "-current_version", "0.15.0", "-compatibility_version", "0.0.0"])
+            binary = app / "Contents/MacOS" / artifact.EXECUTABLE
+            cls.run_command(["xcrun", "clang", "-arch", arch, "-mmacosx-version-min=14.0",
+                             str(source), str(hid), "-o", str(binary)])
+            (app / "Contents/Resources").mkdir()
+            (app / PROVENANCE).write_text(json.dumps(provenance_fixture(arch=arch, application=inspect(binary, arch, "app"))))
             archive = cls.directory / f"{arch}.zip"
             cls.run_command(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(app), str(archive)])
             cls.archives.append(archive)
@@ -135,6 +162,52 @@ class MacPackagingTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(artifact.archive_identity(output, "v3.1.0"), PLIST)
 
+    def test_publication_uses_real_archive_validator(self):
+        result, filename = self.package("v3.1.0")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        program = "const {validateArchive} = require(process.argv[1]); " \
+                  "const fs = require('node:fs'); " \
+                  "console.log(JSON.stringify(validateArchive(fs.readFileSync(process.argv[2]), process.argv[3])));"
+        command = ["node", "-e", program, str(SCRIPTS / "release.cjs"), str(filename)]
+        # CI's real checkout revision must not be confused with this synthetic source fixture.
+        import os
+        environment = {key: value for key, value in os.environ.items() if key != "GITHUB_SHA"}
+        valid = subprocess.run([*command, "v3.1.0"], capture_output=True, text=True, check=True, env=environment)
+        self.assertEqual(json.loads(valid.stdout), PLIST)
+        invalid = subprocess.run([*command, "v3.0.0"], capture_output=True, text=True, env=environment)
+        self.assertNotEqual(invalid.returncode, 0)
+        self.assertIn("Tag/version mismatch", invalid.stderr)
+
+    def test_thin_archive_cannot_be_published(self):
+        with self.assertRaisesRegex(ValueError, "both universal"):
+            artifact.archive_identity(self.archives[0], universal=True)
+
+    def test_missing_provenance_cannot_be_packaged(self):
+        missing = self.directory / "missing-provenance.zip"
+        with zipfile.ZipFile(self.archives[1]) as source, zipfile.ZipFile(missing, "w") as destination:
+            for entry in source.infolist():
+                if not entry.filename.endswith(PROVENANCE):
+                    destination.writestr(entry, source.read(entry))
+        result, output = self.package(archives=[self.archives[0], missing])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("BuildProvenance.json", result.stderr)
+        self.assertFalse(output.exists())
+
+    def test_other_application_revision_cannot_be_combined(self):
+        mismatched = self.directory / "other-revision.zip"
+        with zipfile.ZipFile(self.archives[1]) as source, zipfile.ZipFile(mismatched, "w") as destination:
+            for entry in source.infolist():
+                data = source.read(entry)
+                if entry.filename.endswith(PROVENANCE):
+                    provenance = json.loads(data)
+                    provenance["application_revision"] = "d" * 40
+                    data = json.dumps(provenance).encode()
+                destination.writestr(entry, data)
+        result, output = self.package(archives=[self.archives[0], mismatched])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("application_revision", result.stderr)
+        self.assertFalse(output.exists())
+
     def test_ci_packaging_without_tag(self):
         result, output = self.package()
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -148,7 +221,16 @@ class MacPackagingTests(unittest.TestCase):
 
     def test_cross_architecture_mismatch_does_not_produce_output(self):
         mismatched = self.directory / "mismatched.zip"
-        mismatched.write_bytes(zip_fixture({**PLIST, "CFBundleVersion": "different-build"}).getvalue())
+        with zipfile.ZipFile(self.archives[1]) as source, zipfile.ZipFile(mismatched, "w") as destination:
+            for entry in source.infolist():
+                data = source.read(entry)
+                if entry.filename.endswith("Contents/Info.plist"):
+                    data = plistlib.dumps({**PLIST, "CFBundleVersion": "different-build"})
+                elif entry.filename.endswith(PROVENANCE):
+                    provenance = json.loads(data)
+                    provenance["bundle"]["CFBundleVersion"] = "different-build"
+                    data = json.dumps(provenance).encode()
+                destination.writestr(entry, data)
         result, output = self.package("v3.1.0", archives=[self.archives[0], mismatched])
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Bundle identity mismatch for CFBundleVersion", result.stderr)

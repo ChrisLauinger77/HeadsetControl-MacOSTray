@@ -8,7 +8,9 @@ only. Ambiguous releases and existing prereleases require maintainer inspection.
 
 Architecture archives must describe the same application identifier, executable,
 package type, marketing version, build number, and minimum system version. The
-minimum is compared, not changed. Packaging still combines the executables,
+minimum must match the [build contract](build-contract.md). Source/native/toolchain
+provenance must agree before combining slices; deployment and linkage are inspected
+again inside the final ZIP. No deployment metadata is rewritten. Packaging still combines the executables,
 ad-hoc signs the app, and uses the existing `ditto` ZIP format. It validates the
 finished ZIP and extracted bundle, including signature and both architectures.
 
@@ -42,8 +44,8 @@ There is no asset deletion or replacement operation in the publisher.
   without GitHub checksum metadata also require manual verification.
 
 Prefer retrying failed publication jobs with the retained candidate. Rebuilding
-a draft from scratch can produce different ZIP bytes because dependency/build
-inputs are not pinned. A resulting checksum conflict is intentional. Expired
+a draft from scratch can produce different ZIP bytes even with pinned native/toolchain inputs: ZIP timestamps, signing
+and other build outputs are not promised to be byte-identical. A resulting checksum conflict is intentional. Expired
 Actions artifacts require manual recovery; the publisher never silently accepts
 a replacement candidate. The concurrency lock coordinates this workflow, not
 manual edits or other publishers outside its concurrency group.
@@ -66,5 +68,7 @@ The macOS fixtures compile small arm64/x86_64 executables and exercise the actua
 credentials. Pure identity/API tests run without hardware or release writes.
 CI runs these checks for workflow-only changes as well as application changes.
 
-This pass does not pin dependencies/Xcode, alter deployment targets, audit native
-linkage, bundle libraries, change signing/notarization, or change the cask model.
+The build contract now pins native inputs and Xcode and validates deployment and
+linkage. Publication still never replaces assets. Older archives lacking required
+provenance are rejected for manual inspection, without mutation. Signing, archive
+format, external HIDAPI and Homebrew distribution policy remain unchanged.
