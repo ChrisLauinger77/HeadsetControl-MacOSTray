@@ -18,7 +18,13 @@ Core paths:
 
 The project can be opened through `HeadsetControl-MacOSTray.xcodeproj` or built as a Swift package via `Package.swift`.
 
-External dependency:
+The authoritative CI/release path is `scripts/build-native-app.py` with the exact
+inputs in `build-contract.json`; see `docs/build-contract.md`. It builds separate
+arm64/x86_64 static headsetcontrol and HIDAPI archives at macOS 14.0 and links them
+by explicit paths. The released app needs no Homebrew HIDAPI dylib at runtime.
+Keep the archive-member, final linkage, provenance and license-notice checks.
+
+For direct Xcode/SwiftPM development builds outside that release contract:
 
 - Install `headsetcontrol` before building, usually with:
   ```sh
@@ -36,7 +42,10 @@ swift test
 xcodebuild -scheme HeadsetControl-MacOSTray -project HeadsetControl-MacOSTray.xcodeproj build
 ```
 
-The app target links `-lheadsetcontrol`, `-lhidapi`, and `-lstdc++`. The app sandbox is disabled because headset/HID access is required.
+The direct Xcode target defaults to `-lheadsetcontrol`, `-lhidapi`, and `-lstdc++`;
+the shared build helper overrides those with explicit static archive paths and
+required system frameworks. Do not publish direct Homebrew development builds.
+The app sandbox is disabled because headset/HID access is required.
 
 ## Related Repositories And Release Coordination
 

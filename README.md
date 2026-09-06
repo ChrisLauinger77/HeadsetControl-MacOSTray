@@ -16,14 +16,14 @@ HeadsetControl-MacOSTray is a macOS background application that uses the [headse
 
 ## Installation
 
-1. Install [headsetcontrol](https://github.com/Sapd/HeadsetControl) via [Homebrew](https://brew.sh/). This preserves the supported Homebrew installation model and installs the external HIDAPI runtime dependency:
+1. Install [headsetcontrol](https://github.com/Sapd/HeadsetControl) via [Homebrew](https://brew.sh/). This preserves the supported Cask installation model and provides the standalone CLI:
    ```sh
    brew tap sapd/headsetcontrol
    brew trust --formula sapd/headsetcontrol/headsetcontrol
    brew install sapd/headsetcontrol/headsetcontrol
    ```
 
-The released app embeds a pinned headsetcontrol version. Installing a newer formula does not change its embedded headset support.
+The app built from current source statically embeds pinned headsetcontrol and HIDAPI versions. The Cask still depends on the headsetcontrol formula, which installs HIDAPI for the CLI; neither formula supplies this app's native runtime. Installing a newer formula does not change its embedded headset support.
 
 2. Install headsetcontrol-macostray via [Homebrew](https://brew.sh/)
    ```sh
@@ -31,8 +31,7 @@ The released app embeds a pinned headsetcontrol version. Installing a newer form
    brew trust --cask chrislauinger77/cask/headsetcontrol-macostray
    brew install --cask chrislauinger77/cask/headsetcontrol-macostray
    ```
-3. Restart the app after updating HIDAPI so macOS loads the updated runtime library.
-4. Follow the first-launch instructions below if macOS blocks the app.
+3. Follow the first-launch instructions below if macOS blocks the app.
 
 ## macOS Security Notice
 
@@ -56,9 +55,9 @@ xattr -dr com.apple.quarantine "/Applications/HeadsetControl-MacOSTray.app"
    ```sh
    brew upgrade
    ```
-The app statically embeds headsetcontrol. New headset support and headsetcontrol fixes reach users through a new app release built with an updated pinned revision. Reinstalling or updating the headsetcontrol formula does **not** add support to an already-built app.
+The app statically embeds headsetcontrol and HIDAPI. New headset support and fixes to either library reach users through a new app release built with updated pinned revisions. Reinstalling or updating the formulas does **not** change an already-built app.
 
-HIDAPI remains a dynamically loaded Homebrew dependency and can be updated independently with `brew upgrade hidapi`; restart the app afterward. Keep the standard Homebrew installation prefix (`/opt/homebrew` on Apple Silicon, `/usr/local` on Intel). The app expects HIDAPI's `libhidapi.0.dylib` ABI. See [the build contract](docs/build-contract.md) for exact build inputs and compatibility validation.
+Builds from current source no longer load a Homebrew HIDAPI dylib on either architecture. Older releases retain their original runtime requirements. See [the build contract](docs/build-contract.md) for exact build inputs and compatibility validation. The application bundle includes HIDAPI's [BSD-style redistribution notice](HeadsetControl-MacOSTray/HIDAPI-LICENSE.txt).
 
 ## Screenshots
 
@@ -125,7 +124,7 @@ If you like my work, please consider supporting me ! <br><br>
 
 ## Troubleshooting
 
-- **No headset data appears:** Check that your headset is supported by the headsetcontrol version embedded in this app release. Updating the app may be necessary. Check HIDAPI installation if the app cannot launch.
+- **No headset data appears:** Check that your headset is supported by the headsetcontrol version embedded in this app release. Updating the app may be necessary.
 - **Build fails with `headsetcontrol_c.h not found`:** Install headsetcontrol through Homebrew and make sure the headers are available in `/opt/homebrew/include` or `/usr/local/include`.
 
 ## License

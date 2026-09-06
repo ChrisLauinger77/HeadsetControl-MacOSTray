@@ -21,7 +21,7 @@ neither local tests nor the macOS 15 CI runners execute on the oldest supported 
 | UserNotifications | Async authorization/settings APIs predate Sonoma; notification submission and presentation options used here have no 14.6 requirement. Authorization behavior still needs a real user session. |
 | IOKit | Registry matching notifications and `kIOMainPortDefault` (macOS 12+) fit the floor. No second HID control owner was added. |
 | headsetcontrol 4.1.0 | The exact source below uses C++20, including `std::format` and `source_location`. It needs a modern Apple Clang/libc++ toolchain; no 14.6-only use was found. Every compiled static archive object is checked for a macOS deployment command at or below 14.0. |
-| HIDAPI 0.15.0 | The macOS implementation uses IOKit/CoreFoundation and pthreads, including older-OS handling around device properties. Both architecture dylibs build at 14.0 and link only expected system libraries. |
+| HIDAPI 0.15.0 | The macOS implementation uses IOKit/CoreFoundation and pthreads, including older-OS handling around device properties. Separate static archives build at 14.0 for both architectures. Every archive object is checked against that floor. |
 
 Before editing the project targets, both native libraries and both full Release
 applications were built with compiler deployment target 14.0 using the installed
@@ -51,38 +51,48 @@ by the environment; it does not resolve native source versions. This contract
 promises identifiable, repeatable native inputs, not bit-for-bit reproducibility
 of ZIPs, signatures or the entire runner image.
 
-headsetcontrol is linked by an explicit path to `libheadsetcontrol.a`, so an
-installed dylib cannot silently take precedence. Defined C API symbols are
-required in each final executable slice. Its device implementations are embedded:
-updating a user's headsetcontrol formula cannot change an existing application.
-Updating headset support requires changing the manifest, reviewing/updating the
-native profile expectations, and rebuilding/releasing the app.
+headsetcontrol and HIDAPI are linked by explicit paths to `libheadsetcontrol.a`
+and `libhidapi.a`, so installed dylibs cannot silently take precedence. HIDAPI
+uses upstream `BUILD_SHARED_LIBS=OFF`, separately for arm64 and x86_64.
+headsetcontrol receives that architecture's archive through `HIDAPI_LIBRARY`.
+Its static archive retains HIDAPI references; the final app and Swift tests link
+the two archives once, alongside libc++, IOKit and CoreFoundation. Neither source
+dependency is patched and no install-name rewriting is needed.
 
-HIDAPI is **not bundled**. The staged build dylib has the existing Homebrew runtime
-install name established by CMake during compilation:
+Each executable slice must define the required headsetcontrol/HIDAPI API symbols
+exactly once and have no unresolved HIDAPI symbols. Every member of both static
+archives must be inspectable, match its architecture, and declare a deployment
+target at or below 14.0. No embedded dylibs or frameworks are packaged. The final
+executable may load only the enumerated Apple frameworks, system libraries and
+Swift runtime overlays. All Homebrew paths, HIDAPI dylib load commands, temporary
+build paths and unexpected runpaths are rejected.
 
-- arm64: `/opt/homebrew/opt/hidapi/lib/libhidapi.0.dylib`
-- x86_64: `/usr/local/opt/hidapi/lib/libhidapi.0.dylib`
+The app is self-contained with respect to both native dependencies. Updating a
+user's Homebrew formulas cannot change its HID implementation or headset support.
+Fixes to either library require changing the manifest, reviewing the source and
+native profile expectations, and rebuilding/releasing the app. The existing Cask
+still depends on the headsetcontrol formula, whose HIDAPI dependency serves the
+standalone CLI. Removing that Cask dependency is a separate distribution decision;
+the automated cask update flow is unchanged.
 
-These are deliberate architecture-specific runtime paths. Cellar version paths,
-the opposite architecture's prefix, temporary build paths, unapproved dylibs and
-unexpected runpaths are rejected. Apple frameworks, system libc++/libSystem and
-the enumerated Swift runtime overlays are allowed. The installed HIDAPI must
-provide the compatible `.0` ABI and support the running OS; its runtime bytes can
-differ from the pinned link/test input after an independent Homebrew update.
-The formula currently provides Sonoma bottles for both architectures
-([formula metadata](https://formulae.brew.sh/api/formula/hidapi.json)). A future
-Homebrew ABI or compatibility change requires revalidation. The app does not
-promise arbitrary Homebrew prefixes or a self-contained runtime.
+HIDAPI is redistributed under its BSD-style license. Its full notice is copied
+into `Contents/Resources/HIDAPI-LICENSE.txt`; packaging verifies it against the
+repository copy. Preserve the upstream copyright/license notices when updating
+the pinned version. The application and headsetcontrol retain their GPLv3 terms;
+release source availability must include the corresponding native sources and
+build scripts identified by this manifest.
 
 ## Provenance and packaging gates
 
 `Contents/Resources/BuildProvenance.json` records the application commit,
 headsetcontrol and HIDAPI revisions/versions, Xcode version/build, Swift and Clang
 version strings, SDK, deployment floor, bundle identity, architecture, native
-archive/dylib SHA-256 values, inspected native deployment/linkage, and each
+static archive SHA-256 values, object counts, inspected native deployment, and each
 application slice's UUID/deployment/load commands. Release builds require clean
 application and dependency checkouts. The helper verifies fetched Git revisions.
+Schema 2 explicitly records static HIDAPI linkage; old dynamic-HIDAPI provenance
+cannot pass the new packaging gate. Published archives are never migrated or
+replaced automatically.
 
 Before `lipo`, packaging validates both thin inputs and compares all common
 provenance, including the source revision and bundle/build versions. It combines
@@ -111,13 +121,12 @@ python3 -B scripts/build-native-app.py --workspace /tmp/headset-build --arch arm
 Use `--arch x86_64` on an Intel runner. The same helper is called by CI and release.
 It stages dependencies in the workspace without modifying Homebrew, runs **Debug
 and Release `swift test`**, builds the Release app, writes provenance, signs, and
-validates the architecture ZIP. Tests load the staged HIDAPI using
-`DYLD_LIBRARY_PATH`, so the pinned native profile checks do not silently exercise
-an unrelated installed HIDAPI. A hardware-free probe checks both native API
-version strings and the actual loaded HIDAPI image path first. The helper invokes
-the selected Swift toolchain directly to avoid system shims stripping `DYLD_*`.
-Existing deterministic and C-library profile tests
-remain intact. Production applications keep their external Homebrew load paths.
+validates the architecture ZIP. Tests link the same explicit native archives as
+the application, with inherited `DYLD_*` variables removed. A hardware-free probe
+checks both native API version strings, verifies that HIDAPI resolves to the
+probe executable itself, and rejects any loaded HIDAPI dylib. The helper invokes
+the selected Swift toolchain directly. Existing deterministic and C-library
+profile tests remain intact.
 
 `--fetch-only` prepares sources; `--offline` requires already verified checkouts.
 For local cross-compilation, `--skip-tests` skips execution on the wrong CPU.
@@ -132,21 +141,25 @@ bash scripts/create-universal-app.sh arm64.zip x86_64.zip HeadsetControl-MacOSTr
 ```
 
 Fixtures cover conflicting revisions/versions/toolchains, missing provenance,
-too-new native deployment targets, unapproved/wrong-architecture load paths,
-missing static symbols, final slice mismatch, real universal assembly/signing and
-ZIP validation. Synthetic fixture metadata is never a production build input.
+missing/wrong-architecture static archives, a too-new deployment target in any
+archive member, uninspectable members, forbidden Homebrew/dylib load paths,
+missing/duplicate/unresolved static symbols, final slice mismatch, missing or
+changed license notices, real universal assembly/signing and ZIP validation.
+Synthetic fixture metadata is never a production build input.
 Workflow-only changes run these tests and the complete native/application build.
 
 ## Runtime validation still required
 
-On macOS **14.0**, test both Apple Silicon and Intel with the supported Homebrew
-HIDAPI installed: launch the extracted universal app, open settings/menu, exercise
+On macOS **14.0**, test both Apple Silicon and Intel without Homebrew HIDAPI
+available to the app: launch the extracted universal app, open settings/menu, exercise
 notifications and permission states, then connect/control/remove/reconnect real
 headsets and test sleep/wake/session resume. Repeat on a current stable macOS.
-Test HIDAPI upgrades and missing/incompatible runtime libraries separately.
+Also verify launch on a machine with Homebrew installed and inspect loaded images
+to confirm no installed HIDAPI is loaded. Do not remove libraries needed by a
+user's other applications merely to perform this test; use a clean test machine.
 Static compatibility checks and hardware-free native profiles cannot establish
 those runtime behaviors.
 
 This pass does not change notarization, Developer ID, hardened runtime, the ZIP
-format, Intel support, cask dependency strategy or runtime controllers. Bundling
-HIDAPI or changing installation policy remains an explicit distribution decision.
+format, Intel support, cask dependency strategy or runtime controllers. Changing
+the Cask installation policy remains an explicit distribution decision.

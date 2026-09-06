@@ -13,7 +13,7 @@ import zipfile
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
-from native_contract import CONTRACT, PROVENANCE, inspect
+from native_contract import CONTRACT, PROVENANCE, PROVENANCE_SCHEMA, HIDAPI_LICENSE, ROOT, inspect
 spec = importlib.util.spec_from_file_location("release_artifact", SCRIPTS / "release-artifact.py")
 artifact = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(artifact)
@@ -31,19 +31,18 @@ PLIST = {
 
 def provenance_fixture(plist=None, arch="arm64", application=None):
     # Synthetic provenance is for fixtures only; production metadata comes from the build helper.
-    hid = CONTRACT["hidapi"]["install_names"][arch]
     return {
-        "schema": 1, "application_revision": "a" * 40,
+        "schema": PROVENANCE_SCHEMA, "application_revision": "a" * 40,
         **{key: CONTRACT[key] for key in ("headsetcontrol", "hidapi", "xcode", "macos")},
         "swift": "fixture Swift", "clang": "fixture Clang", "sdk": "26.2",
         "bundle": PLIST if plist is None else plist,
         "slices": {arch: {
             "application": application or {"uuid": "12345678-1234-1234-1234-123456789ABC",
-                "minimum_macos": "14.0", "dependencies": {hid: "0.15.0"}, "rpaths": []},
+                "minimum_macos": "14.0", "dependencies": {"/usr/lib/libSystem.B.dylib": "1351.0.0"}, "rpaths": []},
             "native": {
-                "headsetcontrol": {"sha256": "b" * 64, "minimum_macos": "14.0"},
-                "hidapi": {"sha256": "c" * 64, "minimum_macos": "14.0", "install_name": hid,
-                           "version": "0.15.0", "dependencies": {}, "rpaths": []},
+                name: {"sha256": checksum * 64, "minimum_macos": "14.0", "kind": "static-archive",
+                       "architecture": arch, "object_count": 1}
+                for name, checksum in (("headsetcontrol", "b"), ("hidapi", "c"))
             },
         }},
     }
@@ -55,6 +54,7 @@ def zip_fixture(plist=None, root=artifact.APP_NAME):
         archive.writestr(f"{root}/Contents/Info.plist", plistlib.dumps(PLIST if plist is None else plist))
         archive.writestr(f"{root}/Contents/MacOS/{artifact.EXECUTABLE}", b"executable fixture")
         archive.writestr(f"{root}/{PROVENANCE}", json.dumps(provenance_fixture(plist)))
+        archive.writestr(f"{root}/{HIDAPI_LICENSE}", (ROOT / "HeadsetControl-MacOSTray/HIDAPI-LICENSE.txt").read_bytes())
     data.seek(0)
     return data
 
@@ -114,6 +114,16 @@ class ArtifactTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 artifact.archive_identity(fixture)
 
+    def test_bundled_dylib_and_changed_license_are_rejected(self):
+        fixture = zip_fixture()
+        with zipfile.ZipFile(fixture, "a") as archive:
+            archive.writestr(f"{artifact.APP_NAME}/Contents/Frameworks/libhidapi.0.dylib", b"unexpected")
+        fixture.seek(0)
+        with self.assertRaisesRegex(ValueError, "bundled runtime"):
+            artifact.archive_identity(fixture)
+        with self.assertRaisesRegex(ValueError, "redistribution notice"):
+            artifact.validate_hidapi_license(b"incomplete")
+
 @unittest.skipUnless(sys.platform == "darwin", "ditto/lipo/codesign integration requires macOS")
 class MacPackagingTests(unittest.TestCase):
     @classmethod
@@ -126,21 +136,24 @@ class MacPackagingTests(unittest.TestCase):
                           "void hsc_free_headsets(void) {} void hsc_get_battery(void) {}\n"
                           "int main(void) { return hid_init(); }\n")
         hid_source = cls.directory / "hid.c"
-        hid_source.write_text("int hid_init(void) { return 0; }\n")
+        hid_source.write_text("int hid_init(void) { return 0; }\n"
+                              "void hid_exit(void) {} void hid_enumerate(void) {}\n"
+                              "void hid_open_path(void) {} void hid_close(void) {}\n")
         cls.archives = []
         for arch in ("arm64", "x86_64"):
             app = cls.directory / arch / artifact.APP_NAME
             (app / "Contents/MacOS").mkdir(parents=True)
             (app / "Contents/Info.plist").write_bytes(plistlib.dumps(PLIST))
-            hid = cls.directory / arch / "libhidapi.0.dylib"
+            hid_object = cls.directory / arch / "hid.o"
+            hid = cls.directory / arch / "libhidapi.a"
             cls.run_command(["xcrun", "clang", "-arch", arch, "-mmacosx-version-min=14.0",
-                             "-dynamiclib", str(hid_source), "-o", str(hid),
-                             "-install_name", CONTRACT["hidapi"]["install_names"][arch],
-                             "-current_version", "0.15.0", "-compatibility_version", "0.0.0"])
+                             "-c", str(hid_source), "-o", str(hid_object)])
+            cls.run_command(["xcrun", "ar", "rcs", str(hid), str(hid_object)])
             binary = app / "Contents/MacOS" / artifact.EXECUTABLE
             cls.run_command(["xcrun", "clang", "-arch", arch, "-mmacosx-version-min=14.0",
                              str(source), str(hid), "-o", str(binary)])
             (app / "Contents/Resources").mkdir()
+            (app / HIDAPI_LICENSE).write_bytes((ROOT / "HeadsetControl-MacOSTray/HIDAPI-LICENSE.txt").read_bytes())
             (app / PROVENANCE).write_text(json.dumps(provenance_fixture(arch=arch, application=inspect(binary, arch, "app"))))
             archive = cls.directory / f"{arch}.zip"
             cls.run_command(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(app), str(archive)])

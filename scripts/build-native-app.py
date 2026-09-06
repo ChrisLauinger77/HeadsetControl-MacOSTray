@@ -9,7 +9,7 @@ import platform
 import shutil
 import subprocess
 
-from native_contract import CONTRACT, ROOT, PROVENANCE, inspect, inspect_native, run, validate_provenance
+from native_contract import CONTRACT, ROOT, PROVENANCE, PROVENANCE_SCHEMA, inspect, inspect_native, run, validate_provenance
 
 
 def command(*args, **kwargs):
@@ -39,11 +39,19 @@ def verify_test_runtime(work, prefix, compiler, arch, environment):
     code = probe.with_suffix(".c")
     code.write_text('''#include <stdio.h>
 #include <dlfcn.h>
+#include <mach-o/dyld.h>
+#include <string.h>
 #include <headsetcontrol/headsetcontrol_c.h>
 #include <hidapi/hidapi.h>
 int main(void) {
     Dl_info image;
     if (!dladdr((void *)hid_version_str, &image)) return 1;
+    for (uint32_t i = 0; i < _dyld_image_count(); ++i) {
+        const char *path = _dyld_get_image_name(i);
+        const char *name = strrchr(path, '/');
+        name = name ? name + 1 : path;
+        if (strncmp(name, "libhidapi", 9) == 0 && strstr(name, ".dylib")) return 1;
+    }
     printf("%s\\n%s\\n%s\\n", hsc_version(), hid_version_str(), image.dli_fname);
     return 0;
 }
@@ -51,13 +59,13 @@ int main(void) {
     command(compiler, "-isysroot", run("xcrun", "--show-sdk-path"),
             "-arch", arch, f"-mmacosx-version-min={CONTRACT['macos']}",
             f"-I{prefix}/include", code, prefix / "lib/libheadsetcontrol.a",
-            f"-L{prefix}/lib", "-lhidapi", "-lc++", "-framework", "IOKit",
+            prefix / "lib/libhidapi.a", "-lc++", "-framework", "IOKit",
             "-framework", "CoreFoundation", "-o", probe)
     actual = run(probe, env=environment).splitlines()
     if (len(actual) != 3 or actual[:2] != [CONTRACT["headsetcontrol"]["version"], CONTRACT["hidapi"]["version"]]
-            or Path(actual[2]).resolve() != (prefix / "lib/libhidapi.0.dylib").resolve()):
+            or Path(actual[2]).resolve() != probe.resolve()):
         raise ValueError(f"Native test runtime differs from staged contract: {actual}")
-    print("Verified native API versions and staged HIDAPI runtime", flush=True)
+    print("Verified native API versions and statically embedded HIDAPI", flush=True)
 
 
 def build(args):
@@ -86,15 +94,13 @@ def build(args):
               f"-DCMAKE_C_COMPILER={compiler}", "-DCMAKE_C_FLAGS=-Werror=unguarded-availability-new"]
     hid_build = work / ("hid-" + arch)
     command("cmake", "-S", hid_source, "-B", hid_build, *common,
-            f"-DCMAKE_INSTALL_PREFIX={prefix}", "-DBUILD_SHARED_LIBS=ON",
-            f"-DCMAKE_INSTALL_NAME_DIR={Path(CONTRACT['hidapi']['install_names'][arch]).parent}",
-            "-DCMAKE_BUILD_WITH_INSTALL_NAME_DIR=ON")
+            f"-DCMAKE_INSTALL_PREFIX={prefix}", "-DBUILD_SHARED_LIBS=OFF", "-DHIDAPI_BUILD_HIDTEST=OFF")
     command("cmake", "--build", hid_build, "--parallel", "4")
     command("cmake", "--install", hid_build)
     hsc_build = work / ("hsc-" + arch)
     command("cmake", "-S", hsc_source, "-B", hsc_build, *common,
             f"-DCMAKE_CXX_COMPILER={cxx}", "-DCMAKE_CXX_FLAGS=-Werror=unguarded-availability-new",
-            f"-DHIDAPI_LIBRARY={prefix}/lib/libhidapi.dylib",
+            f"-DHIDAPI_LIBRARY={prefix}/lib/libhidapi.a",
             f"-DHIDAPI_INCLUDE_DIR={prefix}/include/hidapi", "-DBUILD_SHARED_LIBRARY=OFF",
             f"-DHEADSETCONTROL_VERSION={CONTRACT['headsetcontrol']['version']}")
     command("cmake", "--build", hsc_build, "--target", "headsetcontrol_lib", "--parallel", "4")
@@ -106,16 +112,18 @@ def build(args):
     if not args.skip_tests:
         if platform.machine() != arch:
             raise ValueError("Run native integration tests on a runner of the requested architecture")
-        environment = {**os.environ, "DYLD_LIBRARY_PATH": str(prefix / "lib")}
+        environment = {key: value for key, value in os.environ.items() if not key.startswith("DYLD_")}
         verify_test_runtime(work, prefix, compiler, arch, environment)
-        # Invoke the selected toolchain directly; system shims can strip DYLD_* variables.
+        # Use the selected toolchain and the same explicit native archives as the app.
         swift = run("xcrun", "--find", "swift")
         for configuration in ("debug", "release"):
             command(swift, "test", "--configuration", configuration,
                     "--scratch-path", work / ("swift-" + arch),
                     "-Xcc", f"-I{prefix}/include",
                     "-Xlinker", prefix / "lib/libheadsetcontrol.a",
-                    "-Xlinker", f"-L{prefix}/lib", "-Xlinker", "-lhidapi", "-Xlinker", "-lc++",
+                    "-Xlinker", prefix / "lib/libhidapi.a", "-Xlinker", "-lc++",
+                    "-Xlinker", "-framework", "-Xlinker", "IOKit",
+                    "-Xlinker", "-framework", "-Xlinker", "CoreFoundation",
                     env=environment, cwd=ROOT)
 
     derived = work / ("app-" + arch)
@@ -125,7 +133,7 @@ def build(args):
             f"MACOSX_DEPLOYMENT_TARGET={CONTRACT['macos']}",
             f'HEADER_SEARCH_PATHS="{ROOT}/HeadsetControlCLib" "{prefix}/include"',
             f'LIBRARY_SEARCH_PATHS="{prefix}/lib"',
-            f'OTHER_LDFLAGS="{prefix}/lib/libheadsetcontrol.a" -lhidapi -lc++', "build")
+            f'OTHER_LDFLAGS="{prefix}/lib/libheadsetcontrol.a" "{prefix}/lib/libhidapi.a" -lc++ -framework IOKit -framework CoreFoundation', "build")
     app = derived / "Build/Products/Release/HeadsetControl-MacOSTray.app"
     # Import the existing identity validator without triggering provenance validation while stamping.
     import plistlib
@@ -134,7 +142,7 @@ def build(args):
     keys = ("CFBundleIdentifier", "CFBundleExecutable", "CFBundlePackageType",
             "CFBundleShortVersionString", "CFBundleVersion", "LSMinimumSystemVersion")
     provenance = {
-        "schema": 1, "application_revision": revision,
+        "schema": PROVENANCE_SCHEMA, "application_revision": revision,
         **{key: CONTRACT[key] for key in ("headsetcontrol", "hidapi", "macos")},
         "xcode": xcode, "swift": run("xcrun", "swift", "--version").splitlines()[0],
         "clang": run("xcrun", "clang", "--version").splitlines()[0], "sdk": run("xcrun", "--show-sdk-version"),

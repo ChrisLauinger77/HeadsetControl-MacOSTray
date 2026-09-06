@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path, PurePosixPath
 import zipfile
 
-from native_contract import ARCHES, PROVENANCE, compare_provenance, validate_executable, validate_provenance
+from native_contract import ARCHES, ROOT, PROVENANCE, HIDAPI_LICENSE, compare_provenance, validate_executable, validate_provenance
 
 APP_NAME = "HeadsetControl-MacOSTray.app"
 EXECUTABLE = "HeadsetControl-MacOSTray"
@@ -19,6 +19,11 @@ IDENTITY_KEYS = (
     "CFBundleIdentifier", "CFBundleExecutable", "CFBundlePackageType",
     "CFBundleShortVersionString", "CFBundleVersion", "LSMinimumSystemVersion",
 )
+
+
+def validate_hidapi_license(contents):
+    if contents != (ROOT / "HeadsetControl-MacOSTray/HIDAPI-LICENSE.txt").read_bytes():
+        raise ValueError("Missing or changed HIDAPI redistribution notice")
 
 
 def identity(plist, tag=None):
@@ -50,6 +55,7 @@ def bundle_identity(path, tag=None, expected_revision=None):
         raise ValueError("Missing or indirect application executable")
     if list(app.rglob("*.dylib")) or list(app.rglob("*.framework")):
         raise ValueError("Unexpected bundled runtime dependency")
+    validate_hidapi_license((app / HIDAPI_LICENSE).read_bytes())
     provenance = validate_provenance(json.loads((app / PROVENANCE).read_text()), result, expected_revision)
     validate_executable(executable, provenance)
     return result
@@ -74,6 +80,7 @@ def archive_identity(path, tag=None, expected_revision=None, universal=False):
         if executable.file_size == 0 or (executable.external_attr >> 16) & 0o170000 == 0o120000:
             raise ValueError("Missing or indirect application executable")
         provenance = validate_provenance(json.loads(archive.read(f"{APP_NAME}/{PROVENANCE}")), result, expected_revision)
+        validate_hidapi_license(archive.read(f"{APP_NAME}/{HIDAPI_LICENSE}"))
         if universal and set(provenance["slices"]) != ARCHES:
             raise ValueError("Publication requires both universal architecture slices")
         # Inspect the executable from the final ZIP, without launching it or extracting arbitrary paths.
