@@ -1,0 +1,26 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "labels": ["dependencies"],
+  "assignees": ["ChrisLauinger77"],
+  "reviewers": ["ChrisLauinger77"],
+  "dependencyDashboard": true,
+  "prConcurrentLimit": 5,
+  "schedule": ["* * 1-7 * 6"],
+  "packageRules": [
+    {
+      "description": "Group non-major dependency updates",
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "Non-major dependencies"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "digest", "pinDigest"],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    }
+  ]
+}
