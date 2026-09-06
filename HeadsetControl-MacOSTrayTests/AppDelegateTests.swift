@@ -66,11 +66,14 @@ import XCTest
     }
 
     func testNoDevicesMenuStillProvidesSettingsAndQuitActions() async {
-        let appDelegate = AppDelegate()
-        appDelegate.latestDevices = []
+        let executor = ManualHeadsetExecutor()
+        let appDelegate = AppDelegate(headsetController: HeadsetController(provider: RecordingHeadsetProvider(), executor: executor))
+        appDelegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
         let menu = NSMenu()
 
-        appDelegate.menuNeedsUpdate(menu)
+        appDelegate.rebuildMenu(menu)
 
         XCTAssertEqual(menu.items.map { $0.title }, [
             localized("No devices found"),
@@ -93,7 +96,7 @@ import XCTest
         ]]
         let menu = NSMenu()
 
-        appDelegate.menuNeedsUpdate(menu)
+        appDelegate.rebuildMenu(menu)
 
         let inactiveTimeItem = try XCTUnwrap(menu.items.first { $0.title == localized("Inactive Time") })
         let submenu = try XCTUnwrap(inactiveTimeItem.submenu)
@@ -118,7 +121,7 @@ import XCTest
         ]]
         let menu = NSMenu()
 
-        appDelegate.menuNeedsUpdate(menu)
+        appDelegate.rebuildMenu(menu)
 
         let equalizerItem = try XCTUnwrap(menu.items.first { $0.title == localized("Equalizer Preset") })
         let submenu = try XCTUnwrap(equalizerItem.submenu)
@@ -137,7 +140,7 @@ import XCTest
         ]]
         let menu = NSMenu()
 
-        appDelegate.menuNeedsUpdate(menu)
+        appDelegate.rebuildMenu(menu)
 
         let hoursText = String(format: localized("%dh"), 1)
         XCTAssertTrue(menu.items.contains { $0.title == "\(localized("Battery")): 44% (\(hoursText))" })
@@ -184,7 +187,7 @@ import XCTest
         let b = HeadsetTarget.physical(HeadsetUSBID(vendor: 3, product: 4), attachmentID: 22)
         delegate.latestDevices = [menuDevice(target: a), menuDevice(target: b)]
         let menu = NSMenu()
-        delegate.menuNeedsUpdate(menu)
+        delegate.rebuildMenu(menu)
         let titles = ["Sidetone", "Lights", "Inactive Time", "Voice Prompts", "Rotate to Mute", "Equalizer Preset"]
         let controls = try titles.map { title in
             try XCTUnwrap(menu.items.last { $0.title == localized(title) }?.submenu?.items.first)
@@ -208,14 +211,14 @@ import XCTest
         let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor))
         delegate.latestDevices = [menuDevice(target: nil)]
         let menu = NSMenu()
-        delegate.menuNeedsUpdate(menu)
+        delegate.rebuildMenu(menu)
         let unknown = try XCTUnwrap(menu.items.first { $0.title == localized("Lights") }?.submenu?.items.first)
         XCTAssertNil(unknown.action)
         delegate.setLights(unknown)
         XCTAssertTrue(executor.jobs.isEmpty)
 
         delegate.latestDevices = [menuDevice(target: .test(profile: 7))]
-        delegate.menuNeedsUpdate(menu)
+        delegate.rebuildMenu(menu)
         let testItem = try XCTUnwrap(menu.items.first { $0.title == localized("Lights") }?.submenu?.items.first)
         UserDefaults.standard.set(0, forKey: "testMode")
         delegate.setLights(testItem)
@@ -247,7 +250,7 @@ import XCTest
         XCTAssertTrue(executor.jobs.isEmpty)
         executor.finishStop()
         await withCheckedContinuation { continuation in
-            DispatchQueue.main.async { continuation.resume() }
+            HeadsetMainRunLoop.perform { continuation.resume() }
         }
         XCTAssertTrue(stopped)
         XCTAssertEqual(provider.shutdownCount, 1)
@@ -263,14 +266,14 @@ import XCTest
         executor.runNext()
         UserDefaults.standard.set(7, forKey: "testMode")
         await withCheckedContinuation { continuation in
-            DispatchQueue.main.async { continuation.resume() }
+            HeadsetMainRunLoop.perform { continuation.resume() }
         }
         XCTAssertEqual(delegate.latestDevices?.count, 0)
         XCTAssertEqual(executor.jobs.count, 1)
         provider.devices = [HeadsetDevice(usbID: .testDevice, name: "Fake", vendor: "Vendor", product: "Product", capabilities: [], target: .test(profile: 7))]
         executor.runNext()
         await withCheckedContinuation { continuation in
-            DispatchQueue.main.async { continuation.resume() }
+            HeadsetMainRunLoop.perform { continuation.resume() }
         }
         XCTAssertEqual(delegate.latestDevices?.first?["device"] as? String, "Fake")
         XCTAssertEqual(provider.profiles, [0, 7])
@@ -285,7 +288,7 @@ import XCTest
         executor.runNext()
         await drainResults()
         let menu = NSMenu()
-        delegate.menuNeedsUpdate(menu)
+        delegate.rebuildMenu(menu)
         XCTAssertEqual(delegate.refreshFailure, provider.fetchFailure)
         XCTAssertTrue(menu.items.contains { $0.title == localized("Retry refresh") })
         XCTAssertFalse(menu.items.contains { $0.title == localized("No devices found") })
@@ -293,7 +296,7 @@ import XCTest
         delegate.updateStatusItem()
         executor.runNext()
         await drainResults()
-        delegate.menuNeedsUpdate(menu)
+        delegate.rebuildMenu(menu)
         XCTAssertTrue(menu.items.contains { $0.title == localized("No devices found") })
         XCTAssertNil(delegate.refreshFailure)
     }
@@ -305,14 +308,14 @@ import XCTest
         let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor))
         delegate.latestDevices = [menuDevice(target: .physical(.init(vendor: 1, product: 2), attachmentID: 11))]
         let menu = NSMenu()
-        delegate.menuNeedsUpdate(menu)
+        delegate.rebuildMenu(menu)
         let item = try XCTUnwrap(menu.items.first { $0.title == localized("Lights") }?.submenu?.items.first)
         provider.commandResult = .failure(.init(operation: .command, kind: .native(-4)))
         delegate.setLights(item)
         executor.runNext()
         await drainResults()
         XCTAssertTrue(delegate.commandFailure?.contains("-4") == true)
-        delegate.menuNeedsUpdate(menu)
+        delegate.rebuildMenu(menu)
         XCTAssertTrue(menu.items.contains { $0.title.contains("-4") })
         provider.commandResult = .success(())
         delegate.setLights(item)
@@ -329,13 +332,13 @@ import XCTest
         ])
         delegate.latestDevices = [device]
         let menu = NSMenu()
-        delegate.menuNeedsUpdate(menu)
+        delegate.rebuildMenu(menu)
         var items = try XCTUnwrap(menu.items.first { $0.title == localized("Equalizer Preset") }?.submenu).items
         XCTAssertEqual(items.map(\.title), ["Voice", "Flat", "Flat"])
         XCTAssertEqual(items.map { ($0.representedObject as? HeadsetMenuAction)?.value }, [3, 1, 2])
         device["equalizerPresets"] = Result<[HeadsetEqualizerPreset], HeadsetFailure>.success([])
         delegate.latestDevices = [device]
-        delegate.menuNeedsUpdate(menu)
+        delegate.rebuildMenu(menu)
         items = try XCTUnwrap(menu.items.first { $0.title == localized("Equalizer Preset") }?.submenu).items
         XCTAssertEqual(items.count, 1)
         XCTAssertNil(items.first?.action)
@@ -358,7 +361,7 @@ import XCTest
             device["battery"] = Result<HeadsetBattery, HeadsetFailure>.success(battery)
             delegate.latestDevices = [device]
             let menu = NSMenu()
-            delegate.menuNeedsUpdate(menu)
+            delegate.rebuildMenu(menu)
             let row = menu.items.first { $0.title.hasPrefix(localized("Battery") + ":") }
             XCTAssertNotNil(row)
             if let percentage { XCTAssertTrue(row?.title.contains(percentage) == true) }
@@ -446,7 +449,7 @@ import XCTest
             }
             XCTAssertEqual(delegate.notificationFailure, failure)
             let menu = NSMenu()
-            delegate.menuNeedsUpdate(menu)
+            delegate.rebuildMenu(menu)
             XCTAssertTrue(menu.items.contains { $0.title == failure.message })
 
             UserDefaults.standard.set(false, forKey: "notifyOnLowBattery")
@@ -455,7 +458,7 @@ import XCTest
             // Hold the refresh pending: clearing feedback must not wait for HID.
             XCTAssertEqual(executor.jobs.count, 1)
             XCTAssertNil(delegate.notificationFailure)
-            delegate.menuNeedsUpdate(menu)
+            delegate.rebuildMenu(menu)
             XCTAssertFalse(menu.items.contains { $0.title == failure.message })
             executor.runNext()
             await drainResults()
@@ -470,7 +473,7 @@ import XCTest
             UserDefaults.standard.set(false, forKey: "notifyOnLowBattery")
             delivery.authorizations[1](.success(false))
             XCTAssertNil(delegate.notificationFailure)
-            delegate.menuNeedsUpdate(menu)
+            delegate.rebuildMenu(menu)
             XCTAssertFalse(menu.items.contains { $0.title == NotificationFailure.denied.message })
             delegate.stop()
             executor.finishStop()
@@ -523,7 +526,7 @@ import XCTest
                 completeA(.success(()))
                 XCTAssertEqual(delegate.notificationFailure, failure)
                 let menu = NSMenu()
-                delegate.menuNeedsUpdate(menu)
+                delegate.rebuildMenu(menu)
                 XCTAssertTrue(menu.items.contains { $0.title == failure.message })
 
                 await refresh([b, a])
@@ -534,7 +537,7 @@ import XCTest
                 let completeB = try XCTUnwrap(delivery.completions.last)
                 completeB(.success(()))
                 XCTAssertNil(delegate.notificationFailure)
-                delegate.menuNeedsUpdate(menu)
+                delegate.rebuildMenu(menu)
                 XCTAssertFalse(menu.items.contains { $0.title == failure.message })
                 delegate.stop()
                 executor.finishStop()
@@ -544,7 +547,7 @@ import XCTest
     }
 
     private func drainResults() async {
-        await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
+        await withCheckedContinuation { continuation in HeadsetMainRunLoop.perform { continuation.resume() } }
     }
 
     private func menuDevice(target: HeadsetTarget?) -> [String: Any] {

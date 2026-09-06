@@ -103,3 +103,9 @@
 "Retry refresh" = "Retry refresh";
 "Preset metadata unavailable" = "Preset metadata unavailable";
 "Fallback names are used only for supported presets without a device-reported name." = "Fallback names are used only for supported presets without a device-reported name.";
+
+/* Device snapshot freshness */
+"Checking devices…" = "Checking devices…";
+"Device data may be out of date" = "Device data may be out of date";
+"Last checked: %@" = "Last checked: %@";
+"No devices in last check" = "No devices in last check";

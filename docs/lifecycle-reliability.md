@@ -1,0 +1,46 @@
+# Device freshness and lifecycle recovery
+
+## Verified baseline
+
+Reviewed current `main` at `0a5cbbfe9bcf1a573cd77a25a2cb377df9c00e39`, including the merged concurrency and state-management PRs. `AppDelegate` had no observation timestamp, its menu rendered cached dictionaries without checking age, its scheduled polling timer used the default run-loop mode, and it registered no workspace or USB arrival/removal observers. `HeadsetController` already coalesced refreshes, canceled obsolete mode sessions, and discarded results after stop. `HeadsetIOWorker` already serialized complete transactions on one dedicated thread and performed asynchronous native shutdown.
+
+The new nested event-tracking regression also reproduced completed worker results remaining queued behind a main-queue callback. Result delivery now explicitly uses main-run-loop common modes, as do recovery timers and lifecycle callback handoffs. No C/HID operation runs in these callbacks.
+
+## State and recovery
+
+- `HeadsetSnapshot` distinguishes unobserved, fresh, empty, stale, and failed discovery. Successful observations record the time native work **started**, conservatively avoiding a fresh timestamp for data delivered after a long transaction or delayed callback. Data is current for 60 seconds; negative clock age is also stale. An expiration timer changes presentation without polling hardware.
+- Failure retains the last successful devices and timestamp. Successful empty discovery clears devices. Stale/failed cached menus show a warning and last-check time; the status item hides the cached percentage. An open menu updates from new results without recursively requesting another refresh. Cached control items keep their original targets, which are still revalidated by the native transaction.
+- Opening a stale/unobserved/failed menu shares any existing refresh or recovery timer. Otherwise it requests one asynchronous refresh. Repeated AppKit menu updates do not enqueue followups.
+- Wake, screen wake, session activation, and USB arrival/removal start a 750 ms debounce. Bursts share the first deadline. A new event invalidates observations started before it; the existing controller coalesces the eventual request with polling or manual refresh.
+- Empty discovery, discovery failure, telemetry failure, and unavailable/unknown battery status retry after 2, 5, and 10 seconds, measured after the preceding result. A fresh, nonempty result with ready telemetry ends retries. A new external event can start another bounded burst. Exhaustion leaves normal polling and stale-menu refresh available.
+- USB observation uses `IOServiceAddMatchingNotification` for `IOUSBHostDevice` arrival and termination, on a main common-mode run-loop source. It drains and releases the returned services and owns/relinquishes both notification iterators and the notification port. It never creates an `IOHIDManager`, opens USB/HID handles, or calls headsetcontrol. Initial enumeration arms the notifications without issuing a refresh. Registration failure logs the fallback to menu/wake/polling recovery.
+- Sleep invalidates snapshots and cancels recovery timers and coalesced pre-sleep refresh requests. Requests issued after this boundary can still coalesce normally. This does not introduce a policy to stop monitoring during screen lock or inactive sessions. Supported workspace resume notifications request fresh data. USB events are ignored in test mode.
+- Stop first closes application entry points, then unregisters lifecycle/defaults/appearance observers, cancels tracking, detaches the status item/menu and notification delegate, and stops the controller. Expiration/retry timers are canceled. Tokens, sessions, and stop guards reject queued callbacks and worker results. Native cleanup remains on the worker; the main actor never waits for HID.
+
+The observer follows Apple's [matching notification ownership contract](https://developer.apple.com/documentation/iokit/1514362-ioserviceaddmatchingnotification) and uses the workspace's [own notification center for screen-wake events](https://developer.apple.com/documentation/appkit/nsworkspace/screensdidwakenotification). The timer and callback strategy follows Apple's [common run-loop mode behavior](https://developer-mdn.apple.com/library/archive/documentation/Cocoa/Conceptual/Multithreading/RunLoopManagement/RunLoopManagement.html).
+
+## Automated validation
+
+The focused tests use an injected clock, cancelable scheduler, notification center, lifecycle observer, provider, and manual worker executor. Coverage includes age/clock rollback, failure cache vs. empty success, menu-open coalescing and live presentation, pre-event result rejection, overlapping event/poll requests, unavailable/error telemetry after wake, delayed availability, disconnect/reconnect with a changed attachment, retry exhaustion, mode changes with late timers, and stop during queued/in-flight work. Native observer registration/teardown and timers/results inside a simulated AppKit tracking run loop are exercised without controlling physical headsets. Existing native integration tests continue using dependency test profiles only.
+
+Local validation passed all 91 tests in Debug and optimized Release, the Xcode Release build, and localization syntax checks. The extra SwiftPM Release test run used `-debug-info-format none` after its `dsymutil` step hit a local sandbox `Operation not permitted` error; the normal Xcode Release build passed separately.
+
+Run `swift test` and the Xcode Release build as documented in `AGENTS.md`. On this host the shell commands require `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer` and the Homebrew include/library search paths. Local Homebrew libraries target newer macOS versions than the app; a successful local build does **not** establish minimum-version runtime compatibility. CI builds on macOS 15 and checks both architectures and the universal artifact without changing the release workflow.
+
+## Physical macOS validation still required
+
+1. On Apple silicon and Intel, launch with zero, one, and two different headsets. Open the menu before the first result, after 60 seconds, and after the polling interval. Leave it open through expiration and results; check submenu selection, rendering, and settings interactions remain responsive.
+2. Remove/reinsert a receiver directly and through a hub/dock while idle, while tracking its control submenu, and during a command. Confirm prompt stale indication followed by empty/new discovery. A retained action must never target a replacement attachment or another device. Repeat with identical models and test mode enabled.
+3. Sleep/wake with receivers attached, removed during sleep, and reinserted slowly after wake. Repeat short sleep, long sleep, lid close, and dock changes. Verify debounce, bounded retries, cancellation by successful recovery, and eventual polling/menu recovery after exhaustion.
+4. Power a wireless headset off/on while leaving its receiver attached. This may produce no USB registry event; verify stale-menu and periodic recovery and unchanged notification suppression for that receiver attachment.
+5. Lock/unlock with and without display sleep; switch users out/in. Verify resume refresh where the OS posts supported notifications, no cross-session UI regressions, and no new monitoring policy. No private screen-lock notification is used.
+6. Quit during a held-open menu, pending permission prompt, recovery delay, active discovery, and unplug/command races. Confirm the status item disappears immediately, no late UI or commands occur, and native cleanup eventually exits. Inspect IORegistry/Mach port counts or Instruments during repeated observer registration, hotplug and termination.
+7. Run on the oldest supported macOS with compatible native libraries. Check the same behaviors on the currently supported OS versions and architectures; CI's macOS 15 builds alone are insufficient for the minimum OS or actual sleep/wake behavior.
+
+## Remaining limitations and decisions
+
+- Wireless power changes behind an attached receiver, non-USB transport changes, and unlock without a documented resume event may not generate these notifications. Recovery then depends on opening a stale menu or the existing periodic interval.
+- A successfully discovered subset of multiple headsets can end retries before another headset behind the same receiver becomes ready. Later registry events, polling, or stale-menu opening recover it. Persisted physical identity and choosing an expected/primary device are outside this change.
+- The dependency cannot reliably select physically identical devices. This PR retains its existing conservative attachment guards and creates no stable identity.
+- A native HID call that never returns can still prevent asynchronous termination from completing. Forcible-exit timeouts, helper processes, and abandoning native cleanup require separate design/product decisions; no main-thread wait was added.
+- Monitoring during screen lock/inactive sessions and broader multi-device notification policy remain product decisions. Supported macOS versions, dependency strategy, signing, packaging and release policy are unchanged.

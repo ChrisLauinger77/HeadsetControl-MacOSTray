@@ -18,6 +18,9 @@ import UserNotifications
         ]
     }
     private let headsetController: HeadsetController
+    private let lifecycleObserver: HeadsetLifecycleObserving
+    private weak var trackingMenu: NSMenu?
+    private var notificationCenter: UNUserNotificationCenter?
     private var stopping = false
     private var lastRequestedProfile: Int?
     private var lastNotificationEnabled: Bool?
@@ -35,23 +38,32 @@ import UserNotifications
         _ = AppDefaults.standard
         lowBatteryNotifications = LowBatteryNotifications(delivery: SystemLowBatteryNotificationDelivery())
         headsetController = HeadsetController(provider: HeadsetControlService(), executor: HeadsetIOWorker.shared)
+        lifecycleObserver = HeadsetLifecycleObserver()
         super.init()
         bindHeadsetController()
     }
 
-    init(headsetController: HeadsetController, notificationDelivery: LowBatteryNotificationDelivering? = nil) {
+    init(headsetController: HeadsetController, notificationDelivery: LowBatteryNotificationDelivering? = nil,
+         lifecycleObserver: HeadsetLifecycleObserving? = nil) {
         _ = AppDefaults.standard
         lowBatteryNotifications = LowBatteryNotifications(delivery: notificationDelivery ?? SystemLowBatteryNotificationDelivery())
         self.headsetController = headsetController
+        self.lifecycleObserver = lifecycleObserver ?? HeadsetLifecycleObserver()
         super.init()
         bindHeadsetController()
     }
 
     private func bindHeadsetController() {
         headsetController.onRefresh = { [weak self] result in self?.applyRefresh(result) }
+        headsetController.onSnapshotInvalidated = { [weak self] in
+            guard let self, !self.stopping else { return }
+            self.lowBatteryNotifications.suspend()
+            self.updateStatusPresentation()
+        }
         lowBatteryNotifications.isStillAllowed = { [weak self] notice in
             guard let self, !self.stopping else { return false }
-            return AppDefaults.standard.bool(forKey: "notifyOnLowBattery") && notice.level <= self.lowBatteryThreshold
+            return self.headsetController.snapshotState == .fresh
+                && AppDefaults.standard.bool(forKey: "notifyOnLowBattery") && notice.level <= self.lowBatteryThreshold
                 && notice.target.accepts(testProfile: self.currentTestProfile)
         }
         lowBatteryNotifications.onFailure = { [weak self] target, error in
@@ -134,6 +146,7 @@ import UserNotifications
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         observeApplicationAppearance()
+        startLifecycleObservation()
 
         // Request notification authorization and set delegate
         SystemLowBatteryNotificationDelivery().authorize { [weak self] result in
@@ -143,7 +156,8 @@ import UserNotifications
                 self.updateStatusPresentation()
             }
         }
-        UNUserNotificationCenter.current().delegate = self
+        notificationCenter = UNUserNotificationCenter.current()
+        notificationCenter?.delegate = self
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem?.button {
@@ -176,6 +190,20 @@ import UserNotifications
         )
     }
 
+    func startLifecycleObservation() {
+        guard !stopping else { return }
+        lifecycleObserver.start { [weak self] event in
+            guard let self, !self.stopping else { return }
+            switch event {
+            case .willSleep: self.headsetController.invalidateSnapshot()
+            case .resume: self.headsetController.recover(testProfile: self.currentTestProfile)
+            case .usbChanged:
+                // Physical USB events must not create test-profile work.
+                if self.currentTestProfile == 0 { self.headsetController.recover(testProfile: 0) }
+            }
+        }
+    }
+
     private func observeApplicationAppearance() {
         appearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.initial, .new]) { [weak self] _, _ in
             DispatchQueue.main.async {
@@ -200,19 +228,22 @@ import UserNotifications
         let interval = updateInterval
         activeTimerInterval = interval
 
-        statusUpdateTimer = Timer.scheduledTimer(withTimeInterval: Double(interval), repeats: true) { [weak self] _ in
-            DispatchQueue.main.async { self?.updateStatusItem() }
+        let timer = Timer(timeInterval: Double(interval), repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateStatusItem() }
         }
+        timer.tolerance = min(30, Double(interval) * 0.1)
+        RunLoop.main.add(timer, forMode: .common)
+        statusUpdateTimer = timer
     }
 
     // Notifications may be posted from any thread. Read defaults and touch
     // AppKit/coordinator state only after entering the main actor.
     @objc nonisolated func handleRefreshNotification() {
-        DispatchQueue.main.async { [weak self] in self?.updateStatusItem() }
+        HeadsetMainRunLoop.perform { [weak self] in self?.updateStatusItem() }
     }
 
     @objc nonisolated func handleUserDefaultsChanged(_ notification: Notification) {
-        DispatchQueue.main.async { [weak self] in
+        HeadsetMainRunLoop.perform { [weak self] in
             guard let self, !self.stopping else { return }
             AppDefaults.validate(in: AppDefaults.standard)
             if self.updateInterval != self.activeTimerInterval { self.startStatusUpdateTimer() }
@@ -251,9 +282,8 @@ import UserNotifications
         switch result {
         case .failure(let error):
             refreshFailure = error
-            latestDevices = nil
-            statusBatteryText = nil
-            telemetryFailures = []
+            // Preserve useful cached devices, explicitly labeled as stale.
+            latestDevices = headsetController.snapshot.devices?.map(\.menuDictionary)
             lowBatteryNotifications.suspend()
         case .success(let devices):
             refreshFailure = nil
@@ -262,8 +292,10 @@ import UserNotifications
             if let first = devices.first, case .success(let battery) = first.battery {
                 statusBatteryText = battery.chargeText
             } else { statusBatteryText = nil }
-            lowBatteryNotifications.update(devices: devices, enabled: AppDefaults.standard.bool(forKey: "notifyOnLowBattery"),
-                                           threshold: lowBatteryThreshold, testProfile: currentTestProfile)
+            if headsetController.snapshotState == .fresh {
+                lowBatteryNotifications.update(devices: devices, enabled: AppDefaults.standard.bool(forKey: "notifyOnLowBattery"),
+                                               threshold: lowBatteryThreshold, testProfile: currentTestProfile)
+            } else { lowBatteryNotifications.suspend() }
         }
         updateStatusPresentation()
     }
@@ -276,9 +308,11 @@ import UserNotifications
         guard !stopping else { return }
         // Also reject failures delivered before the queued defaults observer.
         if !AppDefaults.standard.bool(forKey: "notifyOnLowBattery") { notificationIssue = nil }
-        let messages = feedbackMessages + telemetryFailures.map(\.message)
-        statusItem?.button?.title = (statusBatteryText.map { " " + $0 } ?? "") + (messages.isEmpty ? "" : " ⚠︎")
+        let messages = feedbackMessages + telemetryFailures.map(\.message) + snapshotMessages
+        let batteryText = headsetController.snapshotState == .fresh ? statusBatteryText : nil
+        statusItem?.button?.title = (batteryText.map { " " + $0 } ?? "") + (messages.isEmpty ? "" : " ⚠︎")
         statusItem?.button?.toolTip = messages.isEmpty ? nil : messages.joined(separator: "\n")
+        if let trackingMenu { rebuildMenu(trackingMenu) }
     }
 
     // Never join the HID thread or take a lock around native work on the main
@@ -298,17 +332,22 @@ import UserNotifications
         if !stopping {
             stopping = true
             lowBatteryNotifications.stop()
+            lifecycleObserver.stop()
             statusUpdateTimer?.invalidate()
             statusUpdateTimer = nil
             NotificationCenter.default.removeObserver(self)
             appearanceObservation?.invalidate()
             appearanceObservation = nil
+            trackingMenu?.cancelTracking()
+            trackingMenu = nil
             statusMenu?.delegate = nil
             statusItem?.menu = nil
             if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
             statusItem = nil
             statusMenu = nil
             latestDevices = nil
+            if notificationCenter?.delegate === self { notificationCenter?.delegate = nil }
+            notificationCenter = nil
         }
         headsetController.stop(completion: completion)
     }
@@ -350,16 +389,44 @@ import UserNotifications
         }
     }
 
+    private var snapshotMessages: [String] {
+        let state = headsetController.snapshotState
+        if state == .unobserved { return [NSLocalizedString("Checking devices…", comment: "Initial asynchronous discovery")] }
+        guard state == .stale || (state == .failed && headsetController.snapshot.observedAt != nil) else { return [] }
+        var messages = [NSLocalizedString("Device data may be out of date", comment: "Cached snapshot warning")]
+        if let date = headsetController.snapshot.observedAt {
+            let time = DateFormatter.localizedString(from: date, dateStyle: .short, timeStyle: .medium)
+            messages.append(String(format: NSLocalizedString("Last checked: %@", comment: "Time of cached device observation"), time))
+        }
+        return messages
+    }
+
     func menuNeedsUpdate(_ menu: NSMenu) {
+        guard !stopping else { menu.removeAllItems(); return }
+        if let lastRequestedProfile, lastRequestedProfile != currentTestProfile { updateStatusItem() }
+        else { headsetController.refreshIfNeeded(testProfile: currentTestProfile) }
+        rebuildMenu(menu)
+    }
+
+    func menuWillOpen(_ menu: NSMenu) { if !stopping { trackingMenu = menu } }
+    func menuDidClose(_ menu: NSMenu) { if trackingMenu === menu { trackingMenu = nil } }
+
+    // Rendering is separate from refresh requests: a result may update an open
+    // menu, but must never recursively schedule another native transaction.
+    func rebuildMenu(_ menu: NSMenu) {
         menu.removeAllItems()
+        guard !stopping else { return }
+        for message in snapshotMessages { menu.addItem(withTitle: message, action: nil, keyEquivalent: "") }
         for message in feedbackMessages { menu.addItem(withTitle: message, action: nil, keyEquivalent: "") }
         if refreshFailure != nil {
             let retry = menu.addItem(withTitle: NSLocalizedString("Retry refresh", comment: "Retry discovery after failure"), action: #selector(handleRefreshNotification), keyEquivalent: "")
             retry.target = self
         }
         guard let devices = latestDevices, !devices.isEmpty else {
-            if refreshFailure == nil {
+            if headsetController.snapshotState == .empty {
                 menu.addItem(withTitle: NSLocalizedString("No devices found", comment: "No devices found message"), action: nil, keyEquivalent: "")
+            } else if headsetController.snapshot.observedAt != nil && refreshFailure == nil {
+                menu.addItem(withTitle: NSLocalizedString("No devices in last check", comment: "Empty cached discovery"), action: nil, keyEquivalent: "")
             }
             menu.addItem(NSMenuItem.separator())
             menu.addItem(withTitle: NSLocalizedString("Settings...", comment: "Settings menu item"), action: #selector(openSettings), keyEquivalent: "s")
@@ -520,11 +587,12 @@ import UserNotifications
     }
 
     @objc func openSettings() {
-        guard let settingsItem = NSApp.mainMenu?.items.first?.submenu?.items.first(where: {
+        guard !stopping, let settingsItem = NSApp.mainMenu?.items.first?.submenu?.items.first(where: {
             $0.keyEquivalent == "," && $0.keyEquivalentModifierMask.contains(.command)
         }), let action = settingsItem.action else { return }
 
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.stopping else { return }
             NSApp.activate(ignoringOtherApps: true)
             NSApp.sendAction(action, to: settingsItem.target, from: settingsItem)
         }
@@ -532,6 +600,8 @@ import UserNotifications
 
     // UNUserNotificationCenterDelegate: Show notifications when app is in foreground
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        completionHandler([.banner, .sound, .badge, .list])
+        DispatchQueue.main.async { [weak self] in
+            completionHandler(self?.stopping == false ? [.banner, .sound, .badge, .list] : [])
+        }
     }
 }
