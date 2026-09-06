@@ -133,6 +133,28 @@ import XCTest
         XCTAssertEqual(delivery.submissions.count, 1)
     }
 
+    func testSuccessfulDiscoveryAbsenceDoesNotRearmTheSameAttachment() async {
+        let delivery = RecordingNotificationDelivery()
+        let notifier = LowBatteryNotifications(delivery: delivery)
+        notifier.update(devices: [device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
+        delivery.authorizations[0](.success(true))
+        delivery.completions[0](.success(()))
+
+        // The receiver can keep its attachment ID while discovery omits the headset.
+        notifier.update(devices: [], enabled: true, threshold: 25, testProfile: 0)
+        notifier.update(devices: [device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
+        XCTAssertEqual(delivery.authorizations.count, 1)
+        XCTAssertEqual(delivery.submissions.count, 1)
+
+        // Another device's recovery must not reset A while A is absent.
+        notifier.update(devices: [device(b, 80)], enabled: true, threshold: 25, testProfile: 0)
+        notifier.update(devices: [device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
+        XCTAssertEqual(delivery.authorizations.count, 1)
+        notifier.update(devices: [device(a, 26)], enabled: true, threshold: 25, testProfile: 0)
+        notifier.update(devices: [device(a, 10)], enabled: true, threshold: 25, testProfile: 0)
+        XCTAssertEqual(delivery.authorizations.count, 2)
+    }
+
     func testTestProfileNotificationCannotSuppressOrRearmPhysicalAttachment() async {
         let delivery = RecordingNotificationDelivery()
         let notifier = LowBatteryNotifications(delivery: delivery)

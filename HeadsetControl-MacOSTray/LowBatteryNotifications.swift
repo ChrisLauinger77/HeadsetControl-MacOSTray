@@ -83,10 +83,9 @@ nonisolated enum NotificationFailure: Error, Equatable, Sendable {
 
     func update(devices: [HeadsetDevice], enabled: Bool, threshold: Int, testProfile: Int) {
         guard !stopped else { return }
-        let present = Set(devices.compactMap(\.target))
-        for target in Array(entries.keys) where target.accepts(testProfile: testProfile) && !present.contains(target) {
-            entries.removeValue(forKey: target)
-        }
+        // Discovery can temporarily omit a headset while its receiver keeps the
+        // same attachment ID. Absence cancels pending work below, but must not
+        // erase submitted suppression. A new attachment has its own target.
         // Preserve the existing rearming rule: an explicitly available reading
         // above the threshold. Unknown/error/charging readings do not rearm.
         for device in devices {

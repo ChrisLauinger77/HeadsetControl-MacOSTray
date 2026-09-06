@@ -384,6 +384,59 @@ import XCTest
         XCTAssertTrue(delivery.submissions.isEmpty)
     }
 
+    func testDisablingAlertsClearsFailuresBeforeRefreshAndRejectsLateWarnings() async {
+        for failure in [NotificationFailure.denied, .system(domain: "Test", code: 1, description: "Rejected")] {
+            UserDefaults.standard.set(7, forKey: "testMode")
+            UserDefaults.standard.set(true, forKey: "notifyOnLowBattery")
+            let provider = RecordingHeadsetProvider()
+            provider.devices = [HeadsetDevice(usbID: .testDevice, name: "Fake", vendor: "Vendor", product: "Product", capabilities: [],
+                                              battery: .success(.init(level: 10, status: .available)), target: .test(profile: 7))]
+            let executor = ManualHeadsetExecutor()
+            let delivery = RecordingNotificationDelivery()
+            let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor), notificationDelivery: delivery)
+            delegate.updateStatusItem()
+            executor.runNext()
+            await drainResults()
+            if failure == .denied {
+                delivery.authorizations[0](.success(false))
+            } else {
+                delivery.authorizations[0](.success(true))
+                delivery.completions[0](.failure(failure))
+            }
+            XCTAssertEqual(delegate.notificationFailure, failure)
+            let menu = NSMenu()
+            delegate.menuNeedsUpdate(menu)
+            XCTAssertTrue(menu.items.contains { $0.title == failure.message })
+
+            UserDefaults.standard.set(false, forKey: "notifyOnLowBattery")
+            delegate.handleUserDefaultsChanged(Notification(name: UserDefaults.didChangeNotification))
+            await drainResults()
+            // Hold the refresh pending: clearing feedback must not wait for HID.
+            XCTAssertEqual(executor.jobs.count, 1)
+            XCTAssertNil(delegate.notificationFailure)
+            delegate.menuNeedsUpdate(menu)
+            XCTAssertFalse(menu.items.contains { $0.title == failure.message })
+            executor.runNext()
+            await drainResults()
+
+            UserDefaults.standard.set(true, forKey: "notifyOnLowBattery")
+            delegate.handleUserDefaultsChanged(Notification(name: UserDefaults.didChangeNotification))
+            await drainResults()
+            executor.runNext()
+            await drainResults()
+            XCTAssertEqual(delivery.authorizations.count, 2)
+            // Authorization can complete before the queued defaults observer.
+            UserDefaults.standard.set(false, forKey: "notifyOnLowBattery")
+            delivery.authorizations[1](.success(false))
+            XCTAssertNil(delegate.notificationFailure)
+            delegate.menuNeedsUpdate(menu)
+            XCTAssertFalse(menu.items.contains { $0.title == NotificationFailure.denied.message })
+            delegate.stop()
+            executor.finishStop()
+            await drainResults()
+        }
+    }
+
     private func drainResults() async {
         await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
     }

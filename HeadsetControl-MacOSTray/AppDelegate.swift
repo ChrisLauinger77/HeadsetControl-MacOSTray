@@ -232,11 +232,11 @@ import UserNotifications
             commandFailure = nil
             notificationFailure = nil
             lowBatteryNotifications.suspend()
-            updateStatusPresentation()
         }
         lastRequestedProfile = profile
         lastNotificationEnabled = AppDefaults.standard.bool(forKey: "notifyOnLowBattery")
         lastNotificationThreshold = lowBatteryThreshold
+        updateStatusPresentation() // Preference feedback must not wait for HID.
         headsetController.refresh(testProfile: profile)
     }
 
@@ -270,6 +270,8 @@ import UserNotifications
 
     private func updateStatusPresentation() {
         guard !stopping else { return }
+        // Also reject failures delivered before the queued defaults observer.
+        if !AppDefaults.standard.bool(forKey: "notifyOnLowBattery") { notificationFailure = nil }
         let messages = feedbackMessages + telemetryFailures.map(\.message)
         statusItem?.button?.title = (statusBatteryText.map { " " + $0 } ?? "") + (messages.isEmpty ? "" : " ⚠︎")
         statusItem?.button?.toolTip = messages.isEmpty ? nil : messages.joined(separator: "\n")
