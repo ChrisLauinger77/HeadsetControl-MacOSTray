@@ -27,6 +27,8 @@ import UserNotifications
     private var lastNotificationThreshold: Int?
     private let lowBatteryNotifications: LowBatteryNotifications
     private var statusBatteryText: String?
+    // Last title applied to AppKit, also observable in tests without a live status item.
+    private(set) var statusTitle = ""
     private var telemetryFailures: [HeadsetFailure] = []
     private(set) var refreshFailure: HeadsetFailure?
     private(set) var commandFailure: String?
@@ -54,6 +56,7 @@ import UserNotifications
     }
 
     private func bindHeadsetController() {
+        headsetController.updateRefreshInterval(updateInterval)
         headsetController.onRefresh = { [weak self] result in self?.applyRefresh(result) }
         headsetController.onSnapshotInvalidated = { [weak self] in
             guard let self, !self.stopping else { return }
@@ -234,6 +237,8 @@ import UserNotifications
         timer.tolerance = min(30, Double(interval) * 0.1)
         RunLoop.main.add(timer, forMode: .common)
         statusUpdateTimer = timer
+        headsetController.updateRefreshInterval(interval)
+        updateStatusPresentation() // An increased interval may restore age-expired cached data.
     }
 
     // Notifications may be posted from any thread. Read defaults and touch
@@ -310,7 +315,8 @@ import UserNotifications
         if !AppDefaults.standard.bool(forKey: "notifyOnLowBattery") { notificationIssue = nil }
         let messages = feedbackMessages + telemetryFailures.map(\.message) + snapshotMessages
         let batteryText = headsetController.snapshotState == .fresh ? statusBatteryText : nil
-        statusItem?.button?.title = (batteryText.map { " " + $0 } ?? "") + (messages.isEmpty ? "" : " ⚠︎")
+        statusTitle = (batteryText.map { " " + $0 } ?? "") + (messages.isEmpty ? "" : " ⚠︎")
+        statusItem?.button?.title = statusTitle
         statusItem?.button?.toolTip = messages.isEmpty ? nil : messages.joined(separator: "\n")
         if let trackingMenu { rebuildMenu(trackingMenu) }
     }
@@ -344,6 +350,7 @@ import UserNotifications
             statusItem?.menu = nil
             if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
             statusItem = nil
+            statusTitle = ""
             statusMenu = nil
             latestDevices = nil
             if notificationCenter?.delegate === self { notificationCenter?.delegate = nil }
