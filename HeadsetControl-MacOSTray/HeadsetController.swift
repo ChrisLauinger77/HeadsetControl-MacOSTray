@@ -43,12 +43,12 @@ import Foundation
         guard !stopped else { return }
         let maximumAge = AppDefaults.snapshotMaximumAge(for: interval)
         guard maximumAge != snapshotMaximumAge else { return }
-        let previousState = snapshotState
         snapshotMaximumAge = maximumAge
         scheduleExpiration()
         // Age expiration is computed, never latched into explicit invalidation.
         // Extending the interval can therefore make an otherwise valid cache fresh.
-        if snapshotState == .stale, previousState != .stale { onSnapshotInvalidated?() }
+        // The old deadline may have passed without its callback being delivered.
+        if snapshotState == .stale { onSnapshotInvalidated?() }
     }
 
     // Menu opening shares existing work; it must not create a perpetual

@@ -334,6 +334,26 @@ import XCTest
         }
     }
 
+    func testIntervalChangeDeliversStalenessWhenOldExpirationIsDelayed() async throws {
+        let f = Fixture(refreshInterval: 900)
+        f.provider.devices = [headset()]
+        var invalidations = 0
+        f.controller.onSnapshotInvalidated = { invalidations += 1 }
+        f.controller.refresh(testProfile: 7)
+        await f.finishRefresh()
+        let oldTimer = try XCTUnwrap(f.scheduler.pending.first)
+        f.clock.now.addTimeInterval(1000) // Advance the clock without delivering the timer.
+        XCTAssertEqual(f.controller.snapshotState, .stale)
+        XCTAssertEqual(invalidations, 0)
+        f.controller.updateRefreshInterval(60)
+        XCTAssertEqual(invalidations, 1)
+        XCTAssertTrue(oldTimer.canceled)
+        XCTAssertTrue(f.scheduler.pending.isEmpty)
+        oldTimer.action()
+        XCTAssertEqual(invalidations, 1)
+        XCTAssertTrue(f.executor.jobs.isEmpty)
+    }
+
     func testIntervalChangedDuringObservationAppliesAtPublication() async throws {
         let f = Fixture(refreshInterval: 900)
         f.provider.devices = [headset()]
