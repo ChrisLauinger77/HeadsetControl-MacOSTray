@@ -76,7 +76,10 @@ git push origin v3.0.0
 - Control menu items carry their device target. Physical controls require a unique, unchanged USB attachment; identical devices cannot be selected by the dependency. Test-mode reads and commands must select only the dependency's reserved test device.
 - Shutdown cancels pending work and discards late results, then frees native resources on the HID thread. AppKit uses `terminateLater`; never synchronously wait for HID on the main actor.
 - Test mode is controlled by the `testMode` user default and routed through `hsc_set_test_profile` / `hsc_enable_test_device`. Use it for development without a connected headset.
-- Settings are stored in `UserDefaults` through `@AppStorage`. Keep new persisted keys documented by using clear names and sensible defaults.
+- `AppDefaults.standard` registers and validates the shared settings policy before AppKit or `@AppStorage` reads it. Keep defaults and supported ranges in `AppDefaults`, including test profiles before native integer conversion.
+- Discovery, per-device telemetry and commands return typed results. Preserve native error codes; successful empty discovery is not an error. Battery decoding follows the actual headsetcontrol 4.1.0 C bridge values, which differ from its public header; keep the native-profile regression test when updating the dependency.
+- Low-battery notifications retain first-device eligibility, with suppression per reliable attachment. Only successful submission consumes an opportunity; valid available readings above the threshold rearm it. Do not fabricate identity for ambiguous devices.
+- Equalizer menu entries use the ordered native preset count/indices and copied names. Stored names are fallbacks for unnamed supported indices only.
 - Menu capabilities are driven by `HeadsetCapability.menuCapabilities` and legacy capability strings such as `CAP_SIDETONE`. If adding a headset feature, update the capability mapping, provider calls, menu construction, settings as needed, and localization files.
 - `ContentView.swift` is not the main user experience; the app uses a Settings scene and status bar menu.
 

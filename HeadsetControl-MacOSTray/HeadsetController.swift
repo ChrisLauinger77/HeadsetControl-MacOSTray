@@ -1,7 +1,7 @@
 import Foundation
 
 @MainActor final class HeadsetController {
-    var onDevices: (([HeadsetDevice]) -> Void)?
+    var onRefresh: ((Result<[HeadsetDevice], HeadsetFailure>) -> Void)?
 
     private let provider: HeadsetControlProviding
     private let executor: HeadsetWorkExecuting
@@ -12,6 +12,7 @@ import Foundation
     private var stopped = false
     private var stopFinished = false
     private var stopCompletions: [() -> Void] = []
+    private var commands: [UUID: (Result<Void, HeadsetFailure>) -> Void] = [:]
 
     init(provider: HeadsetControlProviding, executor: HeadsetWorkExecuting) {
         self.provider = provider
@@ -21,6 +22,14 @@ import Foundation
     func refresh(testProfile: Int) {
         guard !stopped else { return }
         selectProfile(testProfile)
+        // Cancelling old commands invokes caller code, which may stop or select
+        // another mode before this request resumes.
+        guard !stopped, profile == testProfile else { return }
+        guard AppDefaults.testProfileRange.contains(testProfile) else {
+            pendingProfile = nil
+            onRefresh?(.failure(.init(operation: .discovery, kind: .invalidTestProfile(testProfile))))
+            return
+        }
         if refreshInFlight {
             pendingProfile = testProfile
             return
@@ -29,12 +38,10 @@ import Foundation
         let session = self.session
         let provider = self.provider
         executor.enqueue { [weak self] in
-            let devices = session.isActive ? provider.fetchDevices(testProfile: testProfile) : nil
+            let result = session.isActive ? provider.fetchDevices(testProfile: testProfile) : nil
             DispatchQueue.main.async {
                 guard let self, !self.stopped else { return }
-                if self.session === session, let devices {
-                    self.onDevices?(devices)
-                }
+                if self.session === session, let result { self.onRefresh?(result) }
                 self.refreshInFlight = false
                 if let pending = self.pendingProfile {
                     self.pendingProfile = nil
@@ -44,19 +51,45 @@ import Foundation
         }
     }
 
-    func perform(_ command: HeadsetCommand, on target: HeadsetTarget, testProfile: Int) {
-        guard !stopped else { return }
+    func perform(_ command: HeadsetCommand, on target: HeadsetTarget, testProfile: Int,
+                 completion: @escaping (Result<Void, HeadsetFailure>) -> Void = { _ in }) {
+        guard !stopped else { completion(.failure(.init(operation: .command, kind: .stopped))); return }
         selectProfile(testProfile)
-        guard target.accepts(testProfile: testProfile) else { return }
+        guard !stopped, profile == testProfile else {
+            completion(.failure(.init(operation: .command, kind: .cancelled)))
+            return
+        }
+        guard AppDefaults.testProfileRange.contains(testProfile) else {
+            completion(.failure(.init(operation: .command, kind: .invalidTestProfile(testProfile))))
+            return
+        }
+        guard target.accepts(testProfile: testProfile) else {
+            completion(.failure(.init(operation: .command, kind: .targetUnavailable)))
+            return
+        }
+        let id = UUID()
+        commands[id] = completion
         let session = self.session
         let provider = self.provider
-        executor.enqueue {
+        executor.enqueue { [weak self] in
             guard session.isActive else { return }
-            _ = provider.perform(command, on: target, testProfile: testProfile)
+            let result = provider.perform(command, on: target, testProfile: testProfile)
+            DispatchQueue.main.async {
+                guard let self, !self.stopped, self.session === session,
+                      let completion = self.commands.removeValue(forKey: id) else { return }
+                completion(result)
+            }
         }
     }
 
-    // Returns immediately. The completion follows native cleanup on the worker.
+    // Cancellation resolves queued callers once, even when the executor drops
+    // their jobs. Late worker completions cannot publish UI or resolve twice.
+    private func cancelCommands() {
+        let callbacks = Array(commands.values)
+        commands.removeAll()
+        callbacks.forEach { $0(.failure(.init(operation: .command, kind: .cancelled))) }
+    }
+
     func stop(completion: @escaping () -> Void = {}) {
         if stopFinished { completion(); return }
         stopCompletions.append(completion)
@@ -64,7 +97,8 @@ import Foundation
         stopped = true
         session.cancel()
         pendingProfile = nil
-        onDevices = nil
+        onRefresh = nil
+        cancelCommands()
         let provider = self.provider
         executor.stop(cleanup: { provider.shutdown() }) { [self] in
             DispatchQueue.main.async {
@@ -82,9 +116,9 @@ import Foundation
         session = Session()
         self.profile = profile
         if refreshInFlight { pendingProfile = profile }
+        cancelCommands()
     }
 
-    // The lock protects only cancellation, never a native call or callback.
     private nonisolated final class Session: @unchecked Sendable {
         private let lock = NSLock()
         private var active = true

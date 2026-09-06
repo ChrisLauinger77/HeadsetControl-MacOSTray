@@ -12,6 +12,8 @@ import AppKit
 HeadsetControl_MacOSTray: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
+    init() { _ = AppDefaults.standard }
+
     var body: some Scene {
         Settings {
             SettingsView {

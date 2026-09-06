@@ -7,10 +7,10 @@ nonisolated struct HeadsetConnection: Equatable {
 }
 
 nonisolated protocol HeadsetLibraryAccess: AnyObject {
-    func configure(testProfile: Int)
-    func discover() -> [HeadsetConnection]
+    func configure(testProfile: Int) throws(HeadsetFailure)
+    func discover() -> Result<[HeadsetConnection], HeadsetFailure>
     func readDevice(_ connection: HeadsetConnection) -> HeadsetDevice
-    func perform(_ command: HeadsetCommand, on connection: HeadsetConnection) -> Bool
+    func perform(_ command: HeadsetCommand, on connection: HeadsetConnection) -> Result<Void, HeadsetFailure>
     func releaseDevices()
     func shutdown()
 }

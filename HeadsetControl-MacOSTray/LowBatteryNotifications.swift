@@ -1,0 +1,161 @@
+import Foundation
+import UserNotifications
+
+nonisolated struct LowBatteryNotice: Equatable, Sendable {
+    let target: HeadsetTarget
+    let level: Int
+
+    var identifier: String {
+        switch target {
+        case .physical(let usb, let attachment):
+            return "lowBatteryNotification.usb.\(usb.vendor).\(usb.product).\(attachment)"
+        case .test(let profile): return "lowBatteryNotification.test.\(profile)"
+        }
+    }
+}
+
+nonisolated enum NotificationFailure: Error, Equatable, Sendable {
+    case denied
+    case system(domain: String, code: Int, description: String)
+
+    var message: String {
+        switch self {
+        case .denied: return NSLocalizedString("Low-battery notifications are not authorized", comment: "Notification permission failure")
+        case .system: return NSLocalizedString("Low-battery notification could not be sent", comment: "Notification submission failure")
+        }
+    }
+
+    init(_ error: Error) {
+        let error = error as NSError
+        self = .system(domain: error.domain, code: error.code, description: error.localizedDescription)
+    }
+}
+
+@MainActor protocol LowBatteryNotificationDelivering: AnyObject {
+    func authorize(completion: @escaping (Result<Bool, NotificationFailure>) -> Void)
+    func submit(_ notice: LowBatteryNotice, completion: @escaping (Result<Void, NotificationFailure>) -> Void)
+}
+
+@MainActor final class SystemLowBatteryNotificationDelivery: LowBatteryNotificationDelivering {
+    func authorize(completion: @escaping (Result<Bool, NotificationFailure>) -> Void) {
+        Task { @MainActor in
+            let center = UNUserNotificationCenter.current()
+            let settings = await center.notificationSettings()
+            if settings.authorizationStatus == .notDetermined {
+                do { completion(.success(try await center.requestAuthorization(options: [.alert, .sound, .badge]))) }
+                catch { completion(.failure(NotificationFailure(error))) }
+            } else {
+                completion(.success(settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional))
+            }
+        }
+    }
+
+    func submit(_ notice: LowBatteryNotice, completion: @escaping (Result<Void, NotificationFailure>) -> Void) {
+        let content = UNMutableNotificationContent()
+        content.title = NSLocalizedString("HeadsetControl-MacOSTray", comment: "App title")
+        content.body = String(format: NSLocalizedString("Low battery notification message", comment: "Low battery notification message"), notice.level)
+        content.sound = UNNotificationSound.default
+        let request = UNNotificationRequest(identifier: notice.identifier, content: content, trigger: nil)
+        // Start submission in the same main-actor call that checked eligibility;
+        // do not insert a Task that could begin only after stop/recovery.
+        UNUserNotificationCenter.current().add(request) { error in
+            let result: Result<Void, NotificationFailure> = error.map { .failure(NotificationFailure($0)) } ?? .success(())
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+}
+
+@MainActor final class LowBatteryNotifications {
+    private struct Entry {
+        var submitted = false
+        var pending: UUID?
+    }
+
+    private let delivery: LowBatteryNotificationDelivering
+    private var entries: [HeadsetTarget: Entry] = [:]
+    private var eligible: LowBatteryNotice?
+    private var stopped = false
+    var isStillAllowed: ((LowBatteryNotice) -> Bool)?
+    var onFailure: ((NotificationFailure) -> Void)?
+    var onSuccess: (() -> Void)?
+
+    init(delivery: LowBatteryNotificationDelivering) { self.delivery = delivery }
+
+    func update(devices: [HeadsetDevice], enabled: Bool, threshold: Int, testProfile: Int) {
+        guard !stopped else { return }
+        let present = Set(devices.compactMap(\.target))
+        for target in Array(entries.keys) where target.accepts(testProfile: testProfile) && !present.contains(target) {
+            entries.removeValue(forKey: target)
+        }
+        // Preserve the existing rearming rule: an explicitly available reading
+        // above the threshold. Unknown/error/charging readings do not rearm.
+        for device in devices {
+            if let target = device.target, case .success(let battery) = device.battery,
+               battery.status == .available, let level = battery.percentage, level > threshold {
+                entries.removeValue(forKey: target)
+            }
+        }
+        eligible = nil
+        // Preserve first-device eligibility; this pass does not introduce
+        // notifications for every connected headset or choose a new primary.
+        if enabled, let device = devices.first, let target = device.target,
+           target.accepts(testProfile: testProfile), case .success(let battery) = device.battery,
+           battery.status == .available, let level = battery.percentage, level <= threshold {
+            eligible = LowBatteryNotice(target: target, level: level)
+        }
+        for target in Array(entries.keys) where target != eligible?.target {
+            entries[target]?.pending = nil
+        }
+        guard let notice = eligible else { return }
+        var entry = entries[notice.target] ?? Entry()
+        guard !entry.submitted, entry.pending == nil else { return }
+        let attempt = UUID()
+        entry.pending = attempt
+        entries[notice.target] = entry
+        delivery.authorize { [weak self] result in
+            guard let self, self.isCurrent(notice, attempt: attempt) else { return }
+            switch result {
+            case .failure(let error): self.finish(notice, attempt: attempt, result: .failure(error))
+            case .success(false): self.finish(notice, attempt: attempt, result: .failure(.denied))
+            case .success(true):
+                // Preferences can change before their queued observer runs.
+                guard self.isStillAllowed?(notice) != false else { self.suspend(); return }
+                self.delivery.submit(notice) { [weak self] result in
+                    self?.finish(notice, attempt: attempt, result: result)
+                }
+            }
+        }
+    }
+
+    // Discovery failure or a mode switch is not proof that a headset recovered.
+    func suspend() {
+        eligible = nil
+        for target in Array(entries.keys) { entries[target]?.pending = nil }
+    }
+
+    func stop() {
+        stopped = true
+        suspend()
+        entries.removeAll()
+        isStillAllowed = nil
+        onFailure = nil
+        onSuccess = nil
+    }
+
+    private func isCurrent(_ notice: LowBatteryNotice, attempt: UUID) -> Bool {
+        !stopped && eligible?.target == notice.target && entries[notice.target]?.pending == attempt
+    }
+
+    private func finish(_ notice: LowBatteryNotice, attempt: UUID, result: Result<Void, NotificationFailure>) {
+        guard isCurrent(notice, attempt: attempt) else { return }
+        entries[notice.target]?.pending = nil
+        switch result {
+        case .success:
+            entries[notice.target]?.submitted = true
+            onSuccess?()
+        case .failure(let error):
+            // Keep the opportunity available for a subsequent refresh/retry.
+            onFailure?(error)
+        }
+    }
+}

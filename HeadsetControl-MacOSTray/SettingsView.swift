@@ -34,20 +34,20 @@ struct SettingsSection<Content: View>: View {
 }
 
 struct SettingsView: View {
-    @AppStorage("sidetoneOff") var sidetoneOff: Int = 0
-    @AppStorage("sidetoneLow") var sidetoneLow: Int = 32
-    @AppStorage("sidetoneMid") var sidetoneMid: Int = 64
-    @AppStorage("sidetoneHigh") var sidetoneHigh: Int = 96
-    @AppStorage("sidetoneMax") var sidetoneMax: Int = 128
+    @AppStorage("sidetoneOff", store: AppDefaults.standard) var sidetoneOff: Int = AppDefaults.sidetoneValues[0]
+    @AppStorage("sidetoneLow", store: AppDefaults.standard) var sidetoneLow: Int = AppDefaults.sidetoneValues[1]
+    @AppStorage("sidetoneMid", store: AppDefaults.standard) var sidetoneMid: Int = AppDefaults.sidetoneValues[2]
+    @AppStorage("sidetoneHigh", store: AppDefaults.standard) var sidetoneHigh: Int = AppDefaults.sidetoneValues[3]
+    @AppStorage("sidetoneMax", store: AppDefaults.standard) var sidetoneMax: Int = AppDefaults.sidetoneValues[4]
     var onClose: (() -> Void)? = nil
-    @AppStorage("updateInterval") var updateInterval: Double = 600
-    @AppStorage("testMode") var testMode: Int = 0
-    @AppStorage("equalizerPresets") var equalizerPresets: String = "Preset 1,Preset 2,Preset 3,Preset 4"
-    @AppStorage("notifyOnLowBattery") var notifyOnLowBattery: Bool = true
-    @AppStorage("lowBatteryThreshold") var lowBatteryThreshold: Int = 25
-    @AppStorage("inactiveTimeOptions") private var inactiveTimeOptionsRaw: String = "1,2,5,10,15,30,45,60,75,90"
+    @AppStorage("updateInterval", store: AppDefaults.standard) var updateInterval: Double = Double(AppDefaults.updateInterval)
+    @AppStorage("testMode", store: AppDefaults.standard) var testMode: Int = AppDefaults.testProfile
+    @AppStorage("equalizerPresets", store: AppDefaults.standard) var equalizerPresets: String = AppDefaults.equalizerPresets
+    @AppStorage("notifyOnLowBattery", store: AppDefaults.standard) var notifyOnLowBattery: Bool = AppDefaults.notifyOnLowBattery
+    @AppStorage("lowBatteryThreshold", store: AppDefaults.standard) var lowBatteryThreshold: Int = AppDefaults.lowBatteryThreshold
+    @AppStorage("inactiveTimeOptions", store: AppDefaults.standard) private var inactiveTimeOptionsRaw: String = AppDefaults.inactiveTimeOptionsRaw
 
-    private let inactiveTimeOptions: [Int] = [1, 2, 5, 10, 15, 30, 45, 60, 75, 90]
+    private let inactiveTimeOptions = AppDefaults.inactiveTimeOptions
     private let sidetoneLabelWidth: CGFloat = 96
     private let sidetoneFieldWidth: CGFloat = 60
 
@@ -55,13 +55,13 @@ struct SettingsView: View {
         let formatter = NumberFormatter()
         formatter.numberStyle = .none
         formatter.allowsFloats = false
-        formatter.minimum = NSNumber(value: -1)
-        formatter.maximum = NSNumber(value: 128)
+        formatter.minimum = NSNumber(value: AppDefaults.sidetoneRange.lowerBound)
+        formatter.maximum = NSNumber(value: AppDefaults.sidetoneRange.upperBound)
         return formatter
     }()
 
     private var normalizedInactiveTimeOptions: [Int] {
-        parseInactiveTimeOptions(raw: inactiveTimeOptionsRaw)
+        AppDefaults.parseInactiveTimeOptions(inactiveTimeOptionsRaw)
     }
 
     private var selectedInactiveTimeMinutes: Set<Int> {
@@ -74,19 +74,8 @@ struct SettingsView: View {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
 
-        return presets.isEmpty ? [
-            NSLocalizedString("Preset 1", comment: "Equalizer preset 1"),
-            NSLocalizedString("Preset 2", comment: "Equalizer preset 2"),
-            NSLocalizedString("Preset 3", comment: "Equalizer preset 3"),
-            NSLocalizedString("Preset 4", comment: "Equalizer preset 4")
-        ] : presets.map { NSLocalizedString($0, comment: "Equalizer preset from settings") }
-    }
-
-    private func parseInactiveTimeOptions(raw: String) -> [Int] {
-        let allowed = Set(inactiveTimeOptions)
-        let parsed = raw.split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-        let filtered = parsed.filter { allowed.contains($0) }
-        return Array(Set(filtered)).sorted()
+        let names = presets.isEmpty ? AppDefaults.equalizerPresets.split(separator: ",").map(String.init) : presets
+        return names.map { NSLocalizedString($0, comment: "Equalizer fallback name") }
     }
 
     private func toggleInactiveTime(_ minutes: Int) {
@@ -136,27 +125,27 @@ struct SettingsView: View {
 
     private var updateIntervalSecondsBinding: Binding<Int> {
         Binding(
-            get: { Int(updateInterval.rounded()) },
+            get: { AppDefaults.validatedUpdateInterval(updateInterval) },
             set: { newValue in
-                updateInterval = Double(min(max(newValue, 60), 3600))
+                updateInterval = Double(AppDefaults.validatedUpdateInterval(newValue))
             }
         )
     }
 
     private var lowBatteryThresholdBinding: Binding<Int> {
         Binding(
-            get: { min(max(lowBatteryThreshold, 1), 30) },
+            get: { AppDefaults.validatedLowBatteryThreshold(lowBatteryThreshold) },
             set: { newValue in
-                lowBatteryThreshold = min(max(newValue, 1), 30)
+                lowBatteryThreshold = AppDefaults.validatedLowBatteryThreshold(newValue)
             }
         )
     }
 
     private func clampedSidetoneBinding(_ binding: Binding<Int>) -> Binding<Int> {
         Binding(
-            get: { binding.wrappedValue },
+            get: { AppDefaults.validatedSidetone(binding.wrappedValue, fallback: 0) },
             set: { newValue in
-                binding.wrappedValue = min(max(newValue, -1), 128)
+                binding.wrappedValue = AppDefaults.validatedSidetone(newValue, fallback: 0)
             }
         )
     }
@@ -173,7 +162,7 @@ struct SettingsView: View {
                 .multilineTextAlignment(.trailing)
                 .textFieldStyle(.roundedBorder)
 
-            Stepper("", value: clampedValue, in: -1...128, step: 1)
+            Stepper("", value: clampedValue, in: AppDefaults.sidetoneRange, step: 1)
                 .labelsHidden()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -194,7 +183,7 @@ struct SettingsView: View {
                 ) {
                     HStack(alignment: .center, spacing: 12) {
                         settingsLabel(NSLocalizedString("Test Mode:", comment: "Test mode label"))
-                        Picker("", selection: $testMode) {
+                        Picker("", selection: Binding(get: { AppDefaults.validatedTestProfile(testMode) }, set: { testMode = AppDefaults.validatedTestProfile($0) })) {
                             Text(NSLocalizedString("1 - Error conditions", comment: "Test mode 1"))
                                 .tag(1)
                             Text(NSLocalizedString("2 - Charging battery", comment: "Test mode 2"))
@@ -221,11 +210,13 @@ struct SettingsView: View {
 
                     HStack(alignment: .center, spacing: 12) {
                         settingsLabel(NSLocalizedString("Update Interval (seconds):", comment: "Update interval label"))
-                        Slider(value: $updateInterval, in: 60...3600, step: 30)
+                        Slider(value: Binding(get: { Double(AppDefaults.validatedUpdateInterval(updateInterval)) },
+                                              set: { updateInterval = Double(AppDefaults.validatedUpdateInterval($0)) }),
+                               in: Double(AppDefaults.updateIntervalRange.lowerBound)...Double(AppDefaults.updateIntervalRange.upperBound), step: 30)
                         Text(String(format: NSLocalizedString("%d s", comment: "Update interval value in seconds"), updateIntervalSecondsBinding.wrappedValue))
                             .monospacedDigit()
                             .frame(width: 64, alignment: .trailing)
-                        Stepper("", value: updateIntervalSecondsBinding, in: 60...3600, step: 1)
+                        Stepper("", value: updateIntervalSecondsBinding, in: AppDefaults.updateIntervalRange, step: 1)
                             .labelsHidden()
                     }
                 }
@@ -239,7 +230,7 @@ struct SettingsView: View {
                     HStack(alignment: .center, spacing: 12) {
                         settingsLabel(NSLocalizedString("Low battery threshold:", comment: "Low battery threshold label"))
                         Picker("", selection: lowBatteryThresholdBinding) {
-                            ForEach(1...30, id: \.self) { value in
+                            ForEach(AppDefaults.lowBatteryThresholdRange, id: \.self) { value in
                                 Text("\(value)%")
                                     .tag(value)
                             }
@@ -346,7 +337,7 @@ struct SettingsView: View {
                 title: NSLocalizedString("Equalizer Presets", comment: "Equalizer presets section header"),
                 systemImage: "slider.horizontal.3"
             ) {
-                Text(NSLocalizedString("Equalizer presets are configured on the headset.", comment: "Equalizer presets help text"))
+                Text(NSLocalizedString("Fallback names are used only for supported presets without a device-reported name.", comment: "Equalizer fallback names help"))
                     .font(.subheadline)
                     .foregroundColor(.secondary)
 
@@ -356,8 +347,6 @@ struct SettingsView: View {
                             Text(preset)
                                 .foregroundColor(.secondary)
                             Spacer()
-                            Image(systemName: "checkmark")
-                                .foregroundColor(.secondary)
                         }
                         .padding(.vertical, 3)
                     }

@@ -78,3 +78,28 @@
 
 /* Cannot safely select a USB attachment */
 "Controls unavailable: device connection is not unique" = "Controles no disponibles: la conexión del dispositivo no es única";
+
+/* Settings validation and device feedback */
+"Discovery" = "Detección";
+"Control" = "Control";
+"Not supported" = "No compatible";
+"Device offline" = "Dispositivo desconectado";
+"Timed out" = "Tiempo de espera agotado";
+"HID communication failed" = "Error de comunicación HID";
+"Invalid parameter" = "Parámetro no válido";
+"Native operation failed" = "Error en la operación nativa";
+"Invalid device response" = "Respuesta del dispositivo no válida";
+"Invalid test profile" = "Perfil de prueba no válido";
+"Device connection changed or is ambiguous" = "La conexión del dispositivo ha cambiado o es ambigua";
+"Preset is not supported" = "Preajuste no compatible";
+"Operation cancelled" = "Operación cancelada";
+"Operation already in progress" = "La operación ya está en curso";
+"Charging" = "Cargando";
+"Unavailable" = "No disponible";
+"Unknown" = "Desconocido";
+"Preset %d" = "Preajuste %d";
+"Low-battery notifications are not authorized" = "Las notificaciones de batería baja no están autorizadas";
+"Low-battery notification could not be sent" = "No se pudo enviar la notificación de batería baja";
+"Retry refresh" = "Reintentar actualización";
+"Preset metadata unavailable" = "Metadatos de preajustes no disponibles";
+"Fallback names are used only for supported presets without a device-reported name." = "Los nombres alternativos solo se usan para preajustes compatibles cuyo dispositivo no proporciona un nombre.";
