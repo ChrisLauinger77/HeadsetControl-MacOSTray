@@ -81,7 +81,14 @@ updates `version`, the release tag's exact commit digest, and `channel: release`
 together. Digest-only, rollback and pin-only updates are disabled for this entry
 so the snapshot is not continually proposed for replacement by its old baseline.
 The inherited schedule/review settings, Actions digest pinning and `automerge: false`
-remain in place. HIDAPI dependency management is unchanged.
+remain in place. Only the `headsetcontrol` entry for `Sapd/HeadsetControl` is
+recognized by the contract's custom manager; a file-scoped rule also disables
+updates to all other contract entries. The macOS deployment floor, Xcode,
+HIDAPI version/linkage, schema and other metadata require manual changes.
+GitHub Actions runner-image updates (`github-runners`, including `macos-15`)
+are disabled separately: runner labels are detected by the built-in Actions
+manager, independently of the deployment floor. SHA-pinned `uses:` action
+references continue to receive normal reviewable updates.
 
 | Transition | Behavior |
 | --- | --- |
