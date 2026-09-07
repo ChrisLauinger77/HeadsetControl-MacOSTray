@@ -139,10 +139,10 @@ build paths and unexpected runpaths are rejected.
 The app is self-contained with respect to both native dependencies. Updating a
 user's Homebrew formulas cannot change its HID implementation or headset support.
 Fixes to either library require changing the manifest, reviewing the source and
-native profile expectations, and rebuilding/releasing the app. The existing Cask
-still depends on the headsetcontrol formula, whose HIDAPI dependency serves the
-standalone CLI. Removing that Cask dependency is a separate distribution decision;
-the automated cask update flow is unchanged.
+native profile expectations, and rebuilding/releasing the app. The Cask installs
+only the self-contained app; users who want the standalone CLI can install the
+official headsetcontrol formula separately. The automated cask update flow is
+unchanged.
 
 HIDAPI is redistributed under its BSD-style license. Its full notice is copied
 into `Contents/Resources/HIDAPI-LICENSE.txt`; packaging verifies it against the

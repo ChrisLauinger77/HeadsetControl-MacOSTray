@@ -36,27 +36,29 @@ installed separately for the tray app to run.
    ```
 3. Follow the first-launch instructions below if macOS blocks the app.
 
-The current Cask also installs the official HeadsetControl formula. That formula
-provides the standalone `headsetcontrol` command and its own dependencies; the
-tray app does not load them at runtime. No separate formula installation is
-required for the app. If you install the app directly from
+The Cask installs only the self-contained tray app and does not install the
+standalone `headsetcontrol` command. Install the official HeadsetControl formula
+in step 1 only if you want to use that CLI separately. If you install the app
+directly from
 [GitHub Releases](https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray/releases),
-you can skip step 1 entirely.
+you can also skip step 1 entirely.
 
 ## macOS Security Notice
 
 The universal macOS build supports Apple Silicon and Intel. It is ad-hoc signed but cannot
-be notarized without a paid Apple Developer Program membership. On first launch:
+be notarized without a paid Apple Developer Program membership. The Homebrew Cask
+automatically clears the quarantine attribute after installation. If macOS still blocks
+the app, or if you installed it directly from GitHub Releases:
 
 1. Control-click `HeadsetControl-MacOSTray.app` in Finder and choose **Open**.
 2. Confirm **Open** in the security dialog.
 
 If macOS still blocks the app, open **System Settings → Privacy & Security**, find the
-HeadsetControl-MacOSTray message, and choose **Open Anyway**.As a final option, remove the quarantine
-attribute from a build you downloaded from this repository and trust:
+HeadsetControl-MacOSTray message, and choose **Open Anyway**. As a final option, clear
+extended attributes from a build you downloaded from this repository and trust:
 
 ```sh
-xattr -dr com.apple.quarantine "/Applications/HeadsetControl-MacOSTray.app"
+xattr -cr "/Applications/HeadsetControl-MacOSTray.app"
 ```
 
 ## Update
