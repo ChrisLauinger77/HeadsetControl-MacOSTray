@@ -105,7 +105,8 @@ def validate_snapshot_pr(base, proposed, event, repository):
     pr = event.get("pull_request", {})
     head = pr.get("head", {})
     if (proposed != expected or pr.get("user", {}).get("login") != "github-actions[bot]"
-            or head.get("ref") != "codex/headsetcontrol-snapshot-" + current["revision"]
+            or not re.fullmatch(r"codex/headsetcontrol-snapshot-" + current["revision"]
+                                + r"-v" + VERSION.pattern, head.get("ref", ""))
             or head.get("repo", {}).get("full_name") != repository or not repository):
         raise ValueError("Select snapshots through the manual Update HeadsetControl snapshot workflow; "
                          "its PR may change only revision and channel")

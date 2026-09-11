@@ -18,12 +18,15 @@ class FakeGitHub:
 
     def __init__(self, current):
         self.contents = json.dumps(current, indent=2) + "\n"
+        self.project = ("// project fixture\n"
+                        "\t\t\t\tMARKETING_VERSION = 3.1.0;\n"
+                        "\t\t\t\tMARKETING_VERSION = 3.1.0;\n")
         self.base = "1" * 40
         self.branch = None
         self.commits = {self.base: {"tree": {"sha": "2" * 40}, "parents": []}}
         self.prs = []
         self.mutations = []
-        self.blob = None
+        self.blobs = {}
         self.fail_pr = False
 
     def call(self, path, data=None, optional=False):
@@ -35,15 +38,20 @@ class FakeGitHub:
             return {"object": {"sha": self.base}}
         if path.startswith("contents/build-contract.json?"):
             return {"content": base64.b64encode(self.contents.encode()).decode()}
+        if path.startswith("contents/HeadsetControl-MacOSTray.xcodeproj/project.pbxproj?"):
+            return {"content": base64.b64encode(self.project.encode()).decode()}
         if path.startswith("pulls?"):
             return copy.deepcopy(self.prs)
         if path.startswith("git/commits/"):
             return self.commits[path.rsplit('/', 1)[1]]
         if path == "git/blobs":
-            self.blob = base64.b64decode(data["content"]).decode()
-            return {"sha": hashlib.sha1(self.blob.encode()).hexdigest()}
+            contents = base64.b64decode(data["content"]).decode()
+            sha = hashlib.sha1(contents.encode()).hexdigest()
+            self.blobs[sha] = contents
+            return {"sha": sha}
         if path == "git/trees":
-            return {"sha": data["tree"][0]["sha"]}
+            encoded = json.dumps(data, sort_keys=True).encode()
+            return {"sha": hashlib.sha1(encoded).hexdigest()}
         if path.startswith("git/ref/heads/"):
             assert optional
             return {"object": {"sha": self.branch}} if self.branch else None
@@ -66,7 +74,7 @@ class FakeGitHub:
 
 
 class SnapshotUpdateTests(unittest.TestCase):
-    def test_release_and_snapshot_updates_change_only_two_fields(self):
+    def test_release_and_snapshot_updates_bump_the_app_patch_version(self):
         for channel in ("release", "snapshot"):
             before = contract(channel)
             api = FakeGitHub(before)
@@ -79,15 +87,35 @@ class SnapshotUpdateTests(unittest.TestCase):
             self.assertIn("Created snapshot PR", result)
             expected = copy.deepcopy(before)
             expected["headsetcontrol"].update(channel="snapshot", revision="b" * 40)
-            self.assertEqual(json.loads(api.blob), expected)
+            contract_blob = next(value for value in api.blobs.values() if value.startswith("{"))
+            project_blob = next(value for value in api.blobs.values() if value.startswith("// project"))
+            self.assertEqual(json.loads(contract_blob), expected)
+            self.assertEqual(project_blob.count("MARKETING_VERSION = 3.1.1;"), 2)
+            self.assertNotIn("MARKETING_VERSION = 3.1.0;", project_blob)
             validate.assert_called_once_with(expected, before)
             prs = [data for path, data in api.mutations if path == "pulls"]
             self.assertEqual(len(prs), 1)
-            self.assertEqual(prs[0]["head"], "codex/headsetcontrol-snapshot-" + "b" * 40)
-            for text in ("4.1.0", "a" * 40, "b" * 40, f"Previous channel: `{channel}`", "New channel: `snapshot`", "SHA-pinned"):
+            self.assertEqual(prs[0]["head"], "codex/headsetcontrol-snapshot-" + "b" * 40 + "-v3.1.1")
+            for text in ("4.1.0", "a" * 40, "b" * 40, f"Previous channel: `{channel}`",
+                         "New channel: `snapshot`", "Application version: `3.1.0` → `3.1.1`", "SHA-pinned"):
                 self.assertIn(text, prs[0]["body"])
             trees = [data for path, data in api.mutations if path == "git/trees"]
-            self.assertEqual([item["path"] for item in trees[0]["tree"]], ["build-contract.json"])
+            self.assertEqual([item["path"] for item in trees[0]["tree"]], [
+                "build-contract.json", "HeadsetControl-MacOSTray.xcodeproj/project.pbxproj"
+            ])
+
+    def test_marketing_version_bump_requires_two_matching_semantic_versions(self):
+        source = "MARKETING_VERSION = 3.0.2;\n  MARKETING_VERSION = 3.0.2;\n"
+        updated, old, new = updater.bump_marketing_version(source)
+        self.assertEqual((old, new), ("3.0.2", "3.0.3"))
+        self.assertEqual(updated, "MARKETING_VERSION = 3.0.3;\n  MARKETING_VERSION = 3.0.3;\n")
+        for invalid in (
+            "MARKETING_VERSION = 3.0.2;\n",
+            "MARKETING_VERSION = 3.0.2;\nMARKETING_VERSION = 3.0.3;\n",
+            "MARKETING_VERSION = 3.0;\nMARKETING_VERSION = 3.0;\n",
+        ):
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(ValueError, "exactly two identical"):
+                updater.bump_marketing_version(invalid)
 
     def test_noop_and_duplicate_pr_have_no_mutations(self):
         api = FakeGitHub(contract("snapshot", "b" * 40))

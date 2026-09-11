@@ -11,6 +11,14 @@ from urllib.parse import quote, urlencode
 
 from dependency_channels import SHA, git, read_contract, validate_remote
 
+PROJECT_PATH = "HeadsetControl-MacOSTray.xcodeproj/project.pbxproj"
+MARKETING_VERSION = re.compile(
+    r"^(?P<prefix>\s*MARKETING_VERSION\s*=\s*)"
+    r"(?P<major>0|[1-9][0-9]*)\.(?P<minor>0|[1-9][0-9]*)\.(?P<patch>0|[1-9][0-9]*)"
+    r"(?P<suffix>;\s*)$",
+    re.MULTILINE,
+)
+
 
 class GitHub:
     def __init__(self, repository):
@@ -59,6 +67,20 @@ def snapshot_content(contents, revision):
     return updated
 
 
+def bump_marketing_version(contents):
+    matches = list(MARKETING_VERSION.finditer(contents))
+    versions = {(match["major"], match["minor"], match["patch"]) for match in matches}
+    if len(matches) != 2 or len(versions) != 1:
+        raise ValueError("Project must contain exactly two identical major.minor.patch MARKETING_VERSION values")
+    major, minor, patch = matches[0]["major"], matches[0]["minor"], matches[0]["patch"]
+    old_version = f"{major}.{minor}.{patch}"
+    new_version = f"{major}.{minor}.{int(patch) + 1}"
+    updated = MARKETING_VERSION.sub(
+        lambda match: match["prefix"] + new_version + match["suffix"], contents
+    )
+    return updated, old_version, new_version
+
+
 def update_snapshot(api, resolve=resolve_head, validate=validate_remote):
     repo = api.call("")
     default_branch = repo["default_branch"]
@@ -75,7 +97,10 @@ def update_snapshot(api, resolve=resolve_head, validate=validate_remote):
         raise ValueError("Upstream HEAD did not resolve to a full commit SHA")
     if old["revision"] == revision and old["channel"] == "snapshot":
         return "Already pinned to this snapshot; no update needed"
-    branch = "codex/headsetcontrol-snapshot-" + revision
+    project_file = api.call("contents/" + PROJECT_PATH + "?" + urlencode({"ref": base_sha}))
+    project_contents = base64.b64decode(project_file["content"]).decode()
+    updated_project, old_app_version, new_app_version = bump_marketing_version(project_contents)
+    branch = f"codex/headsetcontrol-snapshot-{revision}-v{new_app_version}"
     query = urlencode({"state": "open", "head": api.repository.split('/')[0] + ":" + branch,
                        "per_page": 100})
     prs = api.call("pulls?" + query)
@@ -86,9 +111,16 @@ def update_snapshot(api, resolve=resolve_head, validate=validate_remote):
     updated = snapshot_content(contents, revision)
     validate(read_contract(updated), current)
     base = api.call("git/commits/" + base_sha)
-    blob = api.call("git/blobs", {"content": base64.b64encode(updated.encode()).decode(), "encoding": "base64"})
+    contract_blob = api.call("git/blobs", {
+        "content": base64.b64encode(updated.encode()).decode(), "encoding": "base64"
+    })
+    project_blob = api.call("git/blobs", {
+        "content": base64.b64encode(updated_project.encode()).decode(), "encoding": "base64"
+    })
     tree = api.call("git/trees", {"base_tree": base["tree"]["sha"], "tree": [
-        {"path": "build-contract.json", "mode": "100644", "type": "blob", "sha": blob["sha"]}]})
+        {"path": "build-contract.json", "mode": "100644", "type": "blob", "sha": contract_blob["sha"]},
+        {"path": PROJECT_PATH, "mode": "100644", "type": "blob", "sha": project_blob["sha"]},
+    ]})
     existing = api.call("git/ref/heads/" + quote(branch, safe=""), optional=True)
     if existing:
         commit = api.call("git/commits/" + existing["object"]["sha"])
@@ -105,6 +137,7 @@ def update_snapshot(api, resolve=resolve_head, validate=validate_remote):
 - New snapshot revision: `{revision}`
 - Previous channel: `{old['channel']}`
 - New channel: `snapshot`
+- Application version: `{old_app_version}` → `{new_app_version}`
 
 The build remains SHA-pinned. HEAD was resolved once for this manual request;
 CI and release builds consume the recorded SHA and never follow floating HEAD.

@@ -78,7 +78,7 @@ class ChannelContractTests(unittest.TestCase):
     def test_only_manual_workflow_prs_can_select_a_snapshot(self):
         selected = contract("snapshot", "b" * 40)
         event = {"pull_request": {"user": {"login": "github-actions[bot]"}, "head": {
-            "ref": "codex/headsetcontrol-snapshot-" + "b" * 40,
+            "ref": "codex/headsetcontrol-snapshot-" + "b" * 40 + "-v3.1.1",
             "repo": {"full_name": "owner/app"}}}}
         for previous in (contract(), contract("snapshot", "c" * 40)):
             channels.validate_snapshot_pr(previous, selected, event, "owner/app")

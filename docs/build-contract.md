@@ -62,10 +62,12 @@ prepare them using the existing helper's `--fetch-only` option while online.
 To select a snapshot, run **Actions → Update HeadsetControl snapshot → Run workflow**
 from the default branch. The workflow reads the repository URL from this contract,
 resolves HEAD once to a full SHA, and opens a PR changing only `revision` and
-`channel`. The version is preserved. The branch name contains the complete target
-SHA; repeated requests reuse an open PR or exit if that snapshot is already
-selected. Runs are serialized. An interrupted run can reuse an unchanged branch;
-conflicting branch content is never force-pushed or deleted automatically.
+`channel` in the contract while incrementing both project `MARKETING_VERSION`
+settings by one patch version. The HeadsetControl baseline version is preserved.
+The branch name contains the complete target SHA and new application version;
+repeated requests reuse an open PR or exit if that snapshot is already selected.
+Runs are serialized. An interrupted run can reuse an unchanged branch; conflicting
+branch content is never force-pushed or deleted automatically.
 CI accepts snapshot selection only from the updater's same-repository bot PR
 with that deterministic branch name and the two allowed contract-field changes.
 Ordinary feature PRs can still build against an already selected snapshot.
