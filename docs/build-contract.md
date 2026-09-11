@@ -63,7 +63,10 @@ To select a snapshot, run **Actions → Update HeadsetControl snapshot → Run w
 from the default branch. The workflow reads the repository URL from this contract,
 resolves HEAD once to a full SHA, and opens a PR changing only `revision` and
 `channel` in the contract while incrementing both project `MARKETING_VERSION`
-settings by one patch version. The HeadsetControl baseline version is preserved.
+settings by one patch version. It also updates `BuildNumber.xcconfig` to the
+workflow's creation time in `YYMMDD.hhmm` format using the `Europe/Berlin`
+timezone. Rerun attempts therefore reuse the same build number. The
+HeadsetControl baseline version is preserved.
 The branch name contains the complete target SHA and new application version;
 repeated requests reuse an open PR or exit if that snapshot is already selected.
 Runs are serialized. An interrupted run can reuse an unchanged branch; conflicting

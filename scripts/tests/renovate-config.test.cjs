@@ -196,6 +196,7 @@ test('workflow YAML is valid, actions are SHA-pinned, and snapshot selection is 
     const snapshot = workflows['update-headsetcontrol.yml'];
     assert.deepEqual(Object.keys(snapshot.on), ['workflow_dispatch']);
     assert.equal(snapshot.concurrency['cancel-in-progress'], false);
+    assert.equal(snapshot.permissions.actions, 'read');
     const job = snapshot.jobs['update-headsetcontrol-snapshot'];
     assert.match(job.if, /github\.event\.repository\.default_branch/);
     assert.ok(job.steps.some(step => step.run === 'python3 -B scripts/update_headsetcontrol.py'));

@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import unittest
+from datetime import timedelta, timezone
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -21,6 +22,7 @@ class FakeGitHub:
         self.project = ("// project fixture\n"
                         "\t\t\t\tMARKETING_VERSION = 3.1.0;\n"
                         "\t\t\t\tMARKETING_VERSION = 3.1.0;\n")
+        self.build_number = "CURRENT_PROJECT_VERSION = 260906.1700\n"
         self.base = "1" * 40
         self.branch = None
         self.commits = {self.base: {"tree": {"sha": "2" * 40}, "parents": []}}
@@ -40,6 +42,8 @@ class FakeGitHub:
             return {"content": base64.b64encode(self.contents.encode()).decode()}
         if path.startswith("contents/HeadsetControl-MacOSTray.xcodeproj/project.pbxproj?"):
             return {"content": base64.b64encode(self.project.encode()).decode()}
+        if path.startswith("contents/HeadsetControl-MacOSTray/BuildNumber.xcconfig?"):
+            return {"content": base64.b64encode(self.build_number.encode()).decode()}
         if path.startswith("pulls?"):
             return copy.deepcopy(self.prs)
         if path.startswith("git/commits/"):
@@ -83,25 +87,30 @@ class SnapshotUpdateTests(unittest.TestCase):
                 return "b" * 40
             with patch.object(updater, "validate_remote") as validate:
                 # Pass the validation seam explicitly; production defaults always validate Git metadata.
-                result = updater.update_snapshot(api, resolve, validate)
+                result = updater.update_snapshot(api, resolve, validate, "260911.0745")
             self.assertIn("Created snapshot PR", result)
             expected = copy.deepcopy(before)
             expected["headsetcontrol"].update(channel="snapshot", revision="b" * 40)
             contract_blob = next(value for value in api.blobs.values() if value.startswith("{"))
             project_blob = next(value for value in api.blobs.values() if value.startswith("// project"))
+            build_blob = next(value for value in api.blobs.values()
+                              if value.startswith("CURRENT_PROJECT_VERSION"))
             self.assertEqual(json.loads(contract_blob), expected)
             self.assertEqual(project_blob.count("MARKETING_VERSION = 3.1.1;"), 2)
             self.assertNotIn("MARKETING_VERSION = 3.1.0;", project_blob)
+            self.assertEqual(build_blob, "CURRENT_PROJECT_VERSION = 260911.0745\n")
             validate.assert_called_once_with(expected, before)
             prs = [data for path, data in api.mutations if path == "pulls"]
             self.assertEqual(len(prs), 1)
             self.assertEqual(prs[0]["head"], "codex/headsetcontrol-snapshot-" + "b" * 40 + "-v3.1.1")
             for text in ("4.1.0", "a" * 40, "b" * 40, f"Previous channel: `{channel}`",
-                         "New channel: `snapshot`", "Application version: `3.1.0` → `3.1.1`", "SHA-pinned"):
+                         "New channel: `snapshot`", "Application version: `3.1.0` → `3.1.1`",
+                         "Build number: `260911.0745`", "SHA-pinned"):
                 self.assertIn(text, prs[0]["body"])
             trees = [data for path, data in api.mutations if path == "git/trees"]
             self.assertEqual([item["path"] for item in trees[0]["tree"]], [
-                "build-contract.json", "HeadsetControl-MacOSTray.xcodeproj/project.pbxproj"
+                "build-contract.json", "HeadsetControl-MacOSTray.xcodeproj/project.pbxproj",
+                "HeadsetControl-MacOSTray/BuildNumber.xcconfig"
             ])
 
     def test_marketing_version_bump_requires_two_matching_semantic_versions(self):
@@ -117,6 +126,25 @@ class SnapshotUpdateTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaisesRegex(ValueError, "exactly two identical"):
                 updater.bump_marketing_version(invalid)
 
+    def test_build_number_uses_workflow_creation_time_and_validates_the_file(self):
+        api = FakeGitHub(contract())
+        api.call = lambda path: {"created_at": "2026-09-11T05:45:29Z"}
+        berlin_summer_time = timezone(timedelta(hours=2))
+        with (patch.dict(updater.os.environ, {"GITHUB_RUN_ID": "34566780200"}),
+              patch.object(updater, "ZoneInfo", return_value=berlin_summer_time)):
+            self.assertEqual(updater.workflow_build_number(api), "260911.0745")
+        self.assertEqual(
+            updater.update_build_number("CURRENT_PROJECT_VERSION = 260906.1700\n", "260911.0745"),
+            "CURRENT_PROJECT_VERSION = 260911.0745\n",
+        )
+        for contents, value in (
+            ("CURRENT_PROJECT_VERSION = 260906.1700\n", "20260911.0745"),
+            ("CURRENT_PROJECT_VERSION = 1\n", "260911.0745"),
+            ("OTHER = 260906.1700\n", "260911.0745"),
+        ):
+            with self.subTest(contents=contents, value=value), self.assertRaisesRegex(ValueError, "Build"):
+                updater.update_build_number(contents, value)
+
     def test_noop_and_duplicate_pr_have_no_mutations(self):
         api = FakeGitHub(contract("snapshot", "b" * 40))
         self.assertIn("no update needed", updater.update_snapshot(api, lambda repo: "b" * 40))
@@ -131,20 +159,20 @@ class SnapshotUpdateTests(unittest.TestCase):
         api.fail_pr = True
         validate = lambda *args: None
         with self.assertRaisesRegex(ValueError, "interrupted"):
-            updater.update_snapshot(api, lambda repo: "b" * 40, validate)
+            updater.update_snapshot(api, lambda repo: "b" * 40, validate, "260911.0745")
         api.fail_pr = False
-        updater.update_snapshot(api, lambda repo: "b" * 40, validate)
+        updater.update_snapshot(api, lambda repo: "b" * 40, validate, "260911.0745")
         self.assertEqual(sum(path == "git/refs" for path, data in api.mutations), 1)
         self.assertEqual(sum(path == "git/commits" for path, data in api.mutations), 1)
         previous = len(api.mutations)
-        updater.update_snapshot(api, lambda repo: "b" * 40, validate)
+        updater.update_snapshot(api, lambda repo: "b" * 40, validate, "260911.0745")
         self.assertEqual(len(api.mutations), previous)
 
     def test_conflicting_branch_and_failed_validation_never_create_pr(self):
         api = FakeGitHub(contract())
         api.branch = api.base
         with self.assertRaisesRegex(ValueError, "never overwrite"):
-            updater.update_snapshot(api, lambda repo: "b" * 40, lambda *args: None)
+            updater.update_snapshot(api, lambda repo: "b" * 40, lambda *args: None, "260911.0745")
         self.assertFalse(any(path in ("pulls", "git/refs", "git/commits") for path, data in api.mutations))
         api = FakeGitHub(contract())
         def invalid(*args):

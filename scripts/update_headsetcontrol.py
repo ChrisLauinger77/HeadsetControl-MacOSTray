@@ -7,17 +7,21 @@ import os
 import re
 import subprocess
 import sys
+from datetime import datetime
 from urllib.parse import quote, urlencode
+from zoneinfo import ZoneInfo
 
 from dependency_channels import SHA, git, read_contract, validate_remote
 
 PROJECT_PATH = "HeadsetControl-MacOSTray.xcodeproj/project.pbxproj"
+BUILD_NUMBER_PATH = "HeadsetControl-MacOSTray/BuildNumber.xcconfig"
 MARKETING_VERSION = re.compile(
     r"^(?P<prefix>\s*MARKETING_VERSION\s*=\s*)"
     r"(?P<major>0|[1-9][0-9]*)\.(?P<minor>0|[1-9][0-9]*)\.(?P<patch>0|[1-9][0-9]*)"
     r"(?P<suffix>;\s*)$",
     re.MULTILINE,
 )
+BUILD_NUMBER = re.compile(r"[0-9]{6}\.[0-9]{4}")
 
 
 class GitHub:
@@ -81,7 +85,34 @@ def bump_marketing_version(contents):
     return updated, old_version, new_version
 
 
-def update_snapshot(api, resolve=resolve_head, validate=validate_remote):
+def update_build_number(contents, value):
+    if not isinstance(value, str) or not BUILD_NUMBER.fullmatch(value):
+        raise ValueError("Build number must use YYMMDD.hhmm format")
+    match = re.fullmatch(
+        r"(?P<prefix>[ \t]*CURRENT_PROJECT_VERSION[ \t]*=[ \t]*)"
+        r"[0-9]{6}\.[0-9]{4}(?P<suffix>[ \t]*(?:\r?\n)?)",
+        contents,
+    )
+    if not match:
+        raise ValueError("BuildNumber.xcconfig must contain one YYMMDD.hhmm CURRENT_PROJECT_VERSION")
+    return match["prefix"] + value + match["suffix"]
+
+
+def workflow_build_number(api):
+    run_id = os.environ.get("GITHUB_RUN_ID", "")
+    if not re.fullmatch(r"[1-9][0-9]*", run_id):
+        raise ValueError("GITHUB_RUN_ID must identify the current workflow run")
+    created_at = api.call("actions/runs/" + run_id)["created_at"]
+    try:
+        timestamp = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    except (AttributeError, ValueError) as error:
+        raise ValueError("Workflow run has an invalid creation timestamp") from error
+    if timestamp.tzinfo is None:
+        raise ValueError("Workflow run creation timestamp must include a timezone")
+    return timestamp.astimezone(ZoneInfo("Europe/Berlin")).strftime("%y%m%d.%H%M")
+
+
+def update_snapshot(api, resolve=resolve_head, validate=validate_remote, build_number=None):
     repo = api.call("")
     default_branch = repo["default_branch"]
     base_ref = api.call("git/ref/heads/" + quote(default_branch, safe=""))
@@ -110,6 +141,10 @@ def update_snapshot(api, resolve=resolve_head, validate=validate_remote):
         return "Existing snapshot PR: " + prs[0]["html_url"]
     updated = snapshot_content(contents, revision)
     validate(read_contract(updated), current)
+    build_file = api.call("contents/" + BUILD_NUMBER_PATH + "?" + urlencode({"ref": base_sha}))
+    build_contents = base64.b64decode(build_file["content"]).decode()
+    new_build_number = workflow_build_number(api) if build_number is None else build_number
+    updated_build = update_build_number(build_contents, new_build_number)
     base = api.call("git/commits/" + base_sha)
     contract_blob = api.call("git/blobs", {
         "content": base64.b64encode(updated.encode()).decode(), "encoding": "base64"
@@ -117,9 +152,13 @@ def update_snapshot(api, resolve=resolve_head, validate=validate_remote):
     project_blob = api.call("git/blobs", {
         "content": base64.b64encode(updated_project.encode()).decode(), "encoding": "base64"
     })
+    build_blob = api.call("git/blobs", {
+        "content": base64.b64encode(updated_build.encode()).decode(), "encoding": "base64"
+    })
     tree = api.call("git/trees", {"base_tree": base["tree"]["sha"], "tree": [
         {"path": "build-contract.json", "mode": "100644", "type": "blob", "sha": contract_blob["sha"]},
         {"path": PROJECT_PATH, "mode": "100644", "type": "blob", "sha": project_blob["sha"]},
+        {"path": BUILD_NUMBER_PATH, "mode": "100644", "type": "blob", "sha": build_blob["sha"]},
     ]})
     existing = api.call("git/ref/heads/" + quote(branch, safe=""), optional=True)
     if existing:
@@ -138,6 +177,7 @@ def update_snapshot(api, resolve=resolve_head, validate=validate_remote):
 - Previous channel: `{old['channel']}`
 - New channel: `snapshot`
 - Application version: `{old_app_version}` → `{new_app_version}`
+- Build number: `{new_build_number}`
 
 The build remains SHA-pinned. HEAD was resolved once for this manual request;
 CI and release builds consume the recorded SHA and never follow floating HEAD.
