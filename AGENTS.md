@@ -61,7 +61,11 @@ The app sandbox is disabled because headset/HID access is required.
 
 ## Release Workflow
 
-When asked to create a release, update the project version, commit the version change, push the commit, and add/push the matching release tag.
+When asked to create release `X.Y.Z`, update both `MARKETING_VERSION` entries in
+`HeadsetControl-MacOSTray.xcodeproj/project.pbxproj` to `X.Y.Z`. Do not manually
+change `CURRENT_PROJECT_VERSION`; the build number is generated separately.
+Commit and push the version change, then create and push the matching `vX.Y.Z`
+release tag.
 
 Example request:
 
@@ -72,7 +76,7 @@ create release 3.0.0
 Expected actions:
 
 ```sh
-git commit -am "Bump version to 3.0.0"
+git commit -am "chore(release): Bump version to 3.0.0"
 git push
 git tag v3.0.0
 git push origin v3.0.0
