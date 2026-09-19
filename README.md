@@ -1,9 +1,9 @@
 # HeadsetControl-MacOSTray
 
-[![Github Latest Releases](https://img.shields.io/github/downloads/ChrisLauinger77/HeadsetControl-MacOSTray/latest/total)]()
-[![Version](https://img.shields.io/github/v/release/ChrisLauinger77/HeadsetControl-MacOSTray)]()
-[![Github All Releases](https://img.shields.io/github/downloads/ChrisLauinger77/HeadsetControl-MacOSTray/total.svg)]()
-[![license](https://img.shields.io/github/license/ChrisLauinger77/HeadsetControl-MacOSTray)]()
+[![Desktop checks](https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray/actions/workflows/swift.yml/badge.svg)](https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/github/v/release/ChrisLauinger77/HeadsetControl-MacOSTray)](<>)
+[![Github All Releases](https://img.shields.io/github/downloads/ChrisLauinger77/HeadsetControl-MacOSTray/total.svg)](<>)
+[![license](https://img.shields.io/github/license/ChrisLauinger77/HeadsetControl-MacOSTray)](<>)
 
 <img src="https://raw.githubusercontent.com/ChrisLauinger77/HeadsetControl-MacOSTray/main/HeadsetControl-MacOSTray/Assets.xcassets/AppIconLight.imageset/AppIconLight.png" alt="Light app icon" width="128"> <img src="https://raw.githubusercontent.com/ChrisLauinger77/HeadsetControl-MacOSTray/main/HeadsetControl-MacOSTray/Assets.xcassets/AppIconDark.imageset/AppIconDark.png" alt="Dark app icon" width="128">
 
