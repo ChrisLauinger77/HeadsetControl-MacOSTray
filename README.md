@@ -1,6 +1,6 @@
 # HeadsetControl-MacOSTray
 
-[![CI](https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray/actions/workflows/swift.yml/badge.svg)](https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray/actions/workflows/ci.yml)
+[![CI](https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray/actions/workflows/swift.yml/badge.svg)](https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray/actions/workflows/swift.yml)
 [![Version](https://img.shields.io/github/v/release/ChrisLauinger77/HeadsetControl-MacOSTray)](<>)
 [![Github All Releases](https://img.shields.io/github/downloads/ChrisLauinger77/HeadsetControl-MacOSTray/total.svg)](<>)
 [![license](https://img.shields.io/github/license/ChrisLauinger77/HeadsetControl-MacOSTray)](<>)
