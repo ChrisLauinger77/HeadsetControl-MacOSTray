@@ -9,6 +9,9 @@
 
 HeadsetControl-MacOSTray is a macOS background application that uses the [headsetcontrol](https://github.com/Sapd/HeadsetControl) library to talk directly to [supported headsets](https://github.com/Sapd/HeadsetControl?tab=readme-ov-file#supported-devices). It provides a convenient status bar menu to display headset battery, chatmix, and device information, and allows quick access to settings and refresh actions.
 
+The project homepage is in [`docs/index.html`](docs/index.html). See the
+[GitHub Pages publishing notes](docs/PAGES.md) to preview or deploy it.
+
 ## Preconditions
 
 1. macOS 14.0 (Sonoma) or later, on Apple Silicon or Intel
