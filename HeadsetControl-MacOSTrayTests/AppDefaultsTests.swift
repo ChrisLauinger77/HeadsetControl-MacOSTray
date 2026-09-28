@@ -2,6 +2,21 @@ import XCTest
 @testable import HeadsetControl_MacOSTray
 
 final class AppDefaultsTests: XCTestCase {
+    func testLanguageSelectionOverridesAndRestoresSystemPreference() throws {
+        let name = "HeadsetLanguageTests.\(UUID())"
+        let store = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { store.removePersistentDomain(forName: name) }
+
+        XCTAssertEqual(AppDefaults.selectedLanguage(in: store, domain: name), "")
+        AppDefaults.setLanguage("de", in: store)
+        XCTAssertEqual(AppDefaults.selectedLanguage(in: store, domain: name), "de")
+        XCTAssertEqual(store.persistentDomain(forName: name)?["AppleLanguages"] as? [String], ["de"])
+
+        AppDefaults.setLanguage("", in: store)
+        XCTAssertEqual(AppDefaults.selectedLanguage(in: store, domain: name), "")
+        XCTAssertNil(store.persistentDomain(forName: name)?["AppleLanguages"])
+    }
+
     func testSnapshotAgeUsesTheValidatedIntervalAndGrace() {
         for (interval, threshold) in [(60, 120), (300, 360), (900, 960), (3600, 3660)] {
             XCTAssertEqual(AppDefaults.snapshotMaximumAge(for: interval), Double(threshold))

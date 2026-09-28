@@ -27,10 +27,14 @@
 "Comma-separated list of preset names." = "Comma-separated list of preset names.";
 "Device" = "Device";
 "Disabled" = "Disabled";
+"Deutsch" = "Deutsch";
 "Equalizer" = "Equalizer";
 "Equalizer Preset" = "Equalizer Preset";
 "Equalizer Presets" = "Equalizer Presets";
 "Equalizer presets are configured on the headset." = "Equalizer presets are configured on the headset.";
+"English" = "English";
+"Español" = "Español";
+"Français" = "Français";
 "General" = "General";
 "General Settings" = "General Settings";
 "GitHub Repository" = "GitHub Repository";
@@ -39,6 +43,7 @@
 "High" = "High";
 "High:" = "High:";
 "Inactive Time" = "Inactive Time";
+"Language:" = "Language:";
 "Lights" = "Lights";
 "Low" = "Low";
 "Low battery notification message" = "Battery level is low (%d%%). Please charge your headset.";
@@ -62,8 +67,10 @@
 "Quit" = "Quit";
 "Refresh" = "Refresh";
 "Rotate to Mute" = "Rotate to Mute";
+"Restart the app to apply the language change." = "Restart the app to apply the language change.";
 "Settings or main app window" = "Settings or main app window";
 "Settings..." = "Settings...";
+"System" = "System";
 "Sidetone" = "Sidetone";
 "Sidetone Level Values" = "Sidetone Level Values";
 "Test Mode:" = "Test Mode:";

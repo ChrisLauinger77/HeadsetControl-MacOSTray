@@ -27,10 +27,14 @@
 "Comma-separated list of preset names." = "Liste de noms de préréglages séparés par des virgules.";
 "Device" = "Appareil";
 "Disabled" = "Désactivé";
+"Deutsch" = "Deutsch";
 "Equalizer" = "Égaliseur";
 "Equalizer Preset" = "Préréglage de l'égaliseur";
 "Equalizer Presets" = "Préréglages de l'égaliseur";
 "Equalizer presets are configured on the headset." = "Les préréglages de l'égaliseur sont configurés sur le casque.";
+"English" = "English";
+"Español" = "Español";
+"Français" = "Français";
 "General" = "Général";
 "General Settings" = "Réglages généraux";
 "GitHub Repository" = "Dépôt GitHub";
@@ -39,6 +43,7 @@
 "High" = "Élevé";
 "High:" = "Élevé :";
 "Inactive Time" = "Temps d'inactivité";
+"Language:" = "Langue :";
 "Lights" = "Éclairage";
 "Low" = "Faible";
 "Low battery notification message" = "Le niveau de batterie est faible (%d%%). Veuillez recharger votre casque.";
@@ -62,8 +67,10 @@
 "Quit" = "Quitter";
 "Refresh" = "Actualiser";
 "Rotate to Mute" = "Pivoter pour couper le micro";
+"Restart the app to apply the language change." = "Redémarrez l’app pour appliquer le changement de langue.";
 "Settings or main app window" = "Fenêtre des réglages ou fenêtre principale de l'app";
 "Settings..." = "Réglages...";
+"System" = "Système";
 "Sidetone" = "Retour micro";
 "Sidetone Level Values" = "Valeurs du retour micro";
 "Test Mode:" = "Mode de test :";
