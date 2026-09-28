@@ -36,6 +36,10 @@ struct SettingsSection<Content: View>: View {
 struct SettingsView: View {
     @State private var nativeVersions: NativeDependencyVersions?
     @State private var requestedNativeVersions = false
+    @State private var selectedLanguage = AppDefaults.selectedLanguage(
+        in: AppDefaults.standard, domain: Bundle.main.bundleIdentifier ?? ""
+    )
+    @State private var languageRestartRequired = false
     @AppStorage("sidetoneOff", store: AppDefaults.standard) var sidetoneOff: Int = AppDefaults.sidetoneValues[0]
     @AppStorage("sidetoneLow", store: AppDefaults.standard) var sidetoneLow: Int = AppDefaults.sidetoneValues[1]
     @AppStorage("sidetoneMid", store: AppDefaults.standard) var sidetoneMid: Int = AppDefaults.sidetoneValues[2]
@@ -177,6 +181,33 @@ struct SettingsView: View {
                     title: NSLocalizedString("General Settings", comment: "General settings section header"),
                     systemImage: "gearshape"
                 ) {
+                    HStack(alignment: .center, spacing: 12) {
+                        settingsLabel(NSLocalizedString("Language:", comment: "App language label"))
+                        Picker("", selection: $selectedLanguage) {
+                            Text(NSLocalizedString("System", comment: "Follow the system language"))
+                                .tag("")
+                            Text(NSLocalizedString("English", comment: "English language name"))
+                                .tag("en")
+                            Text(NSLocalizedString("Deutsch", comment: "German language name"))
+                                .tag("de")
+                            Text(NSLocalizedString("Español", comment: "Spanish language name"))
+                                .tag("es")
+                            Text(NSLocalizedString("Français", comment: "French language name"))
+                                .tag("fr")
+                        }
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: 260, alignment: .leading)
+                        .onChange(of: selectedLanguage) { _, newValue in
+                            AppDefaults.setLanguage(newValue, in: AppDefaults.standard)
+                            languageRestartRequired = true
+                        }
+                    }
+                    if languageRestartRequired {
+                        Text(NSLocalizedString("Restart the app to apply the language change.", comment: "Language change restart notice"))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
                     HStack(alignment: .center, spacing: 12) {
                         settingsLabel(NSLocalizedString("Test Mode:", comment: "Test mode label"))
                         Picker("", selection: Binding(get: { AppDefaults.validatedTestProfile(testMode) }, set: { testMode = AppDefaults.validatedTestProfile($0) })) {

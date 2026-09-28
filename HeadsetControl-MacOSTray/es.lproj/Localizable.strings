@@ -27,10 +27,14 @@
 "Comma-separated list of preset names." = "Lista de nombres de preajustes separados por comas.";
 "Device" = "Dispositivo";
 "Disabled" = "Desactivado";
+"Deutsch" = "Deutsch";
 "Equalizer" = "Ecualizador";
 "Equalizer Preset" = "Preajuste del ecualizador";
 "Equalizer Presets" = "Preajustes del ecualizador";
 "Equalizer presets are configured on the headset." = "Los preajustes del ecualizador se configuran en los auriculares.";
+"English" = "English";
+"Español" = "Español";
+"Français" = "Français";
 "General" = "General";
 "General Settings" = "Ajustes generales";
 "GitHub Repository" = "Repositorio de GitHub";
@@ -39,6 +43,7 @@
 "High" = "Alto";
 "High:" = "Alto:";
 "Inactive Time" = "Tiempo de inactividad";
+"Language:" = "Idioma:";
 "Lights" = "Luces";
 "Low" = "Bajo";
 "Low battery notification message" = "El nivel de batería es bajo (%d%%). Por favor, carga los auriculares.";
@@ -62,8 +67,10 @@
 "Quit" = "Salir";
 "Refresh" = "Actualizar";
 "Rotate to Mute" = "Girar para silenciar";
+"Restart the app to apply the language change." = "Reinicia la app para aplicar el cambio de idioma.";
 "Settings or main app window" = "Ventana de ajustes o ventana principal de la app";
 "Settings..." = "Ajustes...";
+"System" = "Sistema";
 "Sidetone" = "Retorno del micrófono";
 "Sidetone Level Values" = "Valores del retorno del micrófono";
 "Test Mode:" = "Modo de prueba:";

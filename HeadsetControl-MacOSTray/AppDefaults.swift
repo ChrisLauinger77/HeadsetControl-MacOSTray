@@ -16,6 +16,21 @@ nonisolated enum AppDefaults {
     static let equalizerPresets = "Preset 1,Preset 2,Preset 3,Preset 4"
     static let inactiveTimeOptions = [1, 2, 5, 10, 15, 30, 45, 60, 75, 90]
     static var inactiveTimeOptionsRaw: String { inactiveTimeOptions.map(String.init).joined(separator: ",") }
+    static let supportedLanguages = ["en", "de", "es", "fr"]
+
+    static func selectedLanguage(in store: UserDefaults, domain: String) -> String {
+        guard let languages = store.persistentDomain(forName: domain)?["AppleLanguages"] as? [String],
+              let language = languages.first, supportedLanguages.contains(language) else { return "" }
+        return language
+    }
+
+    static func setLanguage(_ language: String, in store: UserDefaults) {
+        if supportedLanguages.contains(language) {
+            store.set([language], forKey: "AppleLanguages")
+        } else {
+            store.removeObject(forKey: "AppleLanguages")
+        }
+    }
 
     // Evaluated before any @AppStorage access, including Settings previews.
     static let standard: UserDefaults = {
