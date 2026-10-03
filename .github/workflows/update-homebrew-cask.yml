@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Dispatch cask update
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_CASK_PUSH_TOKEN }}
+          GH_TOKEN: ${{ secrets.PACKAGE_REPOSITORIES_TOKEN }}
         run: |
           curl --fail-with-body --silent --show-error \
             --request POST \
