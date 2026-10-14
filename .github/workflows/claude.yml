@@ -19,7 +19,7 @@ jobs:
       issues: write
       id-token: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 1
       - uses: anthropics/claude-code-action@34968b5981d5d170904281aa3df6f3c0d4a28855 # v1
