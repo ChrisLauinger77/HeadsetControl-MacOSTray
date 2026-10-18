@@ -164,7 +164,7 @@ class NativeContractTests(unittest.TestCase):
 
     def test_workflows_share_build_contract(self):
         root = Path(__file__).resolve().parents[2]
-        for name in ("swift.yml", "release.yml"):
+        for name in ("ci.yml", "release.yml"):
             workflow = (root / ".github/workflows" / name).read_text()
             self.assertIn("scripts/build-native-app.py", workflow)
             self.assertIn(f"/Applications/Xcode_{native.CONTRACT['xcode']['version']}.app", workflow)

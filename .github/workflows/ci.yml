@@ -1,22 +1,17 @@
 name: CI
 
 on:
-  push:
-    branches: ["main"]
-    paths-ignore:
-      - "*.md"
-      - "**/*.md"
-      - "LICENSE"
   pull_request:
     branches: ["main"]
     paths-ignore:
       - "*.md"
       - "**/*.md"
       - "LICENSE"
+  workflow_dispatch:
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-  PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONDONTWRITEBYTECODE: "1"
 
 jobs:
   build:
@@ -59,7 +54,7 @@ jobs:
       - name: Build and test pinned native contract
         env:
           DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHONDONTWRITEBYTECODE: "1"
         run: |
           python3 -B scripts/build-native-app.py \
             --workspace "${{ runner.temp }}/native-contract" \

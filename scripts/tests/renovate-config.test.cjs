@@ -200,7 +200,7 @@ test('workflow YAML is valid, actions are SHA-pinned, and snapshot selection is 
     const job = snapshot.jobs['update-headsetcontrol-snapshot'];
     assert.match(job.if, /github\.event\.repository\.default_branch/);
     assert.ok(job.steps.some(step => step.run === 'python3 -B scripts/update_headsetcontrol.py'));
-    const ciSteps = workflows['swift.yml'].jobs.build.steps;
+    const ciSteps = workflows['ci.yml'].jobs.build.steps;
     assert.ok(ciSteps.some(step => step.run?.includes('dependency_channels.py --base-branch "$BASE_BRANCH"')));
     assert.ok(ciSteps.some(step => step.env?.BASE_BRANCH === '${{ github.base_ref }}'));
     assert.ok(ciSteps.some(step => step.with?.script?.includes("'--strict', '--no-global', 'renovate.json'")));
