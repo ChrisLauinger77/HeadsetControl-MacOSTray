@@ -177,7 +177,7 @@ test('actual RE2 extraction and Handlebars rendering update the release atomical
     }
 });
 
-test('workflow YAML is valid, actions are SHA-pinned, and snapshot selection is manual', { skip: !tools }, () => {
+test('workflow YAML is valid, actions are SHA-pinned, and snapshot updates support manual and weekly runs', { skip: !tools }, () => {
     const requireTool = createRequire(path.join(tools, 'package.json'));
     const yaml = requireTool('yaml');
     const directory = path.join(root, '.github/workflows');
@@ -194,7 +194,8 @@ test('workflow YAML is valid, actions are SHA-pinned, and snapshot selection is 
         }
     }
     const snapshot = workflows['update-headsetcontrol.yml'];
-    assert.deepEqual(Object.keys(snapshot.on), ['workflow_dispatch']);
+    assert.deepEqual(Object.keys(snapshot.on).sort(), ['schedule', 'workflow_dispatch']);
+    assert.deepEqual(snapshot.on.schedule, [{ cron: '0 3 * * 1' }]);
     assert.equal(snapshot.concurrency['cancel-in-progress'], false);
     assert.equal(snapshot.permissions.actions, 'read');
     const job = snapshot.jobs['update-headsetcontrol-snapshot'];
