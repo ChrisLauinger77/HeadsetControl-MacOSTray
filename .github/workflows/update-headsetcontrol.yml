@@ -2,6 +2,8 @@ name: Update HeadsetControl snapshot
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 1"
 
 permissions:
   actions: read
@@ -25,5 +27,5 @@ jobs:
       - name: Resolve and propose a pinned snapshot
         env:
           GH_TOKEN: ${{ github.token }}
-          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHONDONTWRITEBYTECODE: "1"
         run: python3 -B scripts/update_headsetcontrol.py
