@@ -54,7 +54,7 @@ The app sandbox is disabled because headset/HID access is required.
 - `https://github.com/ChrisLauinger77/homebrew-cask` owns `Casks/headsetcontrol-macostray.rb` for distributing this app through Homebrew.
 - Publishing a release from this repository triggers a `repository_dispatch` event named `update-cask` for `headsetcontrol-macostray`.
 - `.github/workflows/update-homebrew-cask.yml` provides the manual fallback for requesting the same cask update.
-- Dispatch authentication uses the `HOMEBREW_CASK_PUSH_TOKEN` repository secret. Never print or persist this token.
+- Dispatch authentication uses the `PACKAGE_REPOSITORIES_TOKEN` repository secret. Never print or persist this token.
 - Do not maintain a duplicate HeadsetControl formula in the personal cask tap. Use the official Sapd formula.
 - When changing release tags, archive names, minimum macOS versions, signing behavior, or installation requirements, verify whether the cask repository and its README must be updated as well.
 - Homebrew 6 requires explicit trust for non-official taps. Keep the user-facing trust commands in this repository's README aligned with the cask tap README.
