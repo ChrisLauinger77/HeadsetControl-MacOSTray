@@ -123,4 +123,165 @@ async function requestCaskUpdate(github) {
         event_type: 'update-cask', client_payload: { cask: 'headsetcontrol-macostray' } });
 }
 
-module.exports = { ASSET_NAME, sha256, validateArchive, prepareRelease, publishRelease, requestCaskUpdate };
+// Two-stage release: a manual run builds and retains a candidate; an annotated
+// tag naming that run publishes the candidate's exact bytes without rebuilding.
+const PROJECT_NAME = 'HeadsetControl-MacOSTray';
+const WORKFLOW_PATH = '.github/workflows/release.yml';
+const CANDIDATE_ARTIFACT = 'release-assets';
+const CHECKSUMS = 'SHA256SUMS';
+const CANDIDATE_MANIFEST = 'candidate.json';
+const RETENTION_DAYS = 30;
+const VERSION_PATTERN = /^[0-9]+\.[0-9]+\.[0-9]+$/;
+
+const isNotFound = error => error?.status === 404;
+
+async function checkCandidateSource(github, repo, { event, ref, defaultBranch, runAttempt, version }) {
+    if (event !== 'workflow_dispatch') throw new Error('Release candidates are built only by a manual workflow run');
+    if (ref !== `refs/heads/${defaultBranch}`) throw new Error(`Release candidates must be built from ${defaultBranch}`);
+    if (Number(runAttempt) !== 1) throw new Error('Start a new manual workflow run instead of rerunning a candidate');
+    if (!VERSION_PATTERN.test(version || '')) throw new Error(`Invalid application version: ${version}`);
+    const tag = `v${version}`;
+    try {
+        await github.rest.git.getRef({ ...repo, ref: `tags/${tag}` });
+    } catch (error) {
+        if (isNotFound(error)) return tag;
+        throw error;
+    }
+    throw new Error(`${tag} already exists; bump MARKETING_VERSION before building a new candidate`);
+}
+
+// Records the verified candidate next to its archive. Stage 2 never regenerates these files.
+function writeCandidate(directory, { version, commit, runID, runAttempt, repository }) {
+    if (Number(runAttempt) !== 1) throw new Error('Start a new manual workflow run instead of rerunning a candidate');
+    const names = fs.readdirSync(directory);
+    if (names.length !== 1 || names[0] !== ASSET_NAME) throw new Error(`Candidate directory must contain only ${ASSET_NAME}`);
+    const digest = sha256(fs.readFileSync(path.join(directory, ASSET_NAME)));
+    fs.writeFileSync(path.join(directory, CHECKSUMS), `${digest.slice('sha256:'.length)}  ${ASSET_NAME}\n`);
+    const manifest = { repository, version, tag: `v${version}`, commit, run_id: Number(runID), run_attempt: 1 };
+    fs.writeFileSync(path.join(directory, CANDIDATE_MANIFEST), JSON.stringify(manifest, null, 2) + '\n');
+    return { digest, manifest };
+}
+
+function candidateSummary({ version, commit, runID, digest }) {
+    if (!VERSION_PATTERN.test(version) || !/^[a-f0-9]{40}$/.test(commit) || !/^[1-9][0-9]*$/.test(String(runID))) {
+        throw new Error('Candidate summary requires a version, full commit SHA and run ID');
+    }
+    const tag = `v${version}`;
+    return [
+        '### Candidate ready for verification',
+        '',
+        `After this run succeeds, download and test its complete \`${CANDIDATE_ARTIFACT}\` artifact.`,
+        `It contains \`${ASSET_NAME}\` (\`${digest}\`), \`${CHECKSUMS}\` and \`${CANDIDATE_MANIFEST}\`.`,
+        '',
+        'When satisfied, run these commands in your local checkout:',
+        '',
+        '```bash',
+        `git tag -a ${tag} ${commit} \\`,
+        `  -m "${PROJECT_NAME} ${version}" \\`,
+        `  -m "Candidate-Run: ${runID}"`,
+        '',
+        `git push origin ${tag}`,
+        '```',
+        '',
+        `- Source commit: \`${commit}\``,
+        `- Candidate run: \`${runID}\``,
+        `- The \`${CANDIDATE_ARTIFACT}\` artifact is retained for ${RETENTION_DAYS} days (subject to repository limits). ` +
+            'Push the tag before it expires; an expired candidate cannot be published.',
+        '- The tag publishes these exact bytes without rebuilding, then requests the Homebrew cask update.',
+        '- Only tag after you have tested and approved the artifact.',
+        '- For a different candidate, start a new manual workflow run. Do not rerun this run: reruns are rejected.',
+        '',
+    ].join('\n');
+}
+
+function candidateRunID(message) {
+    const trailers = String(message || '').split('\n').map(line => line.trim()).filter(line => /^Candidate-Run:/i.test(line));
+    if (trailers.length !== 1) throw new Error('Tag message must contain exactly one Candidate-Run: <run ID> line');
+    const match = /^Candidate-Run: ([1-9][0-9]{0,18})$/.exec(trailers[0]);
+    if (!match || !Number.isSafeInteger(Number(match[1]))) throw new Error(`Invalid candidate run ID: ${trailers[0]}`);
+    return Number(match[1]);
+}
+
+function verifyCandidateRun(run, { repository, commit, workflowID, defaultBranch }) {
+    const expected = {
+        'repository': [run.repository?.full_name, repository],
+        'head repository': [run.head_repository?.full_name, repository],
+        'workflow path': [run.path, WORKFLOW_PATH],
+        'workflow ID': [run.workflow_id, workflowID],
+        'event': [run.event, 'workflow_dispatch'],
+        'branch': [run.head_branch, defaultBranch],
+        'status': [run.status, 'completed'],
+        'conclusion': [run.conclusion, 'success'],
+        // A rerun can replace artifacts under the same run ID; only a first attempt identifies tested bytes.
+        'run attempt': [run.run_attempt, 1],
+        'source commit': [run.head_sha, commit],
+    };
+    for (const [name, [actual, wanted]] of Object.entries(expected)) {
+        if (actual !== wanted) throw new Error(`Candidate run ${name} is ${JSON.stringify(actual)}; expected ${JSON.stringify(wanted)}`);
+    }
+}
+
+function selectCandidateArtifact(artifacts, { runID, commit }) {
+    const matches = artifacts.filter(artifact => artifact.name === CANDIDATE_ARTIFACT);
+    if (matches.length !== 1) throw new Error(`Candidate run must contain exactly one ${CANDIDATE_ARTIFACT} artifact`);
+    const [artifact] = matches;
+    if (artifact.expired) {
+        throw new Error(`Candidate ${CANDIDATE_ARTIFACT} has expired; start a new manual workflow run and tag that candidate`);
+    }
+    if (!(artifact.size_in_bytes > 0)) throw new Error(`Candidate ${CANDIDATE_ARTIFACT} is empty`);
+    if (artifact.workflow_run?.id !== runID || artifact.workflow_run?.head_sha !== commit) {
+        throw new Error(`Candidate ${CANDIDATE_ARTIFACT} does not belong to the verified run and commit`);
+    }
+    return artifact;
+}
+
+// Resolve tag → annotated tag object → Candidate-Run → workflow run → artifact using GitHub APIs only.
+async function resolveCandidate(github, repo, { tag, commit, currentRunID, defaultBranch }) {
+    if (!/^v[0-9]+\.[0-9]+\.[0-9]+$/.test(tag || '')) throw new Error(`Unexpected release tag: ${tag}`);
+    const { data: ref } = await github.rest.git.getRef({ ...repo, ref: `tags/${tag}` });
+    if (ref.object?.type !== 'tag') throw new Error(`${tag} must be an annotated tag with a Candidate-Run line`);
+    const { data: tagObject } = await github.rest.git.getTag({ ...repo, tag_sha: ref.object.sha });
+    if (tagObject.tag !== tag || tagObject.object?.type !== 'commit' || tagObject.object.sha !== commit) {
+        throw new Error(`${tag} does not directly annotate the pushed commit ${commit}`);
+    }
+    const runID = candidateRunID(tagObject.message);
+    const repository = `${repo.owner}/${repo.repo}`;
+    const { data: current } = await github.rest.actions.getWorkflowRun({ ...repo, run_id: currentRunID });
+    let run;
+    try {
+        ({ data: run } = await github.rest.actions.getWorkflowRun({ ...repo, run_id: runID }));
+    } catch (error) {
+        if (isNotFound(error)) throw new Error(`Candidate run ${runID} does not exist in ${repository}`);
+        throw error;
+    }
+    verifyCandidateRun(run, { repository, commit, workflowID: current.workflow_id, defaultBranch });
+    const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts,
+        { ...repo, run_id: runID, per_page: 100 });
+    const artifact = selectCandidateArtifact(artifacts, { runID, commit });
+    return { runID, artifactID: artifact.id };
+}
+
+// Verify downloaded candidate files against the manifests recorded by the candidate run.
+function verifyCandidateFiles(directory, { tag, commit, runID, repository }) {
+    const expected = [ASSET_NAME, CANDIDATE_MANIFEST, CHECKSUMS].sort();
+    const names = fs.readdirSync(directory).sort();
+    if (JSON.stringify(names) !== JSON.stringify(expected)) {
+        throw new Error(`Candidate must contain exactly ${expected.join(', ')}; found ${names.join(', ') || 'nothing'}`);
+    }
+    const manifest = JSON.parse(fs.readFileSync(path.join(directory, CANDIDATE_MANIFEST), 'utf8'));
+    const wanted = { repository, tag, version: tag.slice(1), commit, run_id: runID, run_attempt: 1 };
+    for (const [key, value] of Object.entries(wanted)) {
+        if (manifest[key] !== value) throw new Error(`Candidate manifest ${key} is ${JSON.stringify(manifest[key])}; expected ${JSON.stringify(value)}`);
+    }
+    const lines = fs.readFileSync(path.join(directory, CHECKSUMS), 'utf8').split('\n').filter(Boolean);
+    const match = lines.length === 1 && /^([a-f0-9]{64}) {2}(.+)$/.exec(lines[0]);
+    if (!match || match[2] !== ASSET_NAME) throw new Error(`${CHECKSUMS} must list exactly ${ASSET_NAME}`);
+    const archivePath = path.join(directory, ASSET_NAME);
+    const digest = sha256(fs.readFileSync(archivePath));
+    if (digest !== `sha256:${match[1]}`) throw new Error(`${ASSET_NAME} does not match its recorded candidate checksum`);
+    return { archivePath, digest };
+}
+
+module.exports = { ASSET_NAME, CANDIDATE_ARTIFACT, CHECKSUMS, CANDIDATE_MANIFEST, sha256, validateArchive,
+    prepareRelease, publishRelease, requestCaskUpdate, checkCandidateSource, writeCandidate, candidateSummary,
+    candidateRunID, verifyCandidateRun, selectCandidateArtifact, resolveCandidate, verifyCandidateFiles };

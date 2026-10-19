@@ -73,6 +73,10 @@ class ArtifactTests(unittest.TestCase):
             self.assertEqual(artifact.project_version(project, "v3.1.0"), {"CFBundleShortVersionString": "3.1.0"})
             with self.assertRaisesRegex(ValueError, "Tag/version mismatch"):
                 artifact.project_version(project, "v3.1.1")
+            self.assertEqual(artifact.project_version(project), {"CFBundleShortVersionString": "3.1.0"})
+            project.write_text("MARKETING_VERSION = 3.1;\nMARKETING_VERSION = 3.1;\n")
+            with self.assertRaisesRegex(ValueError, "not X.Y.Z"):
+                artifact.project_version(project)
             project.write_text("MARKETING_VERSION = 3.1.0;\nMARKETING_VERSION = 3.2.0;\n")
             with self.assertRaisesRegex(ValueError, "consistent"):
                 artifact.project_version(project, "v3.1.0")

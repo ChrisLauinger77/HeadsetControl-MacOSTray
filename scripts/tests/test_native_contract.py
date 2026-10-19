@@ -177,7 +177,31 @@ class NativeContractTests(unittest.TestCase):
         release = (root / ".github/workflows/release.yml").read_text()
         self.assertIn("build_number: ${{ steps.build-number.outputs.value }}", release)
         self.assertIn('TZ: Europe/Berlin', release)
-        self.assertIn('--build-number "${{ needs.validate-tag.outputs.build_number }}"', release)
+        self.assertIn('--build-number "${{ needs.validate.outputs.build_number }}"', release)
+
+    def test_release_workflow_separates_candidate_and_publication(self):
+        release = (Path(__file__).resolve().parents[2] / ".github/workflows/release.yml").read_text()
+        import re
+        parts = re.split(r"^  ([\w-]+):\n", release.split("\njobs:\n", 1)[1], flags=re.MULTILINE)
+        jobs = dict(zip(parts[1::2], parts[2::2]))
+        self.assertEqual(list(jobs), ["validate", "build", "package", "publish", "request-cask-update"])
+        self.assertIn("if: github.event_name == 'workflow_dispatch'", jobs["validate"])
+        self.assertIn("if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')", jobs["publish"])
+        # Candidate jobs never receive write permissions or publication secrets.
+        for name in ("validate", "build", "package"):
+            self.assertNotIn("permissions:", jobs[name])
+            self.assertNotIn("secrets.", jobs[name])
+            self.assertNotIn("publishRelease", jobs[name])
+        self.assertIn("name: release-assets", jobs["package"])
+        self.assertIn("retention-days: 30", jobs["package"])
+        self.assertIn("candidateSummary", jobs["package"])
+        # Publication downloads the candidate by run/artifact ID and never rebuilds it.
+        for builder in ("build-native-app.py", "create-universal-app.sh", "upload-artifact", "writeCandidate"):
+            self.assertNotIn(builder, jobs["publish"])
+        for check in ("resolveCandidate", "verifyCandidateFiles", "run-id: ${{ steps.candidate.outputs.run_id }}"):
+            self.assertIn(check, jobs["publish"])
+        self.assertIn("needs: publish", jobs["request-cask-update"])
+        self.assertIn("needs.publish.result == 'success'", jobs["request-cask-update"])
 
 
 @unittest.skipUnless(sys.platform == "darwin", "Archive inspection requires Mach-O tooling")
