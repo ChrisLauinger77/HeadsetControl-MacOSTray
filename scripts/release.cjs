@@ -206,7 +206,8 @@ function verifyCandidateRun(run, { repository, commit, workflowID, defaultBranch
     const expected = {
         'repository': [run.repository?.full_name, repository],
         'head repository': [run.head_repository?.full_name, repository],
-        'workflow path': [run.path, WORKFLOW_PATH],
+        // The runs API may append "@<ref>" to the path; the ref itself is verified as the branch below.
+        'workflow path': [run.path?.split('@')[0], WORKFLOW_PATH],
         'workflow ID': [run.workflow_id, workflowID],
         'event': [run.event, 'workflow_dispatch'],
         'branch': [run.head_branch, defaultBranch],

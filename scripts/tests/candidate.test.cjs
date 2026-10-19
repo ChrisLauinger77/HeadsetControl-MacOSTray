@@ -143,6 +143,8 @@ test('Candidate-Run trailer parsing requires exactly one positive run ID', () =>
 
 test('a verified first-attempt candidate resolves to its release-assets artifact', async () => {
     assert.deepEqual(await resolve(api()), { runID, artifactID: 55 });
+    const suffixed = api(state => { state.runs[runID].path = '.github/workflows/release.yml@main'; });
+    assert.deepEqual(await resolve(suffixed), { runID, artifactID: 55 });
 });
 
 test('tag and trailer problems reject the candidate', async () => {
@@ -166,6 +168,8 @@ test('candidate run identity, outcome and provenance are verified', async () => 
         [run(r => { r.repository.full_name = 'other/app'; }), /repository/],
         [run(r => { r.head_repository.full_name = 'fork/app'; }), /head repository/],
         [run(r => { r.path = '.github/workflows/ci.yml'; }), /workflow path/],
+        [run(r => { r.path = '.github/workflows/ci.yml@main'; }), /workflow path/],
+        [run(r => { delete r.path; }), /workflow path/],
         [run(r => { r.workflow_id = 18; }), /workflow ID/],
         [run(r => { r.event = 'push'; }), /event/],
         [run(r => { r.head_branch = 'feature'; }), /branch/],
