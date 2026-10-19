@@ -52,8 +52,8 @@ The app sandbox is disabled because headset/HID access is required.
 - `https://github.com/Sapd/HeadsetControl` contains the upstream C library and CLI.
 - `https://github.com/Sapd/homebrew-headsetcontrol` provides the official `sapd/headsetcontrol/headsetcontrol` Homebrew formula.
 - `https://github.com/ChrisLauinger77/homebrew-cask` owns `Casks/headsetcontrol-macostray.rb` for distributing this app through Homebrew.
-- Publishing a release from this repository triggers a `repository_dispatch` event named `update-cask` for `headsetcontrol-macostray`.
-- `.github/workflows/update-homebrew-cask.yml` provides the manual fallback for requesting the same cask update.
+- Successful release publication triggers a `repository_dispatch` event named `update-cask` for `headsetcontrol-macostray`. Candidate builds never dispatch.
+- If that dispatch fails after publication, rerun only the `request-cask-update` job of the release workflow; there is no separate manual cask workflow.
 - Dispatch authentication uses the `PACKAGE_REPOSITORIES_TOKEN` repository secret. Never print or persist this token.
 - Do not maintain a duplicate HeadsetControl formula in the personal cask tap. Use the official Sapd formula.
 - When changing release tags, archive names, minimum macOS versions, signing behavior, or installation requirements, verify whether the cask repository and its README must be updated as well.
@@ -61,26 +61,27 @@ The app sandbox is disabled because headset/HID access is required.
 
 ## Release Workflow
 
+Releases use two stages (see `docs/release-safety.md`): a manual **Release**
+workflow run on `main` builds and retains a tested candidate; an annotated
+`vX.Y.Z` tag naming that run publishes the candidate's exact bytes without
+rebuilding.
+
 When asked to create release `X.Y.Z`, update both `MARKETING_VERSION` entries in
 `HeadsetControl-MacOSTray.xcodeproj/project.pbxproj` to `X.Y.Z`. Do not manually
-change `CURRENT_PROJECT_VERSION`; the build number is generated separately.
-Commit and push the version change, then create and push the matching `vX.Y.Z`
-release tag.
-
-Example request:
-
-```text
-create release 3.0.0
-```
-
-Expected actions:
+change `CURRENT_PROJECT_VERSION`; the candidate run generates the build number.
+Commit and push the version change to `main`, then start the candidate run:
 
 ```sh
 git commit -am "chore(release): Bump version to 3.0.0"
 git push
-git tag v3.0.0
-git push origin v3.0.0
+gh workflow run release.yml --ref main
 ```
+
+Stop there. The maintainer must download and test the `release-assets` artifact.
+Only after their approval, run the exact `git tag -a ... -m "Candidate-Run: <id>"`
+and `git push origin vX.Y.Z` commands from that run's job summary. Never use a
+lightweight tag, tag local `HEAD` instead of the summary's commit, or rerun an
+old candidate run; build a new candidate instead. Candidates expire after 30 days.
 
 ## Architecture Notes
 

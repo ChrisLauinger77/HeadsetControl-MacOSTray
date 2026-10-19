@@ -1,6 +1,10 @@
 name: Release
 
+# Stage 1 (manual run on main): build, test and retain a release candidate.
+# Stage 2 (annotated vX.Y.Z tag with a Candidate-Run line): publish that
+# candidate's exact bytes. Publication never rebuilds the application.
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*"
@@ -8,9 +12,10 @@ on:
 permissions:
   contents: read
 
-# Cover preparation, publication, and retries with the same per-tag lock.
+# Candidates never wait for or cancel each other. Publication and its retries
+# share one per-tag lock without canceling an active publisher.
 concurrency:
-  group: release-${{ github.ref }}
+  group: ${{ github.event_name == 'push' && format('release-{0}', github.ref) || format('release-candidate-{0}', github.run_id) }}
   cancel-in-progress: false
 
 env:
@@ -18,25 +23,44 @@ env:
   PYTHONDONTWRITEBYTECODE: '1'
 
 jobs:
-  validate-tag:
+  validate:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.source.outputs.tag }}
       build_number: ${{ steps.build-number.outputs.value }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Check that tag points to main
+      - name: Test release publication and packaging scripts
         run: |
-          git fetch origin main
-          tag_commit="$(git rev-list -n 1 "${GITHUB_REF_NAME}")"
-          git merge-base --is-ancestor "$tag_commit" origin/main
+          node --test scripts/tests/*.test.cjs
+          python3 -B -m unittest discover -s scripts/tests -p 'test_*.py' -v
 
-      - name: Check tag matches application version
-        run: python3 scripts/release-artifact.py project HeadsetControl-MacOSTray.xcodeproj/project.pbxproj --tag "$GITHUB_REF_NAME"
+      - name: Read consistent application version
+        id: version
+        run: |
+          version="$(python3 -B scripts/release-artifact.py project HeadsetControl-MacOSTray.xcodeproj/project.pbxproj \
+            | python3 -c 'import json, sys; print(json.load(sys.stdin)["CFBundleShortVersionString"])')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check candidate source and unreleased version
+        id: source
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        with:
+          script: |
+            const { checkCandidateSource } = require('./scripts/release.cjs');
+            core.setOutput('tag', await checkCandidateSource(github, context.repo, {
+              event: context.eventName, ref: context.ref, defaultBranch: process.env.DEFAULT_BRANCH,
+              runAttempt: process.env.GITHUB_RUN_ATTEMPT, version: process.env.VERSION }));
 
       - name: Generate release build number
         id: build-number
@@ -44,32 +68,8 @@ jobs:
           TZ: Europe/Berlin
         run: echo "value=$(date +'%y%m%d.%H%M')" >> "$GITHUB_OUTPUT"
 
-  prepare-release:
-    needs: validate-tag
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    outputs:
-      release_id: ${{ steps.prepare.outputs.release_id }}
-      published: ${{ steps.prepare.outputs.published }}
-
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Find or create release
-        id: prepare
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        with:
-          script: |
-            const { prepareRelease } = require('./scripts/release.cjs');
-            const result = await prepareRelease(github, context.repo, process.env.RELEASE_TAG);
-            core.setOutput('release_id', result.releaseID);
-            core.setOutput('published', result.published);
-
   build:
-    needs: [validate-tag, prepare-release]
-    if: needs.prepare-release.outputs.published != 'true'
+    needs: validate
     strategy:
       fail-fast: false
       matrix:
@@ -84,6 +84,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Build and test pinned native contract
         env:
@@ -93,7 +95,7 @@ jobs:
           python3 -B scripts/build-native-app.py \
             --workspace "${{ runner.temp }}/native-contract" \
             --arch "${{ matrix.arch }}" \
-            --build-number "${{ needs.validate-tag.outputs.build_number }}"
+            --build-number "${{ needs.validate.outputs.build_number }}"
 
       - name: Upload architecture archive
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -106,15 +108,14 @@ jobs:
           overwrite: true
 
   package:
-    needs: build
+    needs: [validate, build]
     runs-on: macos-15
-    outputs:
-      archive_sha256: ${{ steps.checksum.outputs.archive_sha256 }}
-      artifact_id: ${{ steps.candidate.outputs.artifact-id }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Download architecture archives
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
@@ -123,76 +124,121 @@ jobs:
           path: ${{ runner.temp }}/architecture-archives
           merge-multiple: true
 
-      - name: Create universal app archive
+      - name: Create and verify universal app archive
         run: |
+          mkdir "${{ runner.temp }}/release-assets"
           bash scripts/create-universal-app.sh \
             "${{ runner.temp }}/architecture-archives/HeadsetControl-MacOSTray-arm64.zip" \
             "${{ runner.temp }}/architecture-archives/HeadsetControl-MacOSTray-x86_64.zip" \
-            "${{ runner.temp }}/HeadsetControl-MacOSTray.zip" \
-            "$GITHUB_REF_NAME"
+            "${{ runner.temp }}/release-assets/HeadsetControl-MacOSTray.zip" \
+            "${{ needs.validate.outputs.tag }}"
 
-      - name: Record publication candidate checksum
-        id: checksum
+      - name: Record candidate checksum and provenance
+        id: candidate
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
-          ARCHIVE_PATH: ${{ runner.temp }}/HeadsetControl-MacOSTray.zip
+          CANDIDATE_DIR: ${{ runner.temp }}/release-assets
+          VERSION: ${{ needs.validate.outputs.version }}
         with:
           script: |
-            const { sha256 } = require('./scripts/release.cjs');
-            core.setOutput('archive_sha256', sha256(require('node:fs').readFileSync(process.env.ARCHIVE_PATH)));
+            const { writeCandidate, validateArchive, ASSET_NAME } = require('./scripts/release.cjs');
+            const directory = process.env.CANDIDATE_DIR;
+            const { digest } = writeCandidate(directory, { version: process.env.VERSION, commit: context.sha,
+              runID: context.runId, runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+              repository: `${context.repo.owner}/${context.repo.repo}` });
+            // Apply the publisher's own archive gate before retaining the candidate.
+            validateArchive(require('node:fs').readFileSync(require('node:path').join(directory, ASSET_NAME)),
+              `v${process.env.VERSION}`);
+            core.setOutput('digest', digest);
 
-      # Publication retries must use these exact ZIP bytes, not repackage them.
-      - name: Retain publication candidate
-        id: candidate
+      # Publication downloads these exact files; they are never rebuilt or regenerated.
+      - name: Retain release candidate
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: release-candidate-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/HeadsetControl-MacOSTray.zip
+          name: release-assets
+          path: ${{ runner.temp }}/release-assets
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
+
+      - name: Print publishing commands
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+          DIGEST: ${{ steps.candidate.outputs.digest }}
+        with:
+          script: |
+            const { candidateSummary } = require('./scripts/release.cjs');
+            const text = candidateSummary({ version: process.env.VERSION, commit: context.sha,
+              runID: context.runId, digest: process.env.DIGEST });
+            core.info(text);
+            await core.summary.addRaw(text).write();
 
   publish:
-    needs: [prepare-release, package]
-    if: ${{ !cancelled() && needs.prepare-release.result == 'success' && (needs.package.result == 'success' || (needs.prepare-release.outputs.published == 'true' && needs.package.result == 'skipped')) }}
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    # Archive validation inspects Mach-O slices and signatures with macOS tools.
     runs-on: macos-15
     permissions:
       contents: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Download exact publication candidate
-        if: needs.prepare-release.outputs.published != 'true'
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
-        with:
-          artifact-ids: ${{ needs.package.outputs.artifact_id }}
-          path: ${{ runner.temp }}
-          merge-multiple: true
+      actions: read
 
-      - name: Verify archive and resume publication
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Check tag matches application version
+        run: python3 -B scripts/release-artifact.py project HeadsetControl-MacOSTray.xcodeproj/project.pbxproj --tag "$GITHUB_REF_NAME"
+
+      - name: Verify annotated tag and candidate run
+        id: candidate
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
-          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
-          ALREADY_PUBLISHED: ${{ needs.prepare-release.outputs.published }}
           RELEASE_TAG: ${{ github.ref_name }}
-          ARCHIVE_PATH: ${{ runner.temp }}/HeadsetControl-MacOSTray.zip
-          EXPECTED_DIGEST: ${{ needs.package.outputs.archive_sha256 }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         with:
           script: |
-            const { publishRelease } = require('./scripts/release.cjs');
-            const result = await publishRelease(github, context.repo, {
-              tag: process.env.RELEASE_TAG,
-              releaseID: Number(process.env.RELEASE_ID),
-              archivePath: process.env.ALREADY_PUBLISHED === 'true' ? undefined : process.env.ARCHIVE_PATH,
-              expectedDigest: process.env.EXPECTED_DIGEST
-            });
+            const { resolveCandidate } = require('./scripts/release.cjs');
+            const result = await resolveCandidate(github, context.repo, { tag: process.env.RELEASE_TAG,
+              commit: context.sha, currentRunID: context.runId, defaultBranch: process.env.DEFAULT_BRANCH });
+            core.info(`Publishing candidate run ${result.runID}, artifact ${result.artifactID}`);
+            core.setOutput('run_id', result.runID);
+            core.setOutput('artifact_id', result.artifactID);
+
+      - name: Download verified candidate
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          artifact-ids: ${{ steps.candidate.outputs.artifact_id }}
+          run-id: ${{ steps.candidate.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/release-assets
+          merge-multiple: true
+
+      - name: Verify candidate files and publish exact bytes
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          CANDIDATE_DIR: ${{ runner.temp }}/release-assets
+          CANDIDATE_RUN_ID: ${{ steps.candidate.outputs.run_id }}
+        with:
+          script: |
+            const { verifyCandidateFiles, prepareRelease, publishRelease } = require('./scripts/release.cjs');
+            const tag = process.env.RELEASE_TAG;
+            // All candidate checks happen before any release mutation.
+            const { archivePath, digest } = verifyCandidateFiles(process.env.CANDIDATE_DIR, { tag, commit: context.sha,
+              runID: Number(process.env.CANDIDATE_RUN_ID), repository: `${context.repo.owner}/${context.repo.repo}` });
+            const { releaseID } = await prepareRelease(github, context.repo, tag);
+            const result = await publishRelease(github, context.repo, { tag, releaseID, archivePath, expectedDigest: digest });
             core.info(`Verified release ${result.releaseID}: ${result.digest}`);
 
   request-cask-update:
     needs: publish
-    # Publication can succeed with its build dependency skipped on a rerun.
     if: ${{ !cancelled() && needs.publish.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Request Homebrew cask update
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:

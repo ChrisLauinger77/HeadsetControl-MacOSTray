@@ -3,7 +3,8 @@ const { test } = require('node:test');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { ASSET_NAME, sha256, prepareRelease, publishRelease, requestCaskUpdate } = require('../release.cjs');
+const { ASSET_NAME, sha256, prepareRelease, publishRelease, requestCaskUpdate, writeCandidate,
+    verifyCandidateFiles } = require('../release.cjs');
 
 const repo = { owner: 'owner', repo: 'app' };
 const tag = 'v3.1.0';
@@ -241,4 +242,19 @@ test('manually published release between preparation and upload is not modified'
     };
     await assert.rejects(publishRelease(state.github, repo, { tag, releaseID: 1, archivePath: archive(t), expectedDigest: sha256(bytes) }, validate), /published during preparation/);
     assert.deepEqual(state.mutations, ['create']);
+});
+
+test('verified candidate files are published as the exact uploaded bytes', async t => {
+    const state = server();
+    const directory = path.dirname(archive(t));
+    const commit = 'c'.repeat(40);
+    writeCandidate(directory, { version: '3.1.0', commit, runID: 7, runAttempt: 1, repository: 'owner/app' });
+    const { archivePath, digest } = verifyCandidateFiles(directory, { tag, commit, runID: 7, repository: 'owner/app' });
+    const { releaseID } = await prepareRelease(state.github, repo, tag);
+    await publishRelease(state.github, repo, { tag, releaseID, archivePath, expectedDigest: digest }, validate);
+    assert.deepEqual(state.mutations, ['create', 'upload', 'publish']);
+    assert.equal(state.assets.length, 1);
+    assert.equal(state.assets[0].name, ASSET_NAME);
+    assert.deepEqual(state.assets[0].body, bytes);
+    assert.equal(state.assets[0].digest, digest);
 });
