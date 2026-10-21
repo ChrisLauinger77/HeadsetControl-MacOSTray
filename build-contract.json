@@ -5,8 +5,8 @@
   "headsetcontrol": {
     "repository": "https://github.com/Sapd/HeadsetControl.git",
     "revision": "91ee690a5e302a10a6f4f75a46be05846a38a3b0",
-    "version": "4.1.0",
-    "channel": "snapshot"
+    "version": "4.2.0",
+    "channel": "release"
   },
   "hidapi": {
     "repository": "https://github.com/libusb/hidapi.git",
