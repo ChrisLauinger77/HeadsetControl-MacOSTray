@@ -147,7 +147,8 @@ class NativeContractTests(unittest.TestCase):
             prefix = work / "arm64"
             loaded = work / "native-probe-arm64"
             environment = {}
-            valid = f"4.1.0\n0.15.0\n{loaded}"
+            versions = f"{builder.CONTRACT['headsetcontrol']['version']}\n{builder.CONTRACT['hidapi']['version']}"
+            valid = f"{versions}\n{loaded}"
             with patch.object(builder, "command") as command, \
                     patch.object(builder, "run", side_effect=["/fixture/SDK", valid]) as run:
                 builder.verify_test_runtime(work, prefix, "/fixture/clang", "arm64", environment)
@@ -155,9 +156,10 @@ class NativeContractTests(unittest.TestCase):
                 self.assertIn(prefix / "lib/libhidapi.a", command.call_args.args)
                 self.assertNotIn("-lhidapi", command.call_args.args)
                 self.assertEqual(run.call_args.kwargs["env"], environment)
-            for wrong in (valid.replace("4.1.0", "4.2.0"), valid.replace("0.15.0", "0.14.0"),
-                          "4.1.0\n0.15.0\n/opt/homebrew/lib/libhidapi.0.dylib",
-                          f"4.1.0\n0.15.0\n{prefix}/lib/libhidapi.0.dylib"):
+            for wrong in (f"0.0.0\n{builder.CONTRACT['hidapi']['version']}\n{loaded}",
+                          f"{builder.CONTRACT['headsetcontrol']['version']}\n0.0.0\n{loaded}",
+                          f"{versions}\n/opt/homebrew/lib/libhidapi.0.dylib",
+                          f"{versions}\n{prefix}/lib/libhidapi.0.dylib"):
                 with patch.object(builder, "command"), patch.object(builder, "run", side_effect=["/fixture/SDK", wrong]):
                     with self.assertRaisesRegex(ValueError, "runtime differs"):
                         builder.verify_test_runtime(work, prefix, "/fixture/clang", "arm64", environment)
