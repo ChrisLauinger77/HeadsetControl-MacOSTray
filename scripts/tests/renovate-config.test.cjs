@@ -163,16 +163,18 @@ test('actual RE2 extraction and Handlebars rendering update the release atomical
     const handlebars = requireTool('handlebars');
     const RE2 = requireTool('re2');
     assert.throws(() => new RE2('(?=unsupported)'), 'require native RE2 rather than RegExp fallback');
+    const [major, minor] = JSON.parse(contents).headsetcontrol.version.split('.').map(Number);
+    const newValue = `${major}.${minor + 1}.0`;
     for (const channel of ['release', 'snapshot']) {
         const source = contents.replace(/"channel": "(?:release|snapshot)"/, `"channel": "${channel}"`);
         const regex = new RE2(manager.matchStrings[0]);
         const extracted = source.match(regex).groups;
-        const replacement = handlebars.compile(manager.autoReplaceStringTemplate)({ ...extracted, newDigest: 'b'.repeat(40), newValue: '4.2.0' });
+        const replacement = handlebars.compile(manager.autoReplaceStringTemplate)({ ...extracted, newDigest: 'b'.repeat(40), newValue });
         const updated = JSON.parse(source.replace(regex, () => replacement));
         const expected = JSON.parse(source);
-        expected.headsetcontrol = { ...expected.headsetcontrol, revision: 'b'.repeat(40), version: '4.2.0', channel: 'release' };
+        expected.headsetcontrol = { ...expected.headsetcontrol, revision: 'b'.repeat(40), version: newValue, channel: 'release' };
         assert.deepEqual(updated, expected);
-        const withoutDigest = handlebars.compile(manager.autoReplaceStringTemplate)({ ...extracted, newValue: '4.2.0' });
+        const withoutDigest = handlebars.compile(manager.autoReplaceStringTemplate)({ ...extracted, newValue });
         assert.equal(JSON.parse('{' + withoutDigest + '}').headsetcontrol.revision, '', 'missing digest fails contract validation instead of accepting an old snapshot SHA');
     }
 });

@@ -120,6 +120,8 @@ swift test
 
 Hardware behavior may depend on the installed `headsetcontrol` version and connected devices. Prefer test profiles for reproducible checks and note when real-device validation was not performed.
 
+Renovate updates only `build-contract.json`, so script tests must read pinned dependency versions and revisions from the contract instead of hardcoding them. `scripts/tests/test_contract_updates.py` reruns the Python script tests against a simulated dependency update to enforce this.
+
 ## Worktree Notes
 
 - This repository may have local uncommitted changes. Inspect `git status --short` before editing and do not revert user changes.
