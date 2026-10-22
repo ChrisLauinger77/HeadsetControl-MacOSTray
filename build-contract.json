@@ -4,9 +4,9 @@
   "xcode": {"version": "26.3", "build": "17C529"},
   "headsetcontrol": {
     "repository": "https://github.com/Sapd/HeadsetControl.git",
-    "revision": "91ee690a5e302a10a6f4f75a46be05846a38a3b0",
+    "revision": "b68f56b537fd1837e3add2ac93f085b208a764b3",
     "version": "4.2.0",
-    "channel": "release"
+    "channel": "snapshot"
   },
   "hidapi": {
     "repository": "https://github.com/libusb/hidapi.git",
