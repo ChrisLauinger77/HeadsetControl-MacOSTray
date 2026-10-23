@@ -25,7 +25,7 @@ The focused tests use an injected clock, cancelable scheduler, notification cent
 
 Local validation passed all 91 tests in Debug and optimized Release, the Xcode Release build, and localization syntax checks. The extra SwiftPM Release test run used `-debug-info-format none` after its `dsymutil` step hit a local sandbox `Operation not permitted` error; the normal Xcode Release build passed separately.
 
-Run `swift test` and the Xcode Release build as documented in `AGENTS.md`. On this host the shell commands require `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer` and the Homebrew include/library search paths. Local Homebrew libraries target newer macOS versions than the app; a successful local build does **not** establish minimum-version runtime compatibility. CI builds on macOS 15 and checks both architectures and the universal artifact without changing the release workflow.
+Run `swift test` and the Xcode Release build as documented in `AGENTS.md`. On this host the shell commands require `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer` and the Homebrew include/library search paths. Local Homebrew libraries target newer macOS versions than the app; a successful local build does **not** establish minimum-version runtime compatibility. CI builds on macOS 15, checks both architectures, and runs synthetic universal-packaging tests without uploading artifacts. The Release workflow creates and verifies the universal app archive.
 
 ## Physical macOS validation still required
 

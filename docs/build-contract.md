@@ -201,6 +201,12 @@ and ad-hoc signing. Final ZIP checksums protect the publication bytes.
 
 ## Building and testing
 
+CI validates both architecture builds and their ZIPs on the native runners, and
+executes the synthetic universal-packaging tests. These outputs stay on the
+runner; CI does not upload artifacts. The Release workflow transfers architecture
+archives between jobs, creates and verifies the universal app archive, and
+retains the tested candidate for maintainer approval.
+
 Use a clean checkout, CMake, and the specified Xcode:
 
 ```sh
