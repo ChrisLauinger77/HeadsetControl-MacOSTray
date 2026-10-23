@@ -22,6 +22,9 @@ nonisolated enum HeadsetTarget: Hashable, Sendable {
 }
 
 nonisolated enum HeadsetCommand: Equatable, Sendable {
+    case anc(Int)
+    case ancStartupMode(Int)
+    case ancButtonModes(HeadsetANCButtonModes)
     case sidetone(Int)
     case microphoneVolume(Int)
     case noiseFilter(Int)
@@ -34,6 +37,24 @@ nonisolated enum HeadsetCommand: Equatable, Sendable {
     case voicePrompts(Bool)
     case rotateToMute(Bool)
     case equalizerPreset(Int)
+}
+
+// Store the cycle as one value so a checkbox edit cannot persist an empty
+// intermediate selection. These are requested settings, never device readback.
+nonisolated struct HeadsetANCButtonModes: OptionSet, Sendable {
+    let rawValue: Int
+
+    static let off = Self(rawValue: 1)
+    static let anc = Self(rawValue: 2)
+    static let ambient = Self(rawValue: 4)
+    static let all: Self = [.off, .anc, .ambient]
+
+    var isValid: Bool { rawValue > 0 && rawValue & ~Self.all.rawValue == 0 }
+
+    func setting(_ mode: Self, enabled: Bool) -> Self {
+        let updated = enabled ? union(mode) : subtracting(mode)
+        return updated.isValid ? updated : self
+    }
 }
 
 // Only immutable value data crosses from the HID worker to the main actor.

@@ -103,17 +103,47 @@ import UserNotifications
     private func runControlAction(_ sender: NSMenuItem, command: (Int) -> HeadsetCommand) {
         guard !stopping, let action = sender.representedObject as? HeadsetMenuAction,
               let target = action.target else { return }
-        headsetController.perform(command(action.value), on: target,
+        performControlCommand(command(action.value), on: target, deviceName: action.deviceName)
+    }
+
+    // Settings have no menu item target. Select one safely addressable supporting
+    // device from a current observation; the service rechecks its attachment.
+    func performANCSettingsCommand(_ command: HeadsetCommand) {
+        guard !stopping else { return }
+        let capability: HeadsetCapability
+        switch command {
+        case .ancStartupMode: capability = .ancStartupMode
+        case .ancButtonModes: capability = .ancButtonModes
+        default: return
+        }
+        guard headsetController.snapshotState == .fresh,
+              let device = headsetController.snapshot.devices?.first(where: {
+                  $0.capabilities.contains(capability.legacyCapabilityString)
+                      && $0.target?.accepts(testProfile: currentTestProfile) == true
+              }), let target = device.target else {
+            commandFailure = HeadsetFailure(operation: .command, kind: .targetUnavailable).message
+            updateStatusPresentation()
+            return
+        }
+        performControlCommand(command, on: target, deviceName: device.name)
+    }
+
+    private func performControlCommand(_ command: HeadsetCommand, on target: HeadsetTarget, deviceName: String) {
+        headsetController.perform(command, on: target,
                                   testProfile: currentTestProfile) { [weak self] result in
             guard let self, !self.stopping else { return }
             switch result {
             case .success: self.commandFailure = nil
             case .failure(let error):
                 guard !error.isCancelled else { return }
-                self.commandFailure = action.deviceName.isEmpty ? error.message : "\(action.deviceName): \(error.message)"
+                self.commandFailure = deviceName.isEmpty ? error.message : "\(deviceName): \(error.message)"
             }
             self.updateStatusPresentation()
         }
+    }
+
+    @objc func setANC(_ sender: NSMenuItem) {
+        runControlAction(sender) { .anc($0) }
     }
 
     @objc func setEqualizerPreset(_ sender: NSMenuItem) {
@@ -560,6 +590,7 @@ import UserNotifications
                     menu.addItem(withTitle: NSLocalizedString("Controls unavailable: device connection is not unique", comment: "Cannot safely select a USB attachment"), action: nil, keyEquivalent: "")
                 }
                 let capabilityMap: [(String, String)] = [
+                    ("CAP_ANC", NSLocalizedString("Noise cancelling", comment: "Active noise cancelling capability")),
                     ("CAP_BT_CALL_VOLUME", NSLocalizedString("Bluetooth Call Volume", comment: "Bluetooth call volume capability")),
                     ("CAP_BT_WHEN_POWERED_ON", NSLocalizedString("Bluetooth on at Power-On", comment: "Bluetooth power-on capability")),
                     ("CAP_MICROPHONE_MUTE_LED_BRIGHTNESS", NSLocalizedString("Mic Mute LED Brightness", comment: "Microphone mute LED capability")),
@@ -576,6 +607,12 @@ import UserNotifications
                 for (cap, title) in capabilityMap {
                     if capabilities.contains(cap) {
                         switch cap {
+                        case "CAP_ANC":
+                            let options = [(NSLocalizedString("Off", comment: "Noise cancelling off"), 0),
+                                           (NSLocalizedString("Noise cancelling", comment: "Noise cancelling mode"), 1),
+                                           (NSLocalizedString("Ambient sound", comment: "Ambient sound mode"), 2)]
+                            addChoiceMenu(to: menu, title: title, options: options,
+                                          action: #selector(setANC(_:)), target: controlTarget, deviceName: deviceName)
                         case "CAP_BT_CALL_VOLUME":
                             addChoiceMenu(to: menu, title: title, options: bluetoothCallVolumeLevelsFromSettings,
                                           action: #selector(setBluetoothCallVolume(_:)), target: controlTarget, deviceName: deviceName)

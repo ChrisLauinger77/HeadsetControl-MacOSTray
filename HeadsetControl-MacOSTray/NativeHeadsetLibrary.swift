@@ -121,6 +121,19 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
         assertWorker()
         let handle = handles[connection.index]
         switch command {
+        case .anc(let mode):
+            guard hsc_supports(handle, HSC_CAP_ANC) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
+            let range = AppDefaults.ancRange
+            return HeadsetFailure.result(code: hsc_set_anc(handle, UInt8(max(range.lowerBound, min(range.upperBound, mode)))).rawValue, operation: .command)
+        case .ancStartupMode(let mode):
+            guard hsc_supports(handle, HSC_CAP_ANC_STARTUP_MODE) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
+            let range = AppDefaults.ancStartupModeRange
+            return HeadsetFailure.result(code: hsc_set_anc_startup_mode(handle, UInt8(max(range.lowerBound, min(range.upperBound, mode)))).rawValue, operation: .command)
+        case .ancButtonModes(let modes):
+            guard hsc_supports(handle, HSC_CAP_ANC_BUTTON_MODES) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
+            guard modes.isValid else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_INVALID_PARAM.rawValue))) }
+            var nativeModes = hsc_anc_button_modes_t(off: modes.contains(.off), anc: modes.contains(.anc), ambient: modes.contains(.ambient))
+            return HeadsetFailure.result(code: hsc_set_anc_button_modes(handle, &nativeModes).rawValue, operation: .command)
         case .bluetoothCallVolume(let level):
             guard hsc_supports(handle, HSC_CAP_BT_CALL_VOLUME) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
             let range = AppDefaults.bluetoothCallVolumeRange

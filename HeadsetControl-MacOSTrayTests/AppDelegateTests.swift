@@ -99,6 +99,179 @@ import XCTest
                                         commands: [25, 43, 75, 100].map(HeadsetCommand.bluetoothCallVolume))
     }
 
+    func testANCOffersAllModesWithoutReadback() async throws {
+        try await verifyWriteOnlyControl(.anc, title: "Noise cancelling", values: [0, 1, 2],
+                                        commands: [0, 1, 2].map(HeadsetCommand.anc))
+    }
+
+    func testNativeANCMenuCommandsSucceedInTestMode() async throws {
+        UserDefaults.standard.set(7, forKey: "testMode")
+        let controller = HeadsetController(provider: HeadsetControlService(), executor: HeadsetIOWorker.shared)
+        let delegate = AppDelegate(headsetController: controller, notificationDelivery: RecordingNotificationDelivery())
+        let refreshed = expectation(description: "native ANC device discovered")
+        let originalRefresh = controller.onRefresh
+        controller.onRefresh = { result in originalRefresh?(result); refreshed.fulfill() }
+        delegate.updateStatusItem()
+        await fulfillment(of: [refreshed], timeout: 5)
+        let menu = NSMenu()
+        delegate.rebuildMenu(menu)
+        let submenu = try XCTUnwrap(menu.items.first { $0.title == localized("Noise cancelling") }?.submenu)
+        XCTAssertEqual(submenu.items.map(\.title), ["Off", "Noise cancelling", "Ambient sound"].map(localized))
+        for item in submenu.items {
+            _ = delegate.perform(try XCTUnwrap(item.action), with: item)
+        }
+        // A worker barrier followed by a main-run-loop barrier delivers all results.
+        let writes = expectation(description: "native ANC menu writes finish")
+        HeadsetIOWorker.shared.enqueue { writes.fulfill() }
+        await fulfillment(of: [writes], timeout: 5)
+        await drainResults()
+        XCTAssertNil(delegate.commandFailure)
+        delegate.rebuildMenu(menu)
+        XCTAssertTrue(try XCTUnwrap(menu.items.first { $0.title == localized("Noise cancelling") }?.submenu).items.allSatisfy { $0.state == .off })
+    }
+
+    func testANCSettingsSelectOneSupportingTargetAndUseQueuedCommands() async throws {
+        UserDefaults.standard.set(0, forKey: "testMode")
+        let provider = RecordingHeadsetProvider()
+        let executor = ManualHeadsetExecutor()
+        let controller = HeadsetController(provider: provider, executor: executor)
+        let delegate = AppDelegate(headsetController: controller)
+        let startupTarget = HeadsetTarget.physical(.init(vendor: 3, product: 4), attachmentID: 22)
+        let cycleTarget = HeadsetTarget.physical(.init(vendor: 5, product: 6), attachmentID: 33)
+        func device(_ name: String, capabilities: [String], target: HeadsetTarget?) -> HeadsetDevice {
+            HeadsetDevice(usbID: .init(vendor: 1, product: 2), name: name, vendor: "Vendor", product: "Product",
+                          capabilities: capabilities, target: target)
+        }
+        provider.devices = [
+            device("Unsupported", capabilities: [], target: startupTarget),
+            device("Ambiguous", capabilities: ["CAP_ANC_STARTUP_MODE", "CAP_ANC_BUTTON_MODES"], target: nil),
+            device("Old test mode", capabilities: ["CAP_ANC_STARTUP_MODE"], target: .test(profile: 7)),
+            device("Startup", capabilities: ["CAP_ANC_STARTUP_MODE"], target: startupTarget),
+            device("Cycle", capabilities: ["CAP_ANC_STARTUP_MODE", "CAP_ANC_BUTTON_MODES"], target: cycleTarget)
+        ]
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+        delegate.performANCSettingsCommand(.ancStartupMode(2))
+        delegate.performANCSettingsCommand(.ancButtonModes([.anc, .ambient]))
+        XCTAssertTrue(provider.commands.isEmpty)
+        XCTAssertEqual(executor.jobs.count, 2)
+        executor.runNext()
+        executor.runNext()
+        await drainResults()
+        XCTAssertEqual(provider.commands.map { $0.0 }, [.ancStartupMode(2), .ancButtonModes([.anc, .ambient])])
+        XCTAssertEqual(provider.commands.map { $0.1 }, [startupTarget, cycleTarget])
+        XCTAssertEqual(provider.commands.map { $0.2 }, [0, 0])
+        provider.commandResult = .failure(.init(operation: .command, kind: .native(-5)))
+        delegate.performANCSettingsCommand(.ancStartupMode(1))
+        executor.runNext()
+        await drainResults()
+        XCTAssertTrue(delegate.commandFailure?.contains("Startup:") == true)
+        XCTAssertTrue(delegate.commandFailure?.contains("-5") == true)
+
+        controller.invalidateSnapshot()
+        delegate.performANCSettingsCommand(.ancStartupMode(0))
+        XCTAssertTrue(executor.jobs.isEmpty)
+        XCTAssertEqual(delegate.commandFailure, HeadsetFailure(operation: .command, kind: .targetUnavailable).message)
+        delegate.stop()
+        executor.finishStop()
+        await drainResults()
+    }
+
+    func testANCSettingsRetrySavedSelectionsAfterReconnectStalenessAndNativeFailure() async {
+        let store = AppDefaults.standard
+        let savedStartup = store.object(forKey: "ancStartupMode")
+        let savedCycle = store.object(forKey: "ancButtonModes")
+        let savedProfile = store.object(forKey: "testMode")
+        defer {
+            store.set(savedStartup, forKey: "ancStartupMode")
+            store.set(savedCycle, forKey: "ancButtonModes")
+            store.set(savedProfile, forKey: "testMode")
+        }
+        store.set(7, forKey: "testMode")
+        store.set(3, forKey: "ancStartupMode")
+        store.set(HeadsetANCButtonModes.all.rawValue, forKey: "ancButtonModes")
+        let provider = RecordingHeadsetProvider()
+        let executor = ManualHeadsetExecutor()
+        let controller = HeadsetController(provider: provider, executor: executor)
+        let delegate = AppDelegate(headsetController: controller)
+        delegate.updateStatusItem() // Successfully discover no connected headset.
+        executor.runNext()
+        await drainResults()
+        let view = ANCSettingsView(onCommand: { delegate.performANCSettingsCommand($0) })
+        view.startupModeBinding.wrappedValue = 1
+        view.buttonModeBinding(.off).wrappedValue = false
+        XCTAssertTrue(executor.jobs.isEmpty)
+        XCTAssertNotNil(delegate.commandFailure)
+
+        provider.devices = [HeadsetDevice(usbID: .testDevice, name: "Test", vendor: "Vendor", product: "Product",
+                                         capabilities: ["CAP_ANC_STARTUP_MODE", "CAP_ANC_BUTTON_MODES"], target: .test(profile: 7))]
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+        controller.invalidateSnapshot()
+        view.applyStartupMode()
+        view.applyButtonModes()
+        XCTAssertTrue(executor.jobs.isEmpty)
+        XCTAssertTrue(provider.commands.isEmpty)
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+
+        // Reopening Settings preserves the unapplied values and permits retry.
+        let reopened = ANCSettingsView(onCommand: { delegate.performANCSettingsCommand($0) })
+        provider.commandResult = .failure(.init(operation: .command, kind: .native(-5)))
+        reopened.applyStartupMode()
+        reopened.applyButtonModes()
+        executor.runNext()
+        executor.runNext()
+        await drainResults()
+        XCTAssertTrue(delegate.commandFailure?.contains("-5") == true)
+        provider.commandResult = .success(())
+        reopened.applyStartupMode()
+        reopened.applyButtonModes()
+        executor.runNext()
+        executor.runNext()
+        await drainResults()
+        XCTAssertNil(delegate.commandFailure)
+        let intended: [HeadsetCommand] = [.ancStartupMode(1), .ancButtonModes([.anc, .ambient])]
+        XCTAssertEqual(provider.commands.map { $0.0 }, intended + intended)
+        XCTAssertEqual(provider.commands.map { $0.1 }, Array(repeating: .test(profile: 7), count: 4))
+        XCTAssertEqual(store.integer(forKey: "ancStartupMode"), 1)
+        XCTAssertEqual(store.integer(forKey: "ancButtonModes"), HeadsetANCButtonModes([.anc, .ambient]).rawValue)
+        delegate.stop()
+        executor.finishStop()
+        await drainResults()
+    }
+
+    func testANCSettingsRejectMissingCapabilitiesProfileChangesAndShutdown() async {
+        UserDefaults.standard.set(7, forKey: "testMode")
+        let provider = RecordingHeadsetProvider()
+        let executor = ManualHeadsetExecutor()
+        let controller = HeadsetController(provider: provider, executor: executor)
+        let delegate = AppDelegate(headsetController: controller)
+        provider.devices = [microphoneDevice(muted: nil, attached: nil)]
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+        delegate.performANCSettingsCommand(.ancStartupMode(1))
+        delegate.performANCSettingsCommand(.ancButtonModes(.off))
+        XCTAssertTrue(executor.jobs.isEmpty)
+        provider.devices = [HeadsetDevice(usbID: .testDevice, name: "Test", vendor: "Vendor", product: "Product",
+                                         capabilities: ["CAP_ANC_STARTUP_MODE", "CAP_ANC_BUTTON_MODES"], target: .test(profile: 7))]
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+        UserDefaults.standard.set(0, forKey: "testMode")
+        delegate.performANCSettingsCommand(.ancStartupMode(1))
+        XCTAssertTrue(executor.jobs.isEmpty)
+        delegate.stop()
+        delegate.performANCSettingsCommand(.ancButtonModes(.all))
+        XCTAssertTrue(executor.jobs.isEmpty)
+        executor.finishStop()
+        await drainResults()
+    }
+
     func testBluetoothPowerOnOffersOnAndOffWithoutReadback() async throws {
         try await verifyWriteOnlyControl(.bluetoothWhenPoweredOn, title: "Bluetooth on at Power-On", values: [0, 1],
                                         commands: [.bluetoothWhenPoweredOn(false), .bluetoothWhenPoweredOn(true)])
@@ -325,6 +498,9 @@ import XCTest
     }
 
     func testKnownCapabilitiesExposeLegacyMenuStrings() async {
+        XCTAssertEqual(HeadsetCapability.anc.legacyCapabilityString, "CAP_ANC")
+        XCTAssertEqual(HeadsetCapability.ancStartupMode.legacyCapabilityString, "CAP_ANC_STARTUP_MODE")
+        XCTAssertEqual(HeadsetCapability.ancButtonModes.legacyCapabilityString, "CAP_ANC_BUTTON_MODES")
         XCTAssertEqual(HeadsetCapability.sidetone.legacyCapabilityString, "CAP_SIDETONE")
         XCTAssertEqual(HeadsetCapability.sidetoneStatus.legacyCapabilityString, "CAP_SIDETONE_STATUS")
         XCTAssertEqual(HeadsetCapability.lights.legacyCapabilityString, "CAP_LIGHTS")
@@ -474,7 +650,7 @@ import XCTest
         delegate.latestDevices = [menuDevice(target: a), menuDevice(target: b)]
         let menu = NSMenu()
         delegate.rebuildMenu(menu)
-        let titles = ["Sidetone", "Lights", "Inactive Time", "Voice Prompts", "Rotate to Mute", "Equalizer Preset"]
+        let titles = ["Sidetone", "Lights", "Inactive Time", "Voice Prompts", "Rotate to Mute", "Equalizer Preset", "Noise cancelling"]
         let controls = try titles.map { title in
             try XCTUnwrap(menu.items.last { $0.title == localized(title) }?.submenu?.items.first)
         }
@@ -485,10 +661,10 @@ import XCTest
             let selector = try XCTUnwrap(item.action)
             _ = delegate.perform(selector, with: item)
         }
-        XCTAssertEqual(executor.jobs.count, 6)
+        XCTAssertEqual(executor.jobs.count, 7)
         while !executor.jobs.isEmpty { executor.runNext() }
-        XCTAssertEqual(provider.commands.map { $0.1 }, Array(repeating: b, count: 6))
-        XCTAssertEqual(provider.commands.map { $0.0 }, [.sidetone(0), .lights(false), .inactiveTime(0), .voicePrompts(false), .rotateToMute(false), .equalizerPreset(0)])
+        XCTAssertEqual(provider.commands.map { $0.1 }, Array(repeating: b, count: 7))
+        XCTAssertEqual(provider.commands.map { $0.0 }, [.sidetone(0), .lights(false), .inactiveTime(0), .voicePrompts(false), .rotateToMute(false), .equalizerPreset(0), .anc(0)])
     }
 
     func testUnknownTargetAndOldTestMenuCannotEnqueueHardwareCommands() async throws {
