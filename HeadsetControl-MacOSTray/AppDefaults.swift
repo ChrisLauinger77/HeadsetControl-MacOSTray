@@ -6,6 +6,10 @@ nonisolated enum AppDefaults {
     static let sidetoneValues = [0, 32, 64, 96, 128]
     static let sidetoneRange = -1...128
     static let levelPresetNames = ["Off", "Low", "Medium", "High", "Maximum"]
+    static let headsetVolumeKeys = ["headsetVolumeOff", "headsetVolumeLow", "headsetVolumeMid", "headsetVolumeHigh", "headsetVolumeMax"]
+    static let headsetVolumeValues = [0, 32, 64, 96, 128]
+    static let headsetVolumeRange = 0...128
+    static let headsetVolumePresetRange = -1...128
     static let microphoneVolumeKeys = ["microphoneVolumeOff", "microphoneVolumeLow", "microphoneVolumeMid", "microphoneVolumeHigh", "microphoneVolumeMax"]
     static let microphoneVolumeValues = [0, 32, 64, 96, 128]
     static let microphoneVolumeRange = 0...128
@@ -64,6 +68,7 @@ nonisolated enum AppDefaults {
             "equalizerPresets": equalizerPresets, "inactiveTimeOptions": inactiveTimeOptionsRaw
         ]
         for (key, value) in zip(sidetoneKeys, sidetoneValues) { values[key] = value }
+        for (key, value) in zip(headsetVolumeKeys, headsetVolumeValues) { values[key] = value }
         for (key, value) in zip(microphoneVolumeKeys, microphoneVolumeValues) { values[key] = value }
         for (key, value) in zip(bluetoothCallVolumeKeys, bluetoothCallVolumeValues) { values[key] = value }
         store.register(defaults: values)
@@ -84,6 +89,9 @@ nonisolated enum AppDefaults {
         repair("lowBatteryThreshold", value: validatedLowBatteryThreshold(store.object(forKey: "lowBatteryThreshold")), in: store)
         for (key, fallback) in zip(sidetoneKeys, sidetoneValues) {
             repair(key, value: validatedSidetone(store.object(forKey: key), fallback: fallback), in: store)
+        }
+        for (key, fallback) in zip(headsetVolumeKeys, headsetVolumeValues) {
+            repair(key, value: validatedLevelPreset(store.object(forKey: key), range: headsetVolumePresetRange, fallback: fallback), in: store)
         }
         for (key, fallback) in zip(microphoneVolumeKeys, microphoneVolumeValues) {
             repair(key, value: validatedLevelPreset(store.object(forKey: key), range: microphoneVolumePresetRange, fallback: fallback), in: store)

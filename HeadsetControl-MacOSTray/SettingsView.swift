@@ -45,6 +45,11 @@ struct SettingsView: View {
     @AppStorage("sidetoneMid", store: AppDefaults.standard) var sidetoneMid: Int = AppDefaults.sidetoneValues[2]
     @AppStorage("sidetoneHigh", store: AppDefaults.standard) var sidetoneHigh: Int = AppDefaults.sidetoneValues[3]
     @AppStorage("sidetoneMax", store: AppDefaults.standard) var sidetoneMax: Int = AppDefaults.sidetoneValues[4]
+    @AppStorage("headsetVolumeOff", store: AppDefaults.standard) var headsetVolumeOff: Int = AppDefaults.headsetVolumeValues[0]
+    @AppStorage("headsetVolumeLow", store: AppDefaults.standard) var headsetVolumeLow: Int = AppDefaults.headsetVolumeValues[1]
+    @AppStorage("headsetVolumeMid", store: AppDefaults.standard) var headsetVolumeMid: Int = AppDefaults.headsetVolumeValues[2]
+    @AppStorage("headsetVolumeHigh", store: AppDefaults.standard) var headsetVolumeHigh: Int = AppDefaults.headsetVolumeValues[3]
+    @AppStorage("headsetVolumeMax", store: AppDefaults.standard) var headsetVolumeMax: Int = AppDefaults.headsetVolumeValues[4]
     @AppStorage("microphoneVolumeOff", store: AppDefaults.standard) var microphoneVolumeOff: Int = AppDefaults.microphoneVolumeValues[0]
     @AppStorage("microphoneVolumeLow", store: AppDefaults.standard) var microphoneVolumeLow: Int = AppDefaults.microphoneVolumeValues[1]
     @AppStorage("microphoneVolumeMid", store: AppDefaults.standard) var microphoneVolumeMid: Int = AppDefaults.microphoneVolumeValues[2]
@@ -289,8 +294,13 @@ struct SettingsView: View {
         }
     }
 
-    private func volumePresetSettings(title: String, values: [Binding<Int>], range: ClosedRange<Int>) -> some View {
+    private func volumePresetSettings(title: String, values: [Binding<Int>], range: ClosedRange<Int>, description: String? = nil) -> some View {
         SettingsSection(title: title, systemImage: "slider.horizontal.3") {
+            if let description {
+                Text(description)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
             Text(String(format: NSLocalizedString("Valid range: -1...%d. Use -1 to hide a menu entry.", comment: "Configurable volume preset range"), range.upperBound))
                 .font(.subheadline)
                 .foregroundColor(.secondary)
@@ -363,6 +373,10 @@ struct SettingsView: View {
                         )
                     }
                 }
+                volumePresetSettings(title: NSLocalizedString("Headset volume", comment: "Hardware volume presets"),
+                                     values: [$headsetVolumeOff, $headsetVolumeLow, $headsetVolumeMid, $headsetVolumeHigh, $headsetVolumeMax],
+                                     range: AppDefaults.headsetVolumePresetRange,
+                                     description: NSLocalizedString("Controls the headset's hardware volume.", comment: "Hardware volume settings explanation"))
                 volumePresetSettings(title: NSLocalizedString("Microphone Volume", comment: "Microphone volume presets"),
                                      values: [$microphoneVolumeOff, $microphoneVolumeLow, $microphoneVolumeMid, $microphoneVolumeHigh, $microphoneVolumeMax],
                                      range: AppDefaults.microphoneVolumePresetRange)

@@ -160,4 +160,10 @@
 "Select at least one mode." = "Select at least one mode.";
 "Apply startup mode" = "Apply startup mode";
 "Apply button cycle" = "Apply button cycle";
+
 "Changes are sent to the first connected headset that supports each setting. Current values cannot be read from the headset." = "Changes are sent to the first connected headset that supports each setting. Current values cannot be read from the headset.";
+
+/* Headset hardware volume */
+"Headset volume" = "Headset volume";
+"Headset volume: %@" = "Headset volume: %@";
+"Controls the headset's hardware volume." = "Controls the headset's hardware volume.";

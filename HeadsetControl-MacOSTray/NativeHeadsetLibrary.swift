@@ -44,6 +44,7 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
         var batteryResult: Result<HeadsetBattery, HeadsetFailure>?
         var chatmixResult: Result<Int, HeadsetFailure>?
         var sidetoneResult: Result<HeadsetSidetone, HeadsetFailure>?
+        var headsetVolumeResult: Result<HeadsetVolume, HeadsetFailure>?
         var microphoneMuted: Result<Bool, HeadsetFailure>?
         var microphoneAttached: Result<Bool, HeadsetFailure>?
         var equalizerPresets: Result<[HeadsetEqualizerPreset], HeadsetFailure>?
@@ -80,6 +81,20 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
                 sidetoneResult = .failure(.init(operation: .sidetone, kind: .native(code.rawValue)))
             }
         }
+        // Setting support alone does not imply a getter. In particular, the A50
+        // can be controlled before upstream implements its volume readback.
+        if hsc_supports(handle, HSC_CAP_HEADSET_VOLUME),
+           hsc_get_readable_capabilities(handle) & (1 << HSC_CAP_HEADSET_VOLUME.rawValue) != 0 {
+            var volume = hsc_headset_volume_t()
+            let code = hsc_get_headset_volume(handle, &volume)
+            if code == HSC_RESULT_OK {
+                headsetVolumeResult = HeadsetVolume.decode(level: Int(volume.volume), minLevel: Int(volume.min_volume),
+                                                           maxLevel: Int(volume.max_volume), deviceLevel: Int(volume.device_volume),
+                                                           deviceMin: Int(volume.device_min), deviceMax: Int(volume.device_max))
+            } else {
+                headsetVolumeResult = .failure(.init(operation: .headsetVolume, kind: .native(code.rawValue)))
+            }
+        }
         if hsc_supports(handle, HeadsetCapability.microphoneMuteStatus.rawValue) {
             var status = hsc_mic_mute_status_t()
             let code = hsc_get_mic_mute_status(handle, &status)
@@ -111,6 +126,7 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
             battery: batteryResult,
             chatmix: chatmixResult,
             sidetone: sidetoneResult,
+            headsetVolume: headsetVolumeResult,
             microphoneMuted: microphoneMuted,
             microphoneAttached: microphoneAttached,
             equalizerPresets: equalizerPresets
@@ -121,6 +137,12 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
         assertWorker()
         let handle = handles[connection.index]
         switch command {
+        case .headsetVolume(let level):
+            guard hsc_supports(handle, HSC_CAP_HEADSET_VOLUME) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
+            guard AppDefaults.headsetVolumeRange.contains(level), let nativeLevel = UInt8(exactly: level) else {
+                return .failure(.init(operation: .command, kind: .native(HSC_RESULT_INVALID_PARAM.rawValue)))
+            }
+            return HeadsetFailure.result(code: hsc_set_headset_volume(handle, nativeLevel, nil).rawValue, operation: .command)
         case .anc(let mode):
             guard hsc_supports(handle, HSC_CAP_ANC) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
             let range = AppDefaults.ancRange

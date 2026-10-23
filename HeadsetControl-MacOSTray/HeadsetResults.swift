@@ -6,6 +6,7 @@ nonisolated enum HeadsetOperation: String, Sendable {
     case battery = "Battery"
     case chatmix = "Chatmix"
     case sidetone = "Sidetone"
+    case headsetVolume = "Headset volume"
     case microphone = "Microphone"
     case boomMicrophone = "Boom mic"
     case equalizer = "Equalizer Preset"
@@ -136,6 +137,35 @@ nonisolated struct HeadsetSidetone: Equatable, Sendable {
             return String(format: NSLocalizedString("%d/128 (%@)", comment: "Sidetone level and device-reported name"), level, levelName)
         }
         return String(format: NSLocalizedString("%d/128", comment: "Normalized sidetone level"), level)
+    }
+}
+
+nonisolated struct HeadsetVolume: Equatable, Sendable {
+    let level: Int
+    let minLevel: Int
+    let maxLevel: Int
+    let deviceLevel: Int
+    let deviceMin: Int
+    let deviceMax: Int
+
+    static func decode(level: Int, minLevel: Int, maxLevel: Int, deviceLevel: Int,
+                       deviceMin: Int, deviceMax: Int) -> Result<Self, HeadsetFailure> {
+        let range = AppDefaults.headsetVolumeRange
+        guard range.contains(minLevel), range.contains(maxLevel), minLevel <= maxLevel,
+              (minLevel...maxLevel).contains(level), deviceMin >= 0, deviceMin <= deviceMax,
+              (deviceMin...deviceMax).contains(deviceLevel) else {
+            return .failure(.init(operation: .headsetVolume, kind: .invalidResponse("Headset volume \(level), device level \(deviceLevel)")))
+        }
+        return .success(Self(level: level, minLevel: minLevel, maxLevel: maxLevel,
+                             deviceLevel: deviceLevel, deviceMin: deviceMin, deviceMax: deviceMax))
+    }
+
+    func matchingPresetIndex(in levels: [Int]) -> Int? {
+        levels.firstIndex(of: level)
+    }
+
+    var levelText: String {
+        String(format: NSLocalizedString("%d/128", comment: "Normalized headset volume"), level)
     }
 }
 

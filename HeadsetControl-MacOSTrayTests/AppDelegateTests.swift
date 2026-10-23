@@ -498,6 +498,7 @@ import XCTest
     }
 
     func testKnownCapabilitiesExposeLegacyMenuStrings() async {
+        XCTAssertEqual(HeadsetCapability.headsetVolume.legacyCapabilityString, "CAP_HEADSET_VOLUME")
         XCTAssertEqual(HeadsetCapability.anc.legacyCapabilityString, "CAP_ANC")
         XCTAssertEqual(HeadsetCapability.ancStartupMode.legacyCapabilityString, "CAP_ANC_STARTUP_MODE")
         XCTAssertEqual(HeadsetCapability.ancButtonModes.legacyCapabilityString, "CAP_ANC_BUTTON_MODES")
@@ -650,7 +651,7 @@ import XCTest
         delegate.latestDevices = [menuDevice(target: a), menuDevice(target: b)]
         let menu = NSMenu()
         delegate.rebuildMenu(menu)
-        let titles = ["Sidetone", "Lights", "Inactive Time", "Voice Prompts", "Rotate to Mute", "Equalizer Preset", "Noise cancelling"]
+        let titles = ["Sidetone", "Lights", "Inactive Time", "Voice Prompts", "Rotate to Mute", "Equalizer Preset", "Noise cancelling", "Headset volume"]
         let controls = try titles.map { title in
             try XCTUnwrap(menu.items.last { $0.title == localized(title) }?.submenu?.items.first)
         }
@@ -661,10 +662,10 @@ import XCTest
             let selector = try XCTUnwrap(item.action)
             _ = delegate.perform(selector, with: item)
         }
-        XCTAssertEqual(executor.jobs.count, 7)
+        XCTAssertEqual(executor.jobs.count, 8)
         while !executor.jobs.isEmpty { executor.runNext() }
-        XCTAssertEqual(provider.commands.map { $0.1 }, Array(repeating: b, count: 7))
-        XCTAssertEqual(provider.commands.map { $0.0 }, [.sidetone(0), .lights(false), .inactiveTime(0), .voicePrompts(false), .rotateToMute(false), .equalizerPreset(0), .anc(0)])
+        XCTAssertEqual(provider.commands.map { $0.1 }, Array(repeating: b, count: 8))
+        XCTAssertEqual(provider.commands.map { $0.0 }, [.sidetone(0), .lights(false), .inactiveTime(0), .voicePrompts(false), .rotateToMute(false), .equalizerPreset(0), .anc(0), .headsetVolume(0)])
     }
 
     func testUnknownTargetAndOldTestMenuCannotEnqueueHardwareCommands() async throws {

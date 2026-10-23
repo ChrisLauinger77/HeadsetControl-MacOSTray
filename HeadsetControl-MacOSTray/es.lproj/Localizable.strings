@@ -160,4 +160,10 @@
 "Select at least one mode." = "Selecciona al menos un modo.";
 "Apply startup mode" = "Aplicar modo de encendido";
 "Apply button cycle" = "Aplicar ciclo del botón";
+
 "Changes are sent to the first connected headset that supports each setting. Current values cannot be read from the headset." = "Los cambios se envían al primer auricular conectado que admite cada ajuste. No se pueden leer los valores actuales del auricular.";
+
+/* Headset hardware volume */
+"Headset volume" = "Volumen de los auriculares";
+"Headset volume: %@" = "Volumen de los auriculares: %@";
+"Controls the headset's hardware volume." = "Controla el volumen del hardware de los auriculares.";
