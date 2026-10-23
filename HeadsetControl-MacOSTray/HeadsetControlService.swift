@@ -18,6 +18,7 @@ nonisolated struct HeadsetCapability {
     static let parametricEqualizer = HeadsetCapability(rawValue: HSC_CAP_PARAMETRIC_EQUALIZER)
     static let microphoneMuteLedBrightness = HeadsetCapability(rawValue: HSC_CAP_MICROPHONE_MUTE_LED_BRIGHTNESS)
     static let microphoneVolume = HeadsetCapability(rawValue: HSC_CAP_MICROPHONE_VOLUME)
+    static let noiseFilter = HeadsetCapability(rawValue: HSC_CAP_NOISE_FILTER)
     static let volumeLimiter = HeadsetCapability(rawValue: HSC_CAP_VOLUME_LIMITER)
     static let bluetoothWhenPoweredOn = HeadsetCapability(rawValue: HSC_CAP_BT_WHEN_POWERED_ON)
     static let bluetoothCallVolume = HeadsetCapability(rawValue: HSC_CAP_BT_CALL_VOLUME)
@@ -38,6 +39,7 @@ nonisolated struct HeadsetCapability {
         case HSC_CAP_PARAMETRIC_EQUALIZER: return "CAP_PARAMETRIC_EQUALIZER"
         case HSC_CAP_MICROPHONE_MUTE_LED_BRIGHTNESS: return "CAP_MICROPHONE_MUTE_LED_BRIGHTNESS"
         case HSC_CAP_MICROPHONE_VOLUME: return "CAP_MICROPHONE_VOLUME"
+        case HSC_CAP_NOISE_FILTER: return "CAP_NOISE_FILTER"
         case HSC_CAP_VOLUME_LIMITER: return "CAP_VOLUME_LIMITER"
         case HSC_CAP_BT_WHEN_POWERED_ON: return "CAP_BT_WHEN_POWERED_ON"
         case HSC_CAP_BT_CALL_VOLUME: return "CAP_BT_CALL_VOLUME"
@@ -48,6 +50,7 @@ nonisolated struct HeadsetCapability {
     static let menuCapabilities: [HeadsetCapability] = [
         .sidetone,
         .microphoneVolume,
+        .noiseFilter,
         .lights,
         .inactiveTime,
         .voicePrompts,

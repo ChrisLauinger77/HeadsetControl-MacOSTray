@@ -105,6 +105,10 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
         assertWorker()
         let handle = handles[connection.index]
         switch command {
+        case .noiseFilter(let level):
+            guard hsc_supports(handle, HSC_CAP_NOISE_FILTER) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
+            let range = AppDefaults.noiseFilterRange
+            return HeadsetFailure.result(code: hsc_set_noise_filter(handle, UInt8(max(range.lowerBound, min(range.upperBound, level)))).rawValue, operation: .command)
         case .microphoneVolume(let level):
             guard hsc_supports(handle, HSC_CAP_MICROPHONE_VOLUME) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
             let range = AppDefaults.microphoneVolumeRange

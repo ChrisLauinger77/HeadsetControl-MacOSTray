@@ -125,3 +125,5 @@
 "Microphone Volume" = "Mikrofonlautstärke";
 "Levels" = "Pegel";
 "Valid range: -1...%d. Use -1 to hide a menu entry." = "Gültiger Bereich: -1...%d. Mit -1 wird ein Menüeintrag ausgeblendet.";
+
+"Microphone Noise Filter" = "Mikrofon-Rauschfilter";

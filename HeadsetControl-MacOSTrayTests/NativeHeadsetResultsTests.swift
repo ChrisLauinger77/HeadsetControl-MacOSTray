@@ -3,6 +3,10 @@ import HeadsetControlCLib
 @testable import HeadsetControl_MacOSTray
 
 final class NativeHeadsetResultsTests: XCTestCase {
+    func testNativeNoiseFilterClampsAndPreservesProfileOneError() async {
+        await verifyNativeWrites([Int.min, -1, 0, 1, 2, 3, Int.max].map(HeadsetCommand.noiseFilter), profileOneFails: true)
+    }
+
     private func verifyNativeWrites(_ commands: [HeadsetCommand], profileOneFails: Bool = false) async {
         let done = expectation(description: "native write profiles finish")
         HeadsetIOWorker.shared.enqueue {

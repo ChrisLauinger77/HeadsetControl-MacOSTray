@@ -3,6 +3,11 @@ import XCTest
 @testable import HeadsetControl_MacOSTray
 
 @MainActor class AppDelegateTests: XCTestCase {
+    func testNoiseFilterOffersOffLowAndHighWithoutReadback() async throws {
+        try await verifyWriteOnlyControl(.noiseFilter, title: "Microphone Noise Filter", values: [0, 1, 2],
+                                        commands: [0, 1, 2].map(HeadsetCommand.noiseFilter))
+    }
+
     private func verifyWriteOnlyControl(_ capability: HeadsetCapability, title: String, values: [Int], commands: [HeadsetCommand]) async throws {
         UserDefaults.standard.set(7, forKey: "testMode")
         let service = HeadsetControlService()

@@ -137,6 +137,10 @@ import UserNotifications
         runControlAction(sender) { .microphoneVolume($0) }
     }
 
+    @objc func setNoiseFilter(_ sender: NSMenuItem) {
+        runControlAction(sender) { .noiseFilter($0) }
+    }
+
     private var currentTestProfile: Int {
         AppDefaults.validatedTestProfile(AppDefaults.standard.object(forKey: "testMode"))
     }
@@ -498,6 +502,7 @@ import UserNotifications
                     menu.addItem(withTitle: NSLocalizedString("Controls unavailable: device connection is not unique", comment: "Cannot safely select a USB attachment"), action: nil, keyEquivalent: "")
                 }
                 let capabilityMap: [(String, String)] = [
+                    ("CAP_NOISE_FILTER", NSLocalizedString("Microphone Noise Filter", comment: "Microphone noise filter capability")),
                     ("CAP_MICROPHONE_VOLUME", NSLocalizedString("Microphone Volume", comment: "Microphone volume capability")),
                     ("CAP_SIDETONE", NSLocalizedString("Sidetone", comment: "Sidetone capability")),
                     ("CAP_LIGHTS", NSLocalizedString("Lights", comment: "Lights capability")),
@@ -509,6 +514,12 @@ import UserNotifications
                 for (cap, title) in capabilityMap {
                     if capabilities.contains(cap) {
                         switch cap {
+                        case "CAP_NOISE_FILTER":
+                            let options = [(NSLocalizedString("Off", comment: "Noise filter off"), 0),
+                                           (NSLocalizedString("Low", comment: "Low noise filtering"), 1),
+                                           (NSLocalizedString("High", comment: "High noise filtering"), 2)]
+                            addChoiceMenu(to: menu, title: title, options: options,
+                                          action: #selector(setNoiseFilter(_:)), target: controlTarget, deviceName: deviceName)
                         case "CAP_MICROPHONE_VOLUME":
                             addChoiceMenu(to: menu, title: title, options: microphoneVolumeLevelsFromSettings,
                                           action: #selector(setMicrophoneVolume(_:)), target: controlTarget, deviceName: deviceName)
