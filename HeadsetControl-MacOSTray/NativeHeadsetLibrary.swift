@@ -11,7 +11,7 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
 
     func configure(testProfile: Int) throws(HeadsetFailure) {
         assertWorker()
-        guard AppDefaults.testProfileRange.contains(testProfile) else {
+        guard AppDefaults.isSupportedTestProfile(testProfile) else {
             throw HeadsetFailure(operation: .discovery, kind: .invalidTestProfile(testProfile))
         }
         used = true

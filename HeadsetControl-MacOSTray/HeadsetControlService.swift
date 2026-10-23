@@ -162,7 +162,7 @@ nonisolated final class HeadsetControlService: HeadsetControlProviding, @uncheck
     }
 
     func perform(_ command: HeadsetCommand, on target: HeadsetTarget, testProfile: Int) -> Result<Void, HeadsetFailure> {
-        guard AppDefaults.testProfileRange.contains(testProfile) else {
+        guard AppDefaults.isSupportedTestProfile(testProfile) else {
             return .failure(.init(operation: .command, kind: .invalidTestProfile(testProfile)))
         }
         guard target.accepts(testProfile: testProfile) else {
@@ -215,7 +215,7 @@ nonisolated final class HeadsetControlService: HeadsetControlProviding, @uncheck
     private func withTransaction<T>(testProfile: Int, operation: HeadsetOperation,
                                     _ body: () -> Result<T, HeadsetFailure>) -> Result<T, HeadsetFailure> {
         checkExecutionContext()
-        guard AppDefaults.testProfileRange.contains(testProfile) else {
+        guard AppDefaults.isSupportedTestProfile(testProfile) else {
             return .failure(.init(operation: operation, kind: .invalidTestProfile(testProfile)))
         }
         guard !stopped else { return .failure(.init(operation: operation, kind: .stopped)) }
@@ -248,7 +248,7 @@ nonisolated final class MockHeadsetControlService: HeadsetControlProviding, Send
     }
 
     func perform(_ command: HeadsetCommand, on target: HeadsetTarget, testProfile: Int) -> Result<Void, HeadsetFailure> {
-        target == .test(profile: testProfile) && AppDefaults.testProfileRange.contains(testProfile) && testProfile > 0
+        target == .test(profile: testProfile) && AppDefaults.isSupportedTestProfile(testProfile) && testProfile > 0
             ? .success(()) : .failure(.init(operation: .command, kind: .targetUnavailable))
     }
     func shutdown() {}

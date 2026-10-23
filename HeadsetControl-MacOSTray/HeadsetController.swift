@@ -155,7 +155,7 @@ import Foundation
         // Cancelling old commands invokes caller code, which may stop or select
         // another mode before this request resumes.
         guard !stopped, profile == testProfile else { return }
-        guard AppDefaults.testProfileRange.contains(testProfile) else {
+        guard AppDefaults.isSupportedTestProfile(testProfile) else {
             pendingProfile = nil
             onRefresh?(.failure(.init(operation: .discovery, kind: .invalidTestProfile(testProfile))))
             return
@@ -200,7 +200,7 @@ import Foundation
             completion(.failure(.init(operation: .command, kind: .cancelled)))
             return
         }
-        guard AppDefaults.testProfileRange.contains(testProfile) else {
+        guard AppDefaults.isSupportedTestProfile(testProfile) else {
             completion(.failure(.init(operation: .command, kind: .invalidTestProfile(testProfile))))
             return
         }

@@ -244,6 +244,8 @@ struct SettingsSection<Content: View>: View {
                                 .tag(6)
                             Text(NSLocalizedString("7 - Low battery", comment: "Test mode 7"))
                                 .tag(7)
+                            Text(NSLocalizedString("10 - Limited capabilities", comment: "Test mode 10"))
+                                .tag(10)
                             Text(NSLocalizedString("Disabled", comment: "Test mode disabled"))
                                 .tag(0)
                         }
