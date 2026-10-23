@@ -158,4 +158,6 @@
 "Mode at power-off" = "Mode à l’extinction";
 "ANC button cycles through:" = "Le bouton ANC alterne entre :";
 "Select at least one mode." = "Sélectionnez au moins un mode.";
+"Apply startup mode" = "Appliquer le mode à l’allumage";
+"Apply button cycle" = "Appliquer le cycle du bouton";
 "Changes are sent to the first connected headset that supports each setting. Current values cannot be read from the headset." = "Les modifications sont envoyées au premier casque connecté qui prend en charge chaque réglage. Les valeurs actuelles ne peuvent pas être lues depuis le casque.";

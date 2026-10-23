@@ -178,6 +178,72 @@ import XCTest
         await drainResults()
     }
 
+    func testANCSettingsRetrySavedSelectionsAfterReconnectStalenessAndNativeFailure() async {
+        let store = AppDefaults.standard
+        let savedStartup = store.object(forKey: "ancStartupMode")
+        let savedCycle = store.object(forKey: "ancButtonModes")
+        let savedProfile = store.object(forKey: "testMode")
+        defer {
+            store.set(savedStartup, forKey: "ancStartupMode")
+            store.set(savedCycle, forKey: "ancButtonModes")
+            store.set(savedProfile, forKey: "testMode")
+        }
+        store.set(7, forKey: "testMode")
+        store.set(3, forKey: "ancStartupMode")
+        store.set(HeadsetANCButtonModes.all.rawValue, forKey: "ancButtonModes")
+        let provider = RecordingHeadsetProvider()
+        let executor = ManualHeadsetExecutor()
+        let controller = HeadsetController(provider: provider, executor: executor)
+        let delegate = AppDelegate(headsetController: controller)
+        delegate.updateStatusItem() // Successfully discover no connected headset.
+        executor.runNext()
+        await drainResults()
+        let view = ANCSettingsView(onCommand: { delegate.performANCSettingsCommand($0) })
+        view.startupModeBinding.wrappedValue = 1
+        view.buttonModeBinding(.off).wrappedValue = false
+        XCTAssertTrue(executor.jobs.isEmpty)
+        XCTAssertNotNil(delegate.commandFailure)
+
+        provider.devices = [HeadsetDevice(usbID: .testDevice, name: "Test", vendor: "Vendor", product: "Product",
+                                         capabilities: ["CAP_ANC_STARTUP_MODE", "CAP_ANC_BUTTON_MODES"], target: .test(profile: 7))]
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+        controller.invalidateSnapshot()
+        view.applyStartupMode()
+        view.applyButtonModes()
+        XCTAssertTrue(executor.jobs.isEmpty)
+        XCTAssertTrue(provider.commands.isEmpty)
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+
+        // Reopening Settings preserves the unapplied values and permits retry.
+        let reopened = ANCSettingsView(onCommand: { delegate.performANCSettingsCommand($0) })
+        provider.commandResult = .failure(.init(operation: .command, kind: .native(-5)))
+        reopened.applyStartupMode()
+        reopened.applyButtonModes()
+        executor.runNext()
+        executor.runNext()
+        await drainResults()
+        XCTAssertTrue(delegate.commandFailure?.contains("-5") == true)
+        provider.commandResult = .success(())
+        reopened.applyStartupMode()
+        reopened.applyButtonModes()
+        executor.runNext()
+        executor.runNext()
+        await drainResults()
+        XCTAssertNil(delegate.commandFailure)
+        let intended: [HeadsetCommand] = [.ancStartupMode(1), .ancButtonModes([.anc, .ambient])]
+        XCTAssertEqual(provider.commands.map { $0.0 }, intended + intended)
+        XCTAssertEqual(provider.commands.map { $0.1 }, Array(repeating: .test(profile: 7), count: 4))
+        XCTAssertEqual(store.integer(forKey: "ancStartupMode"), 1)
+        XCTAssertEqual(store.integer(forKey: "ancButtonModes"), HeadsetANCButtonModes([.anc, .ambient]).rawValue)
+        delegate.stop()
+        executor.finishStop()
+        await drainResults()
+    }
+
     func testANCSettingsRejectMissingCapabilitiesProfileChangesAndShutdown() async {
         UserDefaults.standard.set(7, forKey: "testMode")
         let provider = RecordingHeadsetProvider()

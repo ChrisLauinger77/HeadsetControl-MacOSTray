@@ -84,4 +84,27 @@ final class ANCSettingsTests: XCTestCase {
         binding.wrappedValue = 3
         XCTAssertEqual(commands.count, 4)
     }
+
+    @MainActor func testApplyResendsSavedValuesIndependentlyWithoutEditingThem() {
+        let store = AppDefaults.standard
+        let savedStartup = store.object(forKey: "ancStartupMode")
+        let savedCycle = store.object(forKey: "ancButtonModes")
+        defer {
+            store.set(savedStartup, forKey: "ancStartupMode")
+            store.set(savedCycle, forKey: "ancButtonModes")
+        }
+        store.set(2, forKey: "ancStartupMode")
+        store.set(HeadsetANCButtonModes.anc.rawValue, forKey: "ancButtonModes")
+        var commands: [HeadsetCommand] = []
+        let view = ANCSettingsView(onCommand: { commands.append($0) })
+        XCTAssertTrue(commands.isEmpty)
+        view.applyStartupMode()
+        view.applyStartupMode()
+        XCTAssertEqual(commands, [.ancStartupMode(2), .ancStartupMode(2)])
+        view.applyButtonModes()
+        view.applyButtonModes()
+        XCTAssertEqual(commands, [.ancStartupMode(2), .ancStartupMode(2), .ancButtonModes(.anc), .ancButtonModes(.anc)])
+        XCTAssertEqual(store.integer(forKey: "ancStartupMode"), 2)
+        XCTAssertEqual(store.integer(forKey: "ancButtonModes"), HeadsetANCButtonModes.anc.rawValue)
+    }
 }

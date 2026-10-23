@@ -540,7 +540,7 @@ struct ANCSettingsView: View {
                 let mode = AppDefaults.validatedANCStartupMode(newValue)
                 guard mode != startupMode else { return }
                 startupMode = mode
-                onCommand?(.ancStartupMode(mode))
+                applyStartupMode()
             }
         )
     }
@@ -554,9 +554,19 @@ struct ANCSettingsView: View {
                 let updated = buttonModes.setting(mode, enabled: enabled)
                 guard updated != buttonModes else { return }
                 buttonModesRaw = updated.rawValue
-                onCommand?(.ancButtonModes(updated))
+                applyButtonModes()
             }
         )
+    }
+
+    // Explicit submission also retries saved selections after reconnecting or a
+    // failed write, without sending an unwanted intermediate configuration.
+    func applyStartupMode() {
+        onCommand?(.ancStartupMode(startupModeBinding.wrappedValue))
+    }
+
+    func applyButtonModes() {
+        onCommand?(.ancButtonModes(buttonModes))
     }
 
     private func buttonModeToggle(_ title: String, mode: HeadsetANCButtonModes) -> some View {
@@ -577,12 +587,14 @@ struct ANCSettingsView: View {
                 Text(NSLocalizedString("Mode at power-off", comment: "Restore ANC mode at shutdown")).tag(3)
             }
             .pickerStyle(.menu)
+            Button(NSLocalizedString("Apply startup mode", comment: "Send or retry the selected ANC startup mode"), action: applyStartupMode)
             Text(NSLocalizedString("ANC button cycles through:", comment: "ANC button cycle label"))
             HStack(spacing: 16) {
                 buttonModeToggle(NSLocalizedString("Off", comment: "Include off in ANC cycle"), mode: .off)
                 buttonModeToggle(NSLocalizedString("Noise cancelling", comment: "Include ANC in cycle"), mode: .anc)
                 buttonModeToggle(NSLocalizedString("Ambient sound", comment: "Include ambient in ANC cycle"), mode: .ambient)
             }
+            Button(NSLocalizedString("Apply button cycle", comment: "Send or retry the selected ANC button cycle"), action: applyButtonModes)
             Text(NSLocalizedString("Select at least one mode.", comment: "ANC button requires a nonempty cycle"))
                 .font(.caption)
                 .foregroundColor(.secondary)
