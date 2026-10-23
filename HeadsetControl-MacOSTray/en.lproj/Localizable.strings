@@ -120,3 +120,8 @@
 "Device data may be out of date" = "Device data may be out of date";
 "Last checked: %@" = "Last checked: %@";
 "No devices in last check" = "No devices in last check";
+
+/* Microphone volume presets */
+"Microphone Volume" = "Microphone Volume";
+"Levels" = "Levels";
+"Valid range: -1...%d. Use -1 to hide a menu entry." = "Valid range: -1...%d. Use -1 to hide a menu entry.";

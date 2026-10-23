@@ -2,6 +2,21 @@ import XCTest
 @testable import HeadsetControl_MacOSTray
 
 final class AppDefaultsTests: XCTestCase {
+    func testMicrophoneVolumePresetsRegisterRepairAndPreserveHiddenEntries() throws {
+        let name = "MicrophoneVolumeTests.\(UUID())"
+        let store = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { store.removePersistentDomain(forName: name) }
+        AppDefaults.register(in: store)
+        XCTAssertEqual(AppDefaults.microphoneVolumeKeys.map { store.integer(forKey: $0) }, [0, 32, 64, 96, 128])
+        store.set(-1, forKey: "microphoneVolumeOff")
+        store.set(Int.max, forKey: "microphoneVolumeHigh")
+        store.set("invalid", forKey: "microphoneVolumeLow")
+        AppDefaults.validate(in: store)
+        XCTAssertEqual(store.integer(forKey: "microphoneVolumeOff"), -1)
+        XCTAssertEqual(store.integer(forKey: "microphoneVolumeHigh"), 128)
+        XCTAssertEqual(store.integer(forKey: "microphoneVolumeLow"), 32)
+    }
+
     func testLanguageSelectionOverridesAndRestoresSystemPreference() throws {
         let name = "HeadsetLanguageTests.\(UUID())"
         let store = try XCTUnwrap(UserDefaults(suiteName: name))

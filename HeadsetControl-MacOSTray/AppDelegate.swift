@@ -17,6 +17,18 @@ import UserNotifications
             (NSLocalizedString("Maximum", comment: "Sidetone level Maximum"), max)
         ]
     }
+    var microphoneVolumeLevelsFromSettings: [(String, Int)] {
+        configuredLevels(keys: AppDefaults.microphoneVolumeKeys, values: AppDefaults.microphoneVolumeValues,
+                         range: AppDefaults.microphoneVolumePresetRange)
+    }
+
+    private func configuredLevels(keys: [String], values: [Int], range: ClosedRange<Int>) -> [(String, Int)] {
+        zip(keys, values).enumerated().map { index, entry in
+            (NSLocalizedString(AppDefaults.levelPresetNames[index], comment: "Configured level preset"),
+             AppDefaults.validatedLevelPreset(AppDefaults.standard.object(forKey: entry.0), range: range, fallback: entry.1))
+        }.filter { $0.1 != -1 }
+    }
+
     private let headsetController: HeadsetController
     private let lifecycleObserver: HeadsetLifecycleObserving
     private weak var trackingMenu: NSMenu?
@@ -119,6 +131,10 @@ import UserNotifications
 
     @objc func setSidetoneLevel(_ sender: NSMenuItem) {
         runControlAction(sender) { .sidetone($0) }
+    }
+
+    @objc func setMicrophoneVolume(_ sender: NSMenuItem) {
+        runControlAction(sender) { .microphoneVolume($0) }
     }
 
     private var currentTestProfile: Int {
@@ -420,6 +436,20 @@ import UserNotifications
 
     // Rendering is separate from refresh requests: a result may update an open
     // menu, but must never recursively schedule another native transaction.
+    private func addChoiceMenu(to menu: NSMenu, title: String, options: [(String, Int)], action: Selector,
+                               target: HeadsetTarget?, deviceName: String) {
+        let submenu = NSMenu(title: title)
+        for (optionTitle, value) in options {
+            let item = NSMenuItem(title: optionTitle, action: target == nil ? nil : action, keyEquivalent: "")
+            item.target = self
+            item.representedObject = HeadsetMenuAction(target: target, value: value, deviceName: deviceName)
+            submenu.addItem(item)
+        }
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        menu.addItem(item)
+        menu.setSubmenu(submenu, for: item)
+    }
+
     func rebuildMenu(_ menu: NSMenu) {
         menu.removeAllItems()
         guard !stopping else { return }
@@ -468,6 +498,7 @@ import UserNotifications
                     menu.addItem(withTitle: NSLocalizedString("Controls unavailable: device connection is not unique", comment: "Cannot safely select a USB attachment"), action: nil, keyEquivalent: "")
                 }
                 let capabilityMap: [(String, String)] = [
+                    ("CAP_MICROPHONE_VOLUME", NSLocalizedString("Microphone Volume", comment: "Microphone volume capability")),
                     ("CAP_SIDETONE", NSLocalizedString("Sidetone", comment: "Sidetone capability")),
                     ("CAP_LIGHTS", NSLocalizedString("Lights", comment: "Lights capability")),
                     ("CAP_INACTIVE_TIME", NSLocalizedString("Inactive Time", comment: "Inactive Time capability")),
@@ -478,6 +509,9 @@ import UserNotifications
                 for (cap, title) in capabilityMap {
                     if capabilities.contains(cap) {
                         switch cap {
+                        case "CAP_MICROPHONE_VOLUME":
+                            addChoiceMenu(to: menu, title: title, options: microphoneVolumeLevelsFromSettings,
+                                          action: #selector(setMicrophoneVolume(_:)), target: controlTarget, deviceName: deviceName)
                         case "CAP_SIDETONE":
                             let sidetoneMenu = NSMenu(title: NSLocalizedString("Sidetone", comment: "Sidetone capability"))
                             let reading = device["sidetone"] as? Result<HeadsetSidetone, HeadsetFailure>

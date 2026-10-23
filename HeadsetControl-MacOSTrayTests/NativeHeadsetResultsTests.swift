@@ -3,6 +3,25 @@ import HeadsetControlCLib
 @testable import HeadsetControl_MacOSTray
 
 final class NativeHeadsetResultsTests: XCTestCase {
+    private func verifyNativeWrites(_ commands: [HeadsetCommand], profileOneFails: Bool = false) async {
+        let done = expectation(description: "native write profiles finish")
+        HeadsetIOWorker.shared.enqueue {
+            let service = HeadsetControlService()
+            for command in commands {
+                XCTAssertTrue(service.perform(command, on: .test(profile: 7), testProfile: 7).isSuccess, "\(command)")
+                let result = service.perform(command, on: .test(profile: 1), testProfile: 1)
+                if profileOneFails { XCTAssertEqual(result.failureValue?.kind, .native(-5), "\(command)") }
+                else { XCTAssertTrue(result.isSuccess, "Upstream profile 1 also succeeds for \(command)") }
+            }
+            done.fulfill()
+        }
+        await fulfillment(of: [done], timeout: 5)
+    }
+
+    func testNativeMicrophoneVolumeClampsBeforeCallingTheLibrary() async {
+        await verifyNativeWrites([Int.min, -1, 0, 64, 128, 129, Int.max].map(HeadsetCommand.microphoneVolume))
+    }
+
     func testSidetoneReadbackCopiesNamedLevelAndKeepsDeviceOnFailure() async throws {
         let service = HeadsetControlService()
         let result = await withCheckedContinuation { continuation in

@@ -105,6 +105,10 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
         assertWorker()
         let handle = handles[connection.index]
         switch command {
+        case .microphoneVolume(let level):
+            guard hsc_supports(handle, HSC_CAP_MICROPHONE_VOLUME) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
+            let range = AppDefaults.microphoneVolumeRange
+            return HeadsetFailure.result(code: hsc_set_mic_volume(handle, UInt8(max(range.lowerBound, min(range.upperBound, level)))).rawValue, operation: .command)
         case .sidetone(let level):
             guard hsc_supports(handle, HSC_CAP_SIDETONE) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
             return HeadsetFailure.result(code: hsc_set_sidetone(handle, UInt8(max(0, min(128, level))), nil).rawValue, operation: .command)

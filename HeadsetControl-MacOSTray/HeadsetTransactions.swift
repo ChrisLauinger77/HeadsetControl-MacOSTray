@@ -23,6 +23,7 @@ nonisolated enum HeadsetTarget: Hashable, Sendable {
 
 nonisolated enum HeadsetCommand: Equatable, Sendable {
     case sidetone(Int)
+    case microphoneVolume(Int)
     case lights(Bool)
     case inactiveTime(Int)
     case voicePrompts(Bool)

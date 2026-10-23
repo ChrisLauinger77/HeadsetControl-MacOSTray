@@ -44,7 +44,7 @@ final class HeadsetControlServiceTests: XCTestCase {
         library.connections = [HeadsetConnection(index: 0, usbID: a), HeadsetConnection(index: 1, usbID: b)]
         inventory.devices = [a: [11], b: [22]]
         let service = HeadsetControlService(library: library, inventory: inventory)
-        let commands: [HeadsetCommand] = [.sidetone(10), .lights(false), .inactiveTime(5), .voicePrompts(true), .rotateToMute(false), .equalizerPreset(1)]
+        let commands: [HeadsetCommand] = [.sidetone(10), .microphoneVolume(64), .lights(false), .inactiveTime(5), .voicePrompts(true), .rotateToMute(false), .equalizerPreset(1)]
         for command in commands {
             XCTAssertTrue(service.perform(command, on: .physical(b, attachmentID: 22), testProfile: 0).isSuccess)
         }

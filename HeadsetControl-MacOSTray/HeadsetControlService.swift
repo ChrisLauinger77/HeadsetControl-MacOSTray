@@ -47,6 +47,7 @@ nonisolated struct HeadsetCapability {
 
     static let menuCapabilities: [HeadsetCapability] = [
         .sidetone,
+        .microphoneVolume,
         .lights,
         .inactiveTime,
         .voicePrompts,
