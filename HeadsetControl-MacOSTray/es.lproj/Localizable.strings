@@ -146,3 +146,7 @@
 "Detached" = "Desconectado";
 "Show microphone mute status in the menu bar" = "Mostrar el silencio del micrófono en la barra de menús";
 "Microphone muted" = "Micrófono silenciado";
+
+/* Battery charging estimate */
+"<1h until full" = "<1 h hasta completar la carga";
+"%dh until full" = "%d h hasta completar la carga";

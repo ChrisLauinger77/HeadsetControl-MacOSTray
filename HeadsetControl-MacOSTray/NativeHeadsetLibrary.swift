@@ -52,7 +52,7 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
             let code = hsc_get_battery(handle, &battery)
             if code == HSC_RESULT_OK {
                 batteryResult = HeadsetBattery.decode(level: Int(battery.level_percent), rawStatus: Int(battery.status.rawValue),
-                                                      timeToEmpty: Int(battery.time_to_empty_min))
+                                                      timeToEmpty: Int(battery.time_to_empty_min), timeToFull: Int(battery.time_to_full_min))
             } else {
                 batteryResult = .failure(.init(operation: .battery, kind: .native(code.rawValue)))
             }

@@ -300,7 +300,7 @@ import XCTest
             "device": "Test Headset",
             "vendor": "Test Vendor",
             "product": "Test Product",
-            "battery": Result<HeadsetBattery, HeadsetFailure>.success(.init(level: 44, status: .available, timeToEmpty: 119)),
+            "battery": Result<HeadsetBattery, HeadsetFailure>.success(.init(level: 44, status: .available, timeToEmpty: 119, timeToFull: 60)),
             "capabilities": []
         ]]
         let menu = NSMenu()
@@ -348,7 +348,7 @@ import XCTest
         let service = HeadsetControlService()
         let delegate = AppDelegate()
         for (profile, expected) in [
-            (2, "\(localized("Battery")): ⚡︎ 50%"),
+            (2, "\(localized("Battery")): ⚡︎ 50% (\(String(format: localized("%dh until full"), 1)))"),
             (4, "\(localized("Battery")): \(localized("Device offline")) (-3)"),
             (5, "\(localized("Battery")): \(localized("Timed out")) (-4)")
         ] {
@@ -363,6 +363,24 @@ import XCTest
             if profile != 2 {
                 XCTAssertFalse(menu.items.contains { $0.title.hasPrefix(localized("Battery") + ":") && $0.title.contains("%") })
             }
+        }
+    }
+
+    func testChargingMenuFormatsTimeToFullWithoutUsingTimeToEmpty() async {
+        let delegate = AppDelegate()
+        for minutes in [nil, -1, 0, 1, 59, 60, 119, 120] as [Int?] {
+            let battery = HeadsetBattery(level: 50, status: .charging, timeToEmpty: 720, timeToFull: minutes)
+            var device = menuDevice(target: nil)
+            device["battery"] = Result<HeadsetBattery, HeadsetFailure>.success(battery)
+            delegate.latestDevices = [device]
+            let menu = NSMenu()
+            delegate.rebuildMenu(menu)
+            let suffix: String
+            if let minutes, minutes > 0 {
+                let duration = minutes < 60 ? localized("<1h until full") : String(format: localized("%dh until full"), minutes / 60)
+                suffix = " (\(duration))"
+            } else { suffix = "" }
+            XCTAssertTrue(menu.items.contains { $0.title == "\(localized("Battery")): ⚡︎ 50%\(suffix)" })
         }
     }
 

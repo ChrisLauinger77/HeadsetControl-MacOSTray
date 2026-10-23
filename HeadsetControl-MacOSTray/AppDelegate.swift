@@ -414,6 +414,12 @@ import UserNotifications
         return " (" + String(format: NSLocalizedString("%dh", comment: "Battery time in whole hours"), minutes / 60) + ")"
     }
 
+    private func formatTimeToFull(minutes: Int?) -> String? {
+        guard let minutes, minutes > 0 else { return nil }
+        if minutes < 60 { return " (\(NSLocalizedString("<1h until full", comment: "Charging time less than one hour")))" }
+        return " (" + String(format: NSLocalizedString("%dh until full", comment: "Charging time in whole hours"), minutes / 60) + ")"
+    }
+
     private var inactiveTimeMinutesFromSettings: [Int] {
         AppDefaults.parseInactiveTimeOptions(AppDefaults.standard.string(forKey: "inactiveTimeOptions") ?? AppDefaults.inactiveTimeOptionsRaw)
     }
@@ -518,7 +524,10 @@ import UserNotifications
             if let battery = device["battery"] as? Result<HeadsetBattery, HeadsetFailure> {
                 switch battery {
                 case .success(let value):
-                    let suffix = value.percentage != nil ? formatTimeToEmpty(minutes: value.timeToEmpty) ?? "" : ""
+                    let time = value.status == .charging
+                        ? formatTimeToFull(minutes: value.timeToFull)
+                        : formatTimeToEmpty(minutes: value.timeToEmpty)
+                    let suffix = value.percentage != nil ? time ?? "" : ""
                     menu.addItem(withTitle: "\(NSLocalizedString("Battery", comment: "Battery label")): \(value.chargeText ?? value.statusText)\(suffix)", action: nil, keyEquivalent: "")
                 case .failure(let error): menu.addItem(withTitle: error.message, action: nil, keyEquivalent: "")
                 }
