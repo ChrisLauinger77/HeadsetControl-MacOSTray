@@ -16,9 +16,9 @@ HeadsetControl_MacOSTray: App {
 
     var body: some Scene {
         Settings {
-            SettingsView {
+            SettingsView(onClose: {
                 NSApp.keyWindow?.close()
-            }
+            }, onANCCommand: { appDelegate.performANCSettingsCommand($0) })
             .frame(minWidth: 580, minHeight: 440)
         }
     }

@@ -3,6 +3,26 @@ import HeadsetControlCLib
 @testable import HeadsetControl_MacOSTray
 
 final class NativeHeadsetResultsTests: XCTestCase {
+    func testNativeANCCommandsClampModesAndPreserveErrors() async {
+        let commands = [Int.min, -1, 0, 1, 2, 3, Int.max].map(HeadsetCommand.anc)
+            + [Int.min, -1, 0, 1, 2, 3, 4, Int.max].map(HeadsetCommand.ancStartupMode)
+            + (1...7).map { .ancButtonModes(HeadsetANCButtonModes(rawValue: $0)) }
+        await verifyNativeWrites(commands, profileOneFails: true)
+    }
+
+    func testNativeANCRejectsEmptyAndUnknownButtonModes() async {
+        let done = expectation(description: "invalid ANC cycles finish")
+        HeadsetIOWorker.shared.enqueue {
+            let service = HeadsetControlService()
+            for rawValue in [0, -1, 8, Int.max] {
+                let result = service.perform(.ancButtonModes(.init(rawValue: rawValue)), on: .test(profile: 7), testProfile: 7)
+                XCTAssertEqual(result.failureValue?.kind, .native(HSC_RESULT_INVALID_PARAM.rawValue))
+            }
+            done.fulfill()
+        }
+        await fulfillment(of: [done], timeout: 5)
+    }
+
     func testNativeMicrophoneResultsKeepDeviceAndPreserveErrorCodes() async throws {
         let service = HeadsetControlService()
         let results = await withCheckedContinuation { continuation in

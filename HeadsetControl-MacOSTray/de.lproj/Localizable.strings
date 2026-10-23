@@ -150,3 +150,12 @@
 /* Battery charging estimate */
 "<1h until full" = "<1 Std. bis vollständig geladen";
 "%dh until full" = "%d Std. bis vollständig geladen";
+
+/* ANC-Steuerung ohne Statusabfrage */
+"Noise cancelling" = "Geräuschunterdrückung";
+"Ambient sound" = "Umgebungsgeräusche";
+"Mode at power-on:" = "Modus beim Einschalten:";
+"Mode at power-off" = "Modus beim Ausschalten";
+"ANC button cycles through:" = "ANC-Taste wechselt zwischen:";
+"Select at least one mode." = "Mindestens einen Modus auswählen.";
+"Changes are sent to the first connected headset that supports each setting. Current values cannot be read from the headset." = "Änderungen werden an das erste verbundene Headset gesendet, das die jeweilige Einstellung unterstützt. Aktuelle Werte können nicht vom Headset ausgelesen werden.";

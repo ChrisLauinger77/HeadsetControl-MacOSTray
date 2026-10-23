@@ -24,6 +24,9 @@ nonisolated struct HeadsetCapability {
     static let volumeLimiter = HeadsetCapability(rawValue: HSC_CAP_VOLUME_LIMITER)
     static let bluetoothWhenPoweredOn = HeadsetCapability(rawValue: HSC_CAP_BT_WHEN_POWERED_ON)
     static let bluetoothCallVolume = HeadsetCapability(rawValue: HSC_CAP_BT_CALL_VOLUME)
+    static let anc = HeadsetCapability(rawValue: HSC_CAP_ANC)
+    static let ancStartupMode = HeadsetCapability(rawValue: HSC_CAP_ANC_STARTUP_MODE)
+    static let ancButtonModes = HeadsetCapability(rawValue: HSC_CAP_ANC_BUTTON_MODES)
 
     var legacyCapabilityString: String {
         switch rawValue {
@@ -47,11 +50,17 @@ nonisolated struct HeadsetCapability {
         case HSC_CAP_VOLUME_LIMITER: return "CAP_VOLUME_LIMITER"
         case HSC_CAP_BT_WHEN_POWERED_ON: return "CAP_BT_WHEN_POWERED_ON"
         case HSC_CAP_BT_CALL_VOLUME: return "CAP_BT_CALL_VOLUME"
+        case HSC_CAP_ANC: return "CAP_ANC"
+        case HSC_CAP_ANC_STARTUP_MODE: return "CAP_ANC_STARTUP_MODE"
+        case HSC_CAP_ANC_BUTTON_MODES: return "CAP_ANC_BUTTON_MODES"
         default: return ""
         }
     }
 
     static let menuCapabilities: [HeadsetCapability] = [
+        .anc,
+        .ancStartupMode,
+        .ancButtonModes,
         .sidetone,
         .microphoneVolume,
         .noiseFilter,

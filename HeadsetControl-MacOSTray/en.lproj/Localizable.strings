@@ -150,3 +150,12 @@
 /* Battery charging estimate */
 "<1h until full" = "<1h until full";
 "%dh until full" = "%dh until full";
+
+/* Write-only active noise cancelling controls */
+"Noise cancelling" = "Noise cancelling";
+"Ambient sound" = "Ambient sound";
+"Mode at power-on:" = "Mode at power-on:";
+"Mode at power-off" = "Mode at power-off";
+"ANC button cycles through:" = "ANC button cycles through:";
+"Select at least one mode." = "Select at least one mode.";
+"Changes are sent to the first connected headset that supports each setting. Current values cannot be read from the headset." = "Changes are sent to the first connected headset that supports each setting. Current values cannot be read from the headset.";

@@ -10,6 +10,10 @@ nonisolated enum AppDefaults {
     static let microphoneVolumeValues = [0, 32, 64, 96, 128]
     static let microphoneVolumeRange = 0...128
     static let noiseFilterRange = 0...2
+    static let ancRange = 0...2
+    static let ancStartupModeRange = 0...3
+    static let ancStartupMode = 3
+    static let ancButtonModes = HeadsetANCButtonModes.all.rawValue
     static let microphoneMuteLedBrightnessRange = 0...3
     static let microphoneVolumePresetRange = -1...128
     static let bluetoothCallVolumeKeys = ["bluetoothCallVolumeOff", "bluetoothCallVolumeLow", "bluetoothCallVolumeMid", "bluetoothCallVolumeHigh", "bluetoothCallVolumeMax"]
@@ -56,6 +60,7 @@ nonisolated enum AppDefaults {
             "updateInterval": Double(updateInterval), "testMode": testProfile,
             "notifyOnLowBattery": notifyOnLowBattery, "lowBatteryThreshold": lowBatteryThreshold,
             "showMicrophoneMuteIcon": showMicrophoneMuteIcon,
+            "ancStartupMode": ancStartupMode, "ancButtonModes": ancButtonModes,
             "equalizerPresets": equalizerPresets, "inactiveTimeOptions": inactiveTimeOptionsRaw
         ]
         for (key, value) in zip(sidetoneKeys, sidetoneValues) { values[key] = value }
@@ -74,6 +79,8 @@ nonisolated enum AppDefaults {
         }
         repair("updateInterval", value: validatedUpdateInterval(store.object(forKey: "updateInterval")), in: store)
         repair("testMode", value: validatedTestProfile(store.object(forKey: "testMode")), in: store)
+        repair("ancStartupMode", value: validatedANCStartupMode(store.object(forKey: "ancStartupMode")), in: store)
+        repair("ancButtonModes", value: validatedANCButtonModes(store.object(forKey: "ancButtonModes")).rawValue, in: store)
         repair("lowBatteryThreshold", value: validatedLowBatteryThreshold(store.object(forKey: "lowBatteryThreshold")), in: store)
         for (key, fallback) in zip(sidetoneKeys, sidetoneValues) {
             repair(key, value: validatedSidetone(store.object(forKey: key), fallback: fallback), in: store)
@@ -110,6 +117,18 @@ nonisolated enum AppDefaults {
         guard let number = finiteNumber(value), number.rounded() == number,
               Double(testProfileRange.lowerBound)...Double(testProfileRange.upperBound) ~= number else { return testProfile }
         return Int(number)
+    }
+
+    static func validatedANCStartupMode(_ value: Any?) -> Int {
+        guard let number = finiteNumber(value), number.rounded() == number,
+              Double(ancStartupModeRange.lowerBound)...Double(ancStartupModeRange.upperBound) ~= number else { return ancStartupMode }
+        return Int(number)
+    }
+
+    static func validatedANCButtonModes(_ value: Any?) -> HeadsetANCButtonModes {
+        guard let number = finiteNumber(value), number.rounded() == number,
+              (1...Double(ancButtonModes)).contains(number) else { return .all }
+        return HeadsetANCButtonModes(rawValue: Int(number))
     }
 
     static func parseInactiveTimeOptions(_ raw: String) -> [Int] {

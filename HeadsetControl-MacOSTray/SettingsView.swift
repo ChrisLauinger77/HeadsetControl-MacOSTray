@@ -51,6 +51,7 @@ struct SettingsView: View {
     @AppStorage("microphoneVolumeHigh", store: AppDefaults.standard) var microphoneVolumeHigh: Int = AppDefaults.microphoneVolumeValues[3]
     @AppStorage("microphoneVolumeMax", store: AppDefaults.standard) var microphoneVolumeMax: Int = AppDefaults.microphoneVolumeValues[4]
     var onClose: (() -> Void)? = nil
+    var onANCCommand: ((HeadsetCommand) -> Void)? = nil
     @AppStorage("bluetoothCallVolumeOff", store: AppDefaults.standard) var bluetoothCallVolumeOff: Int = AppDefaults.bluetoothCallVolumeValues[0]
     @AppStorage("bluetoothCallVolumeLow", store: AppDefaults.standard) var bluetoothCallVolumeLow: Int = AppDefaults.bluetoothCallVolumeValues[1]
     @AppStorage("bluetoothCallVolumeMid", store: AppDefaults.standard) var bluetoothCallVolumeMid: Int = AppDefaults.bluetoothCallVolumeValues[2]
@@ -281,6 +282,8 @@ struct SettingsView: View {
                         }
                     }
                 }
+
+                ANCSettingsView(onCommand: onANCCommand)
             }
             .padding(20)
         }
@@ -522,6 +525,68 @@ struct SettingsView: View {
             .background(.bar)
         }
         .background(.regularMaterial)
+    }
+}
+
+struct ANCSettingsView: View {
+    @AppStorage("ancStartupMode", store: AppDefaults.standard) private var startupMode = AppDefaults.ancStartupMode
+    @AppStorage("ancButtonModes", store: AppDefaults.standard) private var buttonModesRaw = AppDefaults.ancButtonModes
+    var onCommand: ((HeadsetCommand) -> Void)? = nil
+
+    var startupModeBinding: Binding<Int> {
+        Binding(
+            get: { AppDefaults.validatedANCStartupMode(startupMode) },
+            set: { newValue in
+                let mode = AppDefaults.validatedANCStartupMode(newValue)
+                guard mode != startupMode else { return }
+                startupMode = mode
+                onCommand?(.ancStartupMode(mode))
+            }
+        )
+    }
+
+    private var buttonModes: HeadsetANCButtonModes { AppDefaults.validatedANCButtonModes(buttonModesRaw) }
+
+    func buttonModeBinding(_ mode: HeadsetANCButtonModes) -> Binding<Bool> {
+        Binding(
+            get: { buttonModes.contains(mode) },
+            set: { enabled in
+                let updated = buttonModes.setting(mode, enabled: enabled)
+                guard updated != buttonModes else { return }
+                buttonModesRaw = updated.rawValue
+                onCommand?(.ancButtonModes(updated))
+            }
+        )
+    }
+
+    private func buttonModeToggle(_ title: String, mode: HeadsetANCButtonModes) -> some View {
+        Toggle(title, isOn: buttonModeBinding(mode))
+            .toggleStyle(.checkbox)
+            .disabled(buttonModes == mode)
+    }
+
+    var body: some View {
+        SettingsSection(title: NSLocalizedString("Noise cancelling", comment: "ANC settings section"), systemImage: "headphones") {
+            Text(NSLocalizedString("Changes are sent to the first connected headset that supports each setting. Current values cannot be read from the headset.", comment: "Write-only ANC settings explanation"))
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Picker(NSLocalizedString("Mode at power-on:", comment: "ANC startup mode label"), selection: startupModeBinding) {
+                Text(NSLocalizedString("Off", comment: "ANC startup off")).tag(0)
+                Text(NSLocalizedString("Noise cancelling", comment: "ANC startup noise cancelling")).tag(1)
+                Text(NSLocalizedString("Ambient sound", comment: "ANC startup ambient sound")).tag(2)
+                Text(NSLocalizedString("Mode at power-off", comment: "Restore ANC mode at shutdown")).tag(3)
+            }
+            .pickerStyle(.menu)
+            Text(NSLocalizedString("ANC button cycles through:", comment: "ANC button cycle label"))
+            HStack(spacing: 16) {
+                buttonModeToggle(NSLocalizedString("Off", comment: "Include off in ANC cycle"), mode: .off)
+                buttonModeToggle(NSLocalizedString("Noise cancelling", comment: "Include ANC in cycle"), mode: .anc)
+                buttonModeToggle(NSLocalizedString("Ambient sound", comment: "Include ambient in ANC cycle"), mode: .ambient)
+            }
+            Text(NSLocalizedString("Select at least one mode.", comment: "ANC button requires a nonempty cycle"))
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
     }
 }
 

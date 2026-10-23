@@ -150,3 +150,12 @@
 /* Battery charging estimate */
 "<1h until full" = "<1 h hasta completar la carga";
 "%dh until full" = "%d h hasta completar la carga";
+
+/* Controles ANC sin lectura del estado */
+"Noise cancelling" = "Cancelación de ruido";
+"Ambient sound" = "Sonido ambiente";
+"Mode at power-on:" = "Modo al encender:";
+"Mode at power-off" = "Modo al apagar";
+"ANC button cycles through:" = "El botón ANC alterna entre:";
+"Select at least one mode." = "Selecciona al menos un modo.";
+"Changes are sent to the first connected headset that supports each setting. Current values cannot be read from the headset." = "Los cambios se envían al primer auricular conectado que admite cada ajuste. No se pueden leer los valores actuales del auricular.";
