@@ -146,3 +146,7 @@
 "Detached" = "Detached";
 "Show microphone mute status in the menu bar" = "Show microphone mute status in the menu bar";
 "Microphone muted" = "Microphone muted";
+
+/* Battery charging estimate */
+"<1h until full" = "<1h until full";
+"%dh until full" = "%dh until full";

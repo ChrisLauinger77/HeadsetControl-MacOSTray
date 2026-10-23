@@ -69,6 +69,7 @@ nonisolated struct HeadsetBattery: Equatable, Sendable {
     let level: Int
     let status: Status
     var timeToEmpty: Int? = nil
+    var timeToFull: Int? = nil
 
     var percentage: Int? {
         guard status == .available || status == .charging, (0...100).contains(level) else { return nil }
@@ -89,7 +90,7 @@ nonisolated struct HeadsetBattery: Equatable, Sendable {
         }
     }
 
-    static func decode(level: Int, rawStatus: Int, timeToEmpty: Int? = nil) -> Result<Self, HeadsetFailure> {
+    static func decode(level: Int, rawStatus: Int, timeToEmpty: Int? = nil, timeToFull: Int? = nil) -> Result<Self, HeadsetFailure> {
         let status: Status
         switch rawStatus {
         case Int(HSC_BATTERY_UNAVAILABLE.rawValue): status = .unavailable
@@ -102,7 +103,9 @@ nonisolated struct HeadsetBattery: Equatable, Sendable {
         if (status == .available && !(0...100).contains(level)) || (status == .charging && level > 100) {
             return .failure(.init(operation: .battery, kind: .invalidResponse("Battery level \(level)")))
         }
-        return .success(Self(level: level, status: status, timeToEmpty: timeToEmpty.flatMap { $0 > 0 ? $0 : nil }))
+        return .success(Self(level: level, status: status,
+                             timeToEmpty: timeToEmpty.flatMap { $0 > 0 ? $0 : nil },
+                             timeToFull: timeToFull.flatMap { $0 > 0 ? $0 : nil }))
     }
 }
 

@@ -9,6 +9,26 @@ extension Result {
 }
 
 final class HeadsetResultsTests: XCTestCase {
+    func testBatteryEstimatesKeepOnlyPositiveMinutes() throws {
+        for minutes in [nil, Int.min, -1, 0, 1, 59, 60, 119, 120] as [Int?] {
+            let battery = try HeadsetBattery.decode(level: 50, rawStatus: Int(HSC_BATTERY_CHARGING.rawValue),
+                                                    timeToEmpty: minutes, timeToFull: minutes).get()
+            let expected = minutes.flatMap { $0 > 0 ? $0 : nil }
+            XCTAssertEqual(battery.timeToEmpty, expected)
+            XCTAssertEqual(battery.timeToFull, expected)
+            XCTAssertEqual(battery.chargeText, "⚡︎ 50%")
+        }
+    }
+
+    func testBatteryChargingAndDischargingEstimatesStayIndependent() throws {
+        let battery = try HeadsetBattery.decode(level: 50, rawStatus: Int(HSC_BATTERY_CHARGING.rawValue),
+                                                timeToEmpty: 120, timeToFull: 60).get()
+        XCTAssertEqual(battery.timeToEmpty, 120)
+        XCTAssertEqual(battery.timeToFull, 60)
+        let missing = try HeadsetBattery.decode(level: 50, rawStatus: Int(HSC_BATTERY_CHARGING.rawValue)).get()
+        XCTAssertNil(missing.timeToFull)
+    }
+
     func testBatteryContractDoesNotConfuseUnavailableWithZeroPercent() throws {
         let unavailable = try HeadsetBattery.decode(level: 0, rawStatus: Int(HSC_BATTERY_UNAVAILABLE.rawValue)).get()
         XCTAssertEqual(unavailable.status, .unavailable)
