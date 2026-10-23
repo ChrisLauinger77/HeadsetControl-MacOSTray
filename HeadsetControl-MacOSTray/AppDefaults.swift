@@ -34,6 +34,9 @@ nonisolated enum AppDefaults {
     static let notifyOnLowBattery = true
     static let showMicrophoneMuteIcon = true
     static let equalizerPresets = "Preset 1,Preset 2,Preset 3,Preset 4"
+    static let equalizerCurvesKey = "equalizerCurves"
+    // Bound native counts before allocating buffers or constructing editor rows.
+    static let equalizerBandCountRange = 1...64
     static let inactiveTimeOptions = [1, 2, 5, 10, 15, 30, 45, 60, 75, 90]
     static var inactiveTimeOptionsRaw: String { inactiveTimeOptions.map(String.init).joined(separator: ",") }
     static let supportedLanguages = ["en", "de", "es", "fr"]

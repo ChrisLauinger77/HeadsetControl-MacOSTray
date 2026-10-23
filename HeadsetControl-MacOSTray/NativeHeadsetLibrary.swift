@@ -48,6 +48,8 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
         var microphoneMuted: Result<Bool, HeadsetFailure>?
         var microphoneAttached: Result<Bool, HeadsetFailure>?
         var equalizerPresets: Result<[HeadsetEqualizerPreset], HeadsetFailure>?
+        let equalizerInfo = hsc_supports(handle, HSC_CAP_EQUALIZER) ? readGraphicInfo(handle) : nil
+        let parametricInfo = hsc_supports(handle, HSC_CAP_PARAMETRIC_EQUALIZER) ? readParametricInfo(handle) : nil
         if hsc_supports(handle, HSC_CAP_BATTERY_STATUS) {
             var battery = hsc_battery_t()
             let code = hsc_get_battery(handle, &battery)
@@ -112,6 +114,26 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
                 guard let name = hsc_get_equalizer_preset_name(handle, Int32(index)) else { return nil }
                 return String(cString: name) // Copy before the owning headset is freed.
             }
+            if case .success(let info) = equalizerInfo, case .success(let presets) = equalizerPresets {
+                equalizerPresets = .success(presets.map { preset in
+                    var preset = preset
+                    let count = Int(hsc_get_equalizer_preset_band_count(handle, Int32(preset.index)))
+                    guard count == info.count else { return preset }
+                    var bands = [Float](repeating: 0, count: count)
+                    let code = bands.withUnsafeMutableBufferPointer {
+                        hsc_get_equalizer_preset_bands(handle, Int32(preset.index), $0.baseAddress, Int32(count))
+                    }
+                    let values = bands.map(Double.init)
+                    if code != HSC_RESULT_OK {
+                        preset.bands = .failure(.init(operation: .equalizer, kind: .native(code.rawValue)))
+                    } else if info.accepts(values) {
+                        preset.bands = .success(values)
+                    } else {
+                        preset.bands = .failure(.init(operation: .equalizer, kind: .invalidResponse("Preset bands")))
+                    }
+                    return preset
+                })
+            }
         }
         // Opening the device for a query can refine its product name. Copy the
         // native strings afterward, while this transaction still owns the handle.
@@ -129,7 +151,9 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
             headsetVolume: headsetVolumeResult,
             microphoneMuted: microphoneMuted,
             microphoneAttached: microphoneAttached,
-            equalizerPresets: equalizerPresets
+            equalizerPresets: equalizerPresets,
+            equalizerInfo: equalizerInfo,
+            parametricEqualizerInfo: parametricInfo
         )
     }
 
@@ -137,6 +161,41 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
         assertWorker()
         let handle = handles[connection.index]
         switch command {
+        case .customEqualizer(let curve):
+            guard curve.isValid else {
+                return .failure(.init(operation: .equalizer, kind: .native(HSC_RESULT_INVALID_PARAM.rawValue)))
+            }
+            // Re-read on this transaction's selected handle. A saved signature
+            // or a current-looking Settings draft is never enough to authorize I/O.
+            switch curve {
+            case .graphic(let info, let values):
+                guard hsc_supports(handle, HSC_CAP_EQUALIZER) else {
+                    return .failure(.init(operation: .equalizer, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue)))
+                }
+                switch readGraphicInfo(handle) {
+                case .failure(let error): return .failure(error)
+                case .success(let current):
+                    guard current == info else { return .failure(.init(operation: .equalizer, kind: .equalizerLayoutChanged)) }
+                }
+                let bands = values.map(Float.init)
+                let code = bands.withUnsafeBufferPointer { hsc_set_equalizer(handle, $0.baseAddress, Int32($0.count)) }
+                return HeadsetFailure.result(code: code.rawValue, operation: .equalizer)
+            case .parametric(let info, let values):
+                guard hsc_supports(handle, HSC_CAP_PARAMETRIC_EQUALIZER) else {
+                    return .failure(.init(operation: .equalizer, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue)))
+                }
+                switch readParametricInfo(handle) {
+                case .failure(let error): return .failure(error)
+                case .success(let current):
+                    guard current == info else { return .failure(.init(operation: .equalizer, kind: .equalizerLayoutChanged)) }
+                }
+                let bands = values.map {
+                    hsc_parametric_band_t(frequency: Float($0.frequency), gain: Float($0.gain), q_factor: Float($0.q),
+                                          type: hsc_eq_filter_type_t(rawValue: UInt32($0.filter.rawValue)))
+                }
+                let code = bands.withUnsafeBufferPointer { hsc_set_parametric_equalizer(handle, $0.baseAddress, Int32($0.count)) }
+                return HeadsetFailure.result(code: code.rawValue, operation: .equalizer)
+            }
         case .headsetVolume(let level):
             guard hsc_supports(handle, HSC_CAP_HEADSET_VOLUME) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
             guard AppDefaults.headsetVolumeRange.contains(level), let nativeLevel = UInt8(exactly: level) else {
@@ -209,6 +268,27 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
         if let headsetsPointer { hsc_free_headsets(headsetsPointer, max(0, count)) }
         headsetsPointer = nil
         count = 0
+    }
+
+    private func readGraphicInfo(_ handle: hsc_headset_t) -> Result<GraphicEqualizerInfo, HeadsetFailure> {
+        var native = hsc_equalizer_info_t()
+        let code = hsc_get_equalizer_info(handle, &native)
+        guard code == HSC_RESULT_OK else { return .failure(.init(operation: .equalizer, kind: .native(code.rawValue))) }
+        let info = GraphicEqualizerInfo(count: Int(native.bands_count), baseline: Double(native.bands_baseline),
+                                       step: Double(native.bands_step), minimum: Double(native.bands_min), maximum: Double(native.bands_max))
+        return info.isValid ? .success(info) : .failure(.init(operation: .equalizer, kind: .invalidResponse("Graphic EQ layout")))
+    }
+
+    private func readParametricInfo(_ handle: hsc_headset_t) -> Result<ParametricEqualizerInfo, HeadsetFailure> {
+        var native = hsc_parametric_equalizer_info_t()
+        let code = hsc_get_parametric_equalizer_info(handle, &native)
+        guard code == HSC_RESULT_OK else { return .failure(.init(operation: .equalizer, kind: .native(code.rawValue))) }
+        let info = ParametricEqualizerInfo(count: Int(native.bands_count), baseline: Double(native.gain_base),
+                                          step: Double(native.gain_step), minimum: Double(native.gain_min), maximum: Double(native.gain_max),
+                                          qMinimum: Double(native.q_factor_min), qMaximum: Double(native.q_factor_max),
+                                          frequencyMinimum: Double(native.freq_min), frequencyMaximum: Double(native.freq_max),
+                                          filterMask: Int(native.filter_types))
+        return info.isValid ? .success(info) : .failure(.init(operation: .equalizer, kind: .invalidResponse("Parametric EQ layout")))
     }
 
     func shutdown() {

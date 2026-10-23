@@ -116,7 +116,7 @@ Settings
 - **Inactive Time**: Choose the headset idle timeout from the configured options.
 - **Voice Prompts**: Toggle headset voice prompts on or off.
 - **Rotate to Mute**: Toggle rotate-to-mute on or off.
-- **Equalizer Preset**: If available, shows preset names from the device; otherwise, shows the configured generic presets.
+- **Equalizer**: Offers the device’s built-in presets and compatible saved graphic or parametric curves. **Edit Equalizer…** opens Settings. Preset fallback names apply only to supported indices without a device-reported name.
 
 These menu items only appear if the headset reports the corresponding capability through libheadsetcontrol. Selecting an option immediately applies the setting through the library; V2.x no longer launches the `headsetcontrol` command line tool as a subprocess.
 
@@ -151,6 +151,8 @@ If you like my work, please consider supporting me ! <br><br>
 - The app runs in the background and places an icon in the macOS status bar.
 - Click the icon to view headset data.
 - Access settings via the dialog to configure update interval, sidetone levels, inactive-time options, equalizer preset names, low-battery notifications, and test mode.
+- In **Equalizer** settings, select a headset and edit a graphic curve or parametric bands where supported. **Save Curve** stores it locally; **Apply** explicitly sends the complete curve and saves it after success. Editing, copying a preset, resetting, startup, and reconnecting never apply a curve automatically.
+- Curves are shared by USB model (vendor/product ID), with separate graphic and parametric configurations. Applying requires a current, uniquely addressable connection. A changed band layout requires review or a reset. The editor shows saved or new values, not device readback; graphic band frequencies are unavailable. Devices that cannot yet report EQ metadata retain their preset controls.
 - Use the Refresh button in the settings panel to manually update headset status.
 
 ## Troubleshooting

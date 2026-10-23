@@ -33,7 +33,8 @@ struct SettingsSection<Content: View>: View {
     }
 }
 
-struct SettingsView: View {
+@MainActor struct SettingsView: View {
+    @Bindable var equalizer: EqualizerSettingsModel = EqualizerSettingsModel()
     @State private var nativeVersions: NativeDependencyVersions?
     @State private var requestedNativeVersions = false
     @State private var selectedLanguage = AppDefaults.selectedLanguage(
@@ -429,22 +430,27 @@ struct SettingsView: View {
 
     private var equalizerSettingsTab: some View {
         ScrollView {
-            SettingsSection(
-                title: NSLocalizedString("Equalizer Presets", comment: "Equalizer presets section header"),
-                systemImage: "slider.horizontal.3"
-            ) {
-                Text(NSLocalizedString("Fallback names are used only for supported presets without a device-reported name.", comment: "Equalizer fallback names help"))
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+            VStack(spacing: 16) {
+                SettingsSection(title: NSLocalizedString("Equalizer", comment: "Equalizer editor"), systemImage: "slider.horizontal.3") {
+                    EqualizerSettingsView(model: equalizer)
+                }
+                SettingsSection(
+                    title: NSLocalizedString("Equalizer Presets", comment: "Equalizer presets section header"),
+                    systemImage: "slider.horizontal.3"
+                ) {
+                    Text(NSLocalizedString("Fallback names are used only for supported presets without a device-reported name.", comment: "Equalizer fallback names help"))
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(displayedEqualizerPresets, id: \.self) { preset in
-                        HStack {
-                            Text(preset)
-                                .foregroundColor(.secondary)
-                            Spacer()
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(displayedEqualizerPresets, id: \.self) { preset in
+                            HStack {
+                                Text(preset)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                            }
+                            .padding(.vertical, 3)
                         }
-                        .padding(.vertical, 3)
                     }
                 }
             }
@@ -494,31 +500,36 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TabView {
+            TabView(selection: $equalizer.settingsTab) {
                 generalSettingsTab
                     .tabItem {
                         Label(NSLocalizedString("General", comment: "General settings tab"), systemImage: "gearshape")
                     }
+                    .tag(0)
 
                 levelSettingsTab
                     .tabItem {
                         Label(NSLocalizedString("Levels", comment: "Level presets tab"), systemImage: "waveform")
                     }
+                    .tag(1)
 
                 inactiveTimeSettingsTab
                     .tabItem {
                         Label(NSLocalizedString("Inactive Time", comment: "Inactive time options tab"), systemImage: "timer")
                     }
+                    .tag(2)
 
                 equalizerSettingsTab
                     .tabItem {
-                        Label(NSLocalizedString("Equalizer Presets", comment: "Equalizer presets tab"), systemImage: "slider.horizontal.3")
+                        Label(NSLocalizedString("Equalizer", comment: "Equalizer tab"), systemImage: "slider.horizontal.3")
                     }
+                    .tag(3)
 
                 aboutTab
                     .tabItem {
                         Label(NSLocalizedString("About", comment: "About tab"), systemImage: "info.circle")
                     }
+                    .tag(4)
             }
             .frame(minWidth: 520, minHeight: 330)
 

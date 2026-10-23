@@ -221,7 +221,7 @@ import Foundation
                 completion(result)
                 if case .success = result, !self.stopped, self.session === session {
                     switch command {
-                    case .sidetone, .headsetVolume: self.refresh(testProfile: testProfile)
+                    case .sidetone, .headsetVolume, .equalizerPreset, .customEqualizer: self.refresh(testProfile: testProfile)
                     default: break
                     }
                 }

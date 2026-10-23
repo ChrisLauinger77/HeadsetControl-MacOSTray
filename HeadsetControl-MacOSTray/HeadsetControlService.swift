@@ -75,7 +75,9 @@ nonisolated struct HeadsetCapability {
         .inactiveTime,
         .voicePrompts,
         .rotateToMute,
-        .equalizerPreset
+        .equalizerPreset,
+        .equalizer,
+        .parametricEqualizer
     ]
 }
 
