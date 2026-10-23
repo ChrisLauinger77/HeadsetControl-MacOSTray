@@ -26,6 +26,7 @@ nonisolated enum HeadsetCommand: Equatable, Sendable {
     case ancStartupMode(Int)
     case ancButtonModes(HeadsetANCButtonModes)
     case sidetone(Int)
+    case headsetVolume(Int)
     case microphoneVolume(Int)
     case noiseFilter(Int)
     case volumeLimiter(Bool)
@@ -67,6 +68,7 @@ nonisolated struct HeadsetDevice: Sendable {
     var battery: Result<HeadsetBattery, HeadsetFailure>? = nil
     var chatmix: Result<Int, HeadsetFailure>? = nil
     var sidetone: Result<HeadsetSidetone, HeadsetFailure>? = nil
+    var headsetVolume: Result<HeadsetVolume, HeadsetFailure>? = nil
     var microphoneMuted: Result<Bool, HeadsetFailure>? = nil
     var microphoneAttached: Result<Bool, HeadsetFailure>? = nil
     var equalizerPresets: Result<[HeadsetEqualizerPreset], HeadsetFailure>? = nil
@@ -77,6 +79,7 @@ nonisolated struct HeadsetDevice: Sendable {
         if case .failure(let error) = battery { result.append(error) }
         if case .failure(let error) = chatmix { result.append(error) }
         if case .failure(let error) = sidetone { result.append(error) }
+        if case .failure(let error) = headsetVolume { result.append(error) }
         if case .failure(let error) = microphoneMuted { result.append(error) }
         if case .failure(let error) = microphoneAttached { result.append(error) }
         if case .failure(let error) = equalizerPresets { result.append(error) }
@@ -95,6 +98,7 @@ nonisolated struct HeadsetDevice: Sendable {
         result["battery"] = battery
         result["chatmix"] = chatmix
         result["sidetone"] = sidetone
+        result["headsetVolume"] = headsetVolume
         result["microphoneMuted"] = microphoneMuted
         result["microphoneAttached"] = microphoneAttached
         result["equalizerPresets"] = equalizerPresets

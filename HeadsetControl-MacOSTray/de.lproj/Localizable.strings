@@ -160,4 +160,10 @@
 "Select at least one mode." = "Mindestens einen Modus auswählen.";
 "Apply startup mode" = "Startmodus anwenden";
 "Apply button cycle" = "Tastenzyklus anwenden";
+
 "Changes are sent to the first connected headset that supports each setting. Current values cannot be read from the headset." = "Änderungen werden an das erste verbundene Headset gesendet, das die jeweilige Einstellung unterstützt. Aktuelle Werte können nicht vom Headset ausgelesen werden.";
+
+/* Headset hardware volume */
+"Headset volume" = "Headset-Lautstärke";
+"Headset volume: %@" = "Headset-Lautstärke: %@";
+"Controls the headset's hardware volume." = "Steuert die Hardware-Lautstärke des Headsets.";

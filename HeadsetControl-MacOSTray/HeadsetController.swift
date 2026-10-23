@@ -219,9 +219,11 @@ import Foundation
                 guard let self, !self.stopped, self.session === session,
                       let completion = self.commands.removeValue(forKey: id) else { return }
                 completion(result)
-                if case .sidetone = command, case .success = result,
-                   !self.stopped, self.session === session {
-                    self.refresh(testProfile: testProfile)
+                if case .success = result, !self.stopped, self.session === session {
+                    switch command {
+                    case .sidetone, .headsetVolume: self.refresh(testProfile: testProfile)
+                    default: break
+                    }
                 }
             }
         }

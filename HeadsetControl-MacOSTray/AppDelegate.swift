@@ -22,6 +22,11 @@ import UserNotifications
                          range: AppDefaults.microphoneVolumePresetRange)
     }
 
+    var headsetVolumeLevelsFromSettings: [(String, Int)] {
+        configuredLevels(keys: AppDefaults.headsetVolumeKeys, values: AppDefaults.headsetVolumeValues,
+                         range: AppDefaults.headsetVolumePresetRange)
+    }
+
     var bluetoothCallVolumeLevelsFromSettings: [(String, Int)] {
         configuredLevels(keys: AppDefaults.bluetoothCallVolumeKeys, values: AppDefaults.bluetoothCallVolumeValues,
                          range: AppDefaults.bluetoothCallVolumePresetRange)
@@ -168,6 +173,10 @@ import UserNotifications
 
     @objc func setSidetoneLevel(_ sender: NSMenuItem) {
         runControlAction(sender) { .sidetone($0) }
+    }
+
+    @objc func setHeadsetVolume(_ sender: NSMenuItem) {
+        runControlAction(sender) { .headsetVolume($0) }
     }
 
     @objc func setMicrophoneVolume(_ sender: NSMenuItem) {
@@ -509,8 +518,9 @@ import UserNotifications
         [(NSLocalizedString("Off", comment: "Control off"), 0), (NSLocalizedString("On", comment: "Control on"), 1)]
     }
 
+    @discardableResult
     private func addChoiceMenu(to menu: NSMenu, title: String, options: [(String, Int)], action: Selector,
-                               target: HeadsetTarget?, deviceName: String) {
+                               target: HeadsetTarget?, deviceName: String) -> NSMenu {
         let submenu = NSMenu(title: title)
         for (optionTitle, value) in options {
             let item = NSMenuItem(title: optionTitle, action: target == nil ? nil : action, keyEquivalent: "")
@@ -521,6 +531,7 @@ import UserNotifications
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         menu.addItem(item)
         menu.setSubmenu(submenu, for: item)
+        return submenu
     }
 
     func rebuildMenu(_ menu: NSMenu) {
@@ -590,6 +601,7 @@ import UserNotifications
                     menu.addItem(withTitle: NSLocalizedString("Controls unavailable: device connection is not unique", comment: "Cannot safely select a USB attachment"), action: nil, keyEquivalent: "")
                 }
                 let capabilityMap: [(String, String)] = [
+                    ("CAP_HEADSET_VOLUME", NSLocalizedString("Headset volume", comment: "Headset hardware volume capability")),
                     ("CAP_ANC", NSLocalizedString("Noise cancelling", comment: "Active noise cancelling capability")),
                     ("CAP_BT_CALL_VOLUME", NSLocalizedString("Bluetooth Call Volume", comment: "Bluetooth call volume capability")),
                     ("CAP_BT_WHEN_POWERED_ON", NSLocalizedString("Bluetooth on at Power-On", comment: "Bluetooth power-on capability")),
@@ -607,6 +619,25 @@ import UserNotifications
                 for (cap, title) in capabilityMap {
                     if capabilities.contains(cap) {
                         switch cap {
+                        case "CAP_HEADSET_VOLUME":
+                            let reading = device["headsetVolume"] as? Result<HeadsetVolume, HeadsetFailure>
+                            let current: HeadsetVolume?
+                            if case .success(let volume) = reading { current = volume } else { current = nil }
+                            let presets = headsetVolumeLevelsFromSettings
+                            let matchedIndex = current?.matchingPresetIndex(in: presets.map { $0.1 })
+                            let menuTitle: String
+                            if let current, matchedIndex == nil {
+                                menuTitle = String(format: NSLocalizedString("Headset volume: %@", comment: "Hardware volume between configured presets"), current.levelText)
+                            } else { menuTitle = title }
+                            let submenu = addChoiceMenu(to: menu, title: menuTitle, options: presets,
+                                                        action: #selector(setHeadsetVolume(_:)), target: controlTarget, deviceName: deviceName)
+                            for (index, item) in submenu.items.enumerated() {
+                                item.state = index == matchedIndex ? .on : .off
+                            }
+                            if case .failure(let error) = reading {
+                                submenu.insertItem(.separator(), at: 0)
+                                submenu.insertItem(withTitle: error.message, action: nil, keyEquivalent: "", at: 0)
+                            }
                         case "CAP_ANC":
                             let options = [(NSLocalizedString("Off", comment: "Noise cancelling off"), 0),
                                            (NSLocalizedString("Noise cancelling", comment: "Noise cancelling mode"), 1),

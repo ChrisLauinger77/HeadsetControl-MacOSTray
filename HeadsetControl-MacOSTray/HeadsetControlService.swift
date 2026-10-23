@@ -5,6 +5,7 @@ nonisolated struct HeadsetCapability {
     let rawValue: hsc_capability_t
 
     static let sidetone = HeadsetCapability(rawValue: HSC_CAP_SIDETONE)
+    static let headsetVolume = HeadsetCapability(rawValue: HSC_CAP_HEADSET_VOLUME)
     static let sidetoneStatus = HeadsetCapability(rawValue: HSC_CAP_SIDETONE_STATUS)
     static let batteryStatus = HeadsetCapability(rawValue: HSC_CAP_BATTERY_STATUS)
     static let notificationSound = HeadsetCapability(rawValue: HSC_CAP_NOTIFICATION_SOUND)
@@ -31,6 +32,7 @@ nonisolated struct HeadsetCapability {
     var legacyCapabilityString: String {
         switch rawValue {
         case HSC_CAP_SIDETONE: return "CAP_SIDETONE"
+        case HSC_CAP_HEADSET_VOLUME: return "CAP_HEADSET_VOLUME"
         case HSC_CAP_SIDETONE_STATUS: return "CAP_SIDETONE_STATUS"
         case HSC_CAP_BATTERY_STATUS: return "CAP_BATTERY_STATUS"
         case HSC_CAP_NOTIFICATION_SOUND: return "CAP_NOTIFICATION_SOUND"
@@ -62,6 +64,7 @@ nonisolated struct HeadsetCapability {
         .ancStartupMode,
         .ancButtonModes,
         .sidetone,
+        .headsetVolume,
         .microphoneVolume,
         .noiseFilter,
         .volumeLimiter,
