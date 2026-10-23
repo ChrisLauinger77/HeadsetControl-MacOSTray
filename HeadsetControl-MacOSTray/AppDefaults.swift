@@ -10,6 +10,7 @@ nonisolated enum AppDefaults {
     static let microphoneVolumeValues = [0, 32, 64, 96, 128]
     static let microphoneVolumeRange = 0...128
     static let noiseFilterRange = 0...2
+    static let microphoneMuteLedBrightnessRange = 0...3
     static let microphoneVolumePresetRange = -1...128
     static let updateInterval = 600
     static let updateIntervalRange = 60...3600

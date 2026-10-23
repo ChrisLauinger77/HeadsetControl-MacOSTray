@@ -3,6 +3,11 @@ import XCTest
 @testable import HeadsetControl_MacOSTray
 
 @MainActor class AppDelegateTests: XCTestCase {
+    func testMicMuteLedBrightnessOffersAllFourStepsWithoutReadback() async throws {
+        try await verifyWriteOnlyControl(.microphoneMuteLedBrightness, title: "Mic Mute LED Brightness", values: [0, 1, 2, 3],
+                                        commands: [0, 1, 2, 3].map(HeadsetCommand.microphoneMuteLedBrightness))
+    }
+
     func testVolumeLimiterOffersOnAndOffWithoutReadback() async throws {
         try await verifyWriteOnlyControl(.volumeLimiter, title: "Volume Limiter", values: [0, 1], commands: [.volumeLimiter(false), .volumeLimiter(true)])
     }

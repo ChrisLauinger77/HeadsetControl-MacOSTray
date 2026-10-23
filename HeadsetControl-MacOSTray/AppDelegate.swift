@@ -145,6 +145,10 @@ import UserNotifications
         runControlAction(sender) { .volumeLimiter($0 != 0) }
     }
 
+    @objc func setMicrophoneMuteLedBrightness(_ sender: NSMenuItem) {
+        runControlAction(sender) { .microphoneMuteLedBrightness($0) }
+    }
+
     private var currentTestProfile: Int {
         AppDefaults.validatedTestProfile(AppDefaults.standard.object(forKey: "testMode"))
     }
@@ -510,6 +514,7 @@ import UserNotifications
                     menu.addItem(withTitle: NSLocalizedString("Controls unavailable: device connection is not unique", comment: "Cannot safely select a USB attachment"), action: nil, keyEquivalent: "")
                 }
                 let capabilityMap: [(String, String)] = [
+                    ("CAP_MICROPHONE_MUTE_LED_BRIGHTNESS", NSLocalizedString("Mic Mute LED Brightness", comment: "Microphone mute LED capability")),
                     ("CAP_VOLUME_LIMITER", NSLocalizedString("Volume Limiter", comment: "Volume limiter capability")),
                     ("CAP_NOISE_FILTER", NSLocalizedString("Microphone Noise Filter", comment: "Microphone noise filter capability")),
                     ("CAP_MICROPHONE_VOLUME", NSLocalizedString("Microphone Volume", comment: "Microphone volume capability")),
@@ -523,6 +528,13 @@ import UserNotifications
                 for (cap, title) in capabilityMap {
                     if capabilities.contains(cap) {
                         switch cap {
+                        case "CAP_MICROPHONE_MUTE_LED_BRIGHTNESS":
+                            let options = [(NSLocalizedString("Off", comment: "Mute LED off"), 0),
+                                           (NSLocalizedString("Low", comment: "Low mute LED brightness"), 1),
+                                           (NSLocalizedString("Medium", comment: "Medium mute LED brightness"), 2),
+                                           (NSLocalizedString("High", comment: "High mute LED brightness"), 3)]
+                            addChoiceMenu(to: menu, title: title, options: options,
+                                          action: #selector(setMicrophoneMuteLedBrightness(_:)), target: controlTarget, deviceName: deviceName)
                         case "CAP_VOLUME_LIMITER":
                             addChoiceMenu(to: menu, title: title, options: onOffOptions,
                                           action: #selector(setVolumeLimiter(_:)), target: controlTarget, deviceName: deviceName)

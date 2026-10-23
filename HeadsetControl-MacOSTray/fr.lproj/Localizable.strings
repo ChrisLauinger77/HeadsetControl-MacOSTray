@@ -129,3 +129,5 @@
 "Microphone Noise Filter" = "Filtre de bruit du microphone";
 
 "Volume Limiter" = "Limiteur de volume";
+
+"Mic Mute LED Brightness" = "Luminosité de la LED du microphone coupé";

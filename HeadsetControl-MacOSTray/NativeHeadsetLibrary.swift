@@ -105,6 +105,10 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
         assertWorker()
         let handle = handles[connection.index]
         switch command {
+        case .microphoneMuteLedBrightness(let level):
+            guard hsc_supports(handle, HSC_CAP_MICROPHONE_MUTE_LED_BRIGHTNESS) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
+            let range = AppDefaults.microphoneMuteLedBrightnessRange
+            return HeadsetFailure.result(code: hsc_set_mic_mute_led_brightness(handle, UInt8(max(range.lowerBound, min(range.upperBound, level)))).rawValue, operation: .command)
         case .volumeLimiter(let enabled):
             guard hsc_supports(handle, HSC_CAP_VOLUME_LIMITER) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
             return HeadsetFailure.result(code: hsc_set_volume_limiter(handle, enabled).rawValue, operation: .command)

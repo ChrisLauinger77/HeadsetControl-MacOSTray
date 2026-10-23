@@ -52,6 +52,7 @@ nonisolated struct HeadsetCapability {
         .microphoneVolume,
         .noiseFilter,
         .volumeLimiter,
+        .microphoneMuteLedBrightness,
         .lights,
         .inactiveTime,
         .voicePrompts,
