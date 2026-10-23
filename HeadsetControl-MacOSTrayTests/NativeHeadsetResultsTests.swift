@@ -1,8 +1,14 @@
 import XCTest
+import HeadsetControlCLib
 @testable import HeadsetControl_MacOSTray
 
 final class NativeHeadsetResultsTests: XCTestCase {
     func testInstalledLibraryBatteryProfilesAndOrderedPresetMetadata() async {
+        XCTAssertEqual(HSC_BATTERY_UNAVAILABLE.rawValue, 0)
+        XCTAssertEqual(HSC_BATTERY_CHARGING.rawValue, 1)
+        XCTAssertEqual(HSC_BATTERY_AVAILABLE.rawValue, 2)
+        XCTAssertEqual(HSC_BATTERY_ERROR.rawValue, 3)
+        XCTAssertEqual(HSC_BATTERY_TIMEOUT.rawValue, 4)
         let done = expectation(description: "native profile transactions finish")
         HeadsetIOWorker.shared.enqueue {
             let service = HeadsetControlService()
@@ -12,6 +18,8 @@ final class NativeHeadsetResultsTests: XCTestCase {
                 if profile == 1 { XCTAssertEqual(device?.chatmix?.failureValue?.kind, .native(-5)) }
             }
             let charging = service.fetchDevices(testProfile: 2).successValue?.first
+            XCTAssertEqual(charging?.battery?.successValue?.status, .charging)
+            XCTAssertEqual(charging?.battery?.successValue?.percentage, 50)
             XCTAssertEqual(charging?.battery?.successValue?.chargeText, "⚡︎ 50%")
             let low = service.fetchDevices(testProfile: 7).successValue?.first
             XCTAssertEqual(low?.battery?.successValue?.percentage, 10)

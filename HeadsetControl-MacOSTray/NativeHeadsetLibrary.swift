@@ -41,42 +41,49 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
     func readDevice(_ connection: HeadsetConnection) -> HeadsetDevice {
         assertWorker()
         let handle = handles[connection.index]
-        var device = HeadsetDevice(
-            usbID: connection.usbID,
-            name: stringFromC(hsc_get_name(handle)),
-            vendor: stringFromC(hsc_get_vendor_name(handle)),
-            product: stringFromC(hsc_get_product_name(handle)),
-            capabilities: HeadsetCapability.menuCapabilities.compactMap {
-                hsc_supports(handle, $0.rawValue) ? $0.legacyCapabilityString : nil
-            }
-        )
+        var batteryResult: Result<HeadsetBattery, HeadsetFailure>?
+        var chatmixResult: Result<Int, HeadsetFailure>?
+        var equalizerPresets: Result<[HeadsetEqualizerPreset], HeadsetFailure>?
         if hsc_supports(handle, HSC_CAP_BATTERY_STATUS) {
             var battery = hsc_battery_t()
             let code = hsc_get_battery(handle, &battery)
             if code == HSC_RESULT_OK {
-                device.battery = HeadsetBattery.decode(level: Int(battery.level_percent), rawStatus: Int(battery.status.rawValue),
-                                                       timeToEmpty: Int(battery.time_to_empty_min))
+                batteryResult = HeadsetBattery.decode(level: Int(battery.level_percent), rawStatus: Int(battery.status.rawValue),
+                                                      timeToEmpty: Int(battery.time_to_empty_min))
             } else {
-                device.battery = .failure(.init(operation: .battery, kind: .native(code.rawValue)))
+                batteryResult = .failure(.init(operation: .battery, kind: .native(code.rawValue)))
             }
         }
         if hsc_supports(handle, HSC_CAP_CHATMIX_STATUS) {
             var chatmix = hsc_chatmix_t()
             let code = hsc_get_chatmix(handle, &chatmix)
             if code == HSC_RESULT_OK {
-                device.chatmix = (0...128).contains(chatmix.level) ? .success(Int(chatmix.level))
+                chatmixResult = (0...128).contains(chatmix.level) ? .success(Int(chatmix.level))
                     : .failure(.init(operation: .chatmix, kind: .invalidResponse("Chatmix level \(chatmix.level)")))
             } else {
-                device.chatmix = .failure(.init(operation: .chatmix, kind: .native(code.rawValue)))
+                chatmixResult = .failure(.init(operation: .chatmix, kind: .native(code.rawValue)))
             }
         }
         if hsc_supports(handle, HSC_CAP_EQUALIZER_PRESET) {
-            device.equalizerPresets = HeadsetEqualizerPreset.read(count: Int(hsc_get_equalizer_presets_count(handle))) { index in
+            equalizerPresets = HeadsetEqualizerPreset.read(count: Int(hsc_get_equalizer_presets_count(handle))) { index in
                 guard let name = hsc_get_equalizer_preset_name(handle, Int32(index)) else { return nil }
                 return String(cString: name) // Copy before the owning headset is freed.
             }
         }
-        return device
+        // Opening the device for a query can refine its product name. Copy the
+        // native strings afterward, while this transaction still owns the handle.
+        return HeadsetDevice(
+            usbID: connection.usbID,
+            name: stringFromC(hsc_get_name(handle)),
+            vendor: stringFromC(hsc_get_vendor_name(handle)),
+            product: stringFromC(hsc_get_product_name(handle)),
+            capabilities: HeadsetCapability.menuCapabilities.compactMap {
+                hsc_supports(handle, $0.rawValue) ? $0.legacyCapabilityString : nil
+            },
+            battery: batteryResult,
+            chatmix: chatmixResult,
+            equalizerPresets: equalizerPresets
+        )
     }
 
     func perform(_ command: HeadsetCommand, on connection: HeadsetConnection) -> Result<Void, HeadsetFailure> {
