@@ -101,6 +101,24 @@ class NativeContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unsupported build provenance"):
             native.validate_provenance({**valid, "schema": 1}, PLIST)
 
+    def test_observation_runtime_requires_the_exact_system_install_name(self):
+        for arch in sorted(native.ARCHES):
+            data = provenance_fixture(arch=arch)
+            info = data["slices"][arch]["application"]
+            info["dependencies"]["/usr/lib/swift/libswiftObservation.dylib"] = "1.0.0"
+            native.check_linkage(info, arch, "app")
+            native.validate_provenance(data, PLIST)
+            for path in ("/opt/homebrew/lib/libswiftObservation.dylib",
+                         "/usr/local/lib/libswiftObservation.dylib",
+                         "@rpath/libswiftObservation.dylib",
+                         "@executable_path/../Frameworks/libswiftObservation.dylib",
+                         "/usr/lib/libswiftObservation.dylib",
+                         "/usr/lib/swift/libswiftUnexpected.dylib"):
+                wrong = copy.deepcopy(data)
+                wrong["slices"][arch]["application"]["dependencies"][path] = "1.0.0"
+                with self.subTest(arch=arch, path=path), self.assertRaisesRegex(ValueError, "Unexpected"):
+                    native.validate_provenance(wrong, PLIST)
+
     def test_cross_architecture_provenance(self):
         left = provenance_fixture()
         right = provenance_fixture(arch="x86_64")
