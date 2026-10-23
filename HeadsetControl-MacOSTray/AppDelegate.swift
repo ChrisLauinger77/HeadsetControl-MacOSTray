@@ -149,6 +149,10 @@ import UserNotifications
         runControlAction(sender) { .microphoneMuteLedBrightness($0) }
     }
 
+    @objc func setBluetoothWhenPoweredOn(_ sender: NSMenuItem) {
+        runControlAction(sender) { .bluetoothWhenPoweredOn($0 != 0) }
+    }
+
     private var currentTestProfile: Int {
         AppDefaults.validatedTestProfile(AppDefaults.standard.object(forKey: "testMode"))
     }
@@ -514,6 +518,7 @@ import UserNotifications
                     menu.addItem(withTitle: NSLocalizedString("Controls unavailable: device connection is not unique", comment: "Cannot safely select a USB attachment"), action: nil, keyEquivalent: "")
                 }
                 let capabilityMap: [(String, String)] = [
+                    ("CAP_BT_WHEN_POWERED_ON", NSLocalizedString("Bluetooth on at Power-On", comment: "Bluetooth power-on capability")),
                     ("CAP_MICROPHONE_MUTE_LED_BRIGHTNESS", NSLocalizedString("Mic Mute LED Brightness", comment: "Microphone mute LED capability")),
                     ("CAP_VOLUME_LIMITER", NSLocalizedString("Volume Limiter", comment: "Volume limiter capability")),
                     ("CAP_NOISE_FILTER", NSLocalizedString("Microphone Noise Filter", comment: "Microphone noise filter capability")),
@@ -528,6 +533,9 @@ import UserNotifications
                 for (cap, title) in capabilityMap {
                     if capabilities.contains(cap) {
                         switch cap {
+                        case "CAP_BT_WHEN_POWERED_ON":
+                            addChoiceMenu(to: menu, title: title, options: onOffOptions,
+                                          action: #selector(setBluetoothWhenPoweredOn(_:)), target: controlTarget, deviceName: deviceName)
                         case "CAP_MICROPHONE_MUTE_LED_BRIGHTNESS":
                             let options = [(NSLocalizedString("Off", comment: "Mute LED off"), 0),
                                            (NSLocalizedString("Low", comment: "Low mute LED brightness"), 1),

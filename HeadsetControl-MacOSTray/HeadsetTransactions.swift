@@ -27,6 +27,7 @@ nonisolated enum HeadsetCommand: Equatable, Sendable {
     case noiseFilter(Int)
     case volumeLimiter(Bool)
     case microphoneMuteLedBrightness(Int)
+    case bluetoothWhenPoweredOn(Bool)
     case lights(Bool)
     case inactiveTime(Int)
     case voicePrompts(Bool)

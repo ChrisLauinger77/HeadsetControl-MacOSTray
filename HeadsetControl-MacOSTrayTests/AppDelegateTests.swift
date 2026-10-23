@@ -3,6 +3,11 @@ import XCTest
 @testable import HeadsetControl_MacOSTray
 
 @MainActor class AppDelegateTests: XCTestCase {
+    func testBluetoothPowerOnOffersOnAndOffWithoutReadback() async throws {
+        try await verifyWriteOnlyControl(.bluetoothWhenPoweredOn, title: "Bluetooth on at Power-On", values: [0, 1],
+                                        commands: [.bluetoothWhenPoweredOn(false), .bluetoothWhenPoweredOn(true)])
+    }
+
     func testMicMuteLedBrightnessOffersAllFourStepsWithoutReadback() async throws {
         try await verifyWriteOnlyControl(.microphoneMuteLedBrightness, title: "Mic Mute LED Brightness", values: [0, 1, 2, 3],
                                         commands: [0, 1, 2, 3].map(HeadsetCommand.microphoneMuteLedBrightness))

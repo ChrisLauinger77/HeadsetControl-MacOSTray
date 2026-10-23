@@ -53,6 +53,7 @@ nonisolated struct HeadsetCapability {
         .noiseFilter,
         .volumeLimiter,
         .microphoneMuteLedBrightness,
+        .bluetoothWhenPoweredOn,
         .lights,
         .inactiveTime,
         .voicePrompts,

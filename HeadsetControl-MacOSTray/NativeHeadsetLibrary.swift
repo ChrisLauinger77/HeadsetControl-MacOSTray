@@ -105,6 +105,9 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
         assertWorker()
         let handle = handles[connection.index]
         switch command {
+        case .bluetoothWhenPoweredOn(let enabled):
+            guard hsc_supports(handle, HSC_CAP_BT_WHEN_POWERED_ON) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
+            return HeadsetFailure.result(code: hsc_set_bluetooth_when_powered_on(handle, enabled).rawValue, operation: .command)
         case .microphoneMuteLedBrightness(let level):
             guard hsc_supports(handle, HSC_CAP_MICROPHONE_MUTE_LED_BRIGHTNESS) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
             let range = AppDefaults.microphoneMuteLedBrightnessRange

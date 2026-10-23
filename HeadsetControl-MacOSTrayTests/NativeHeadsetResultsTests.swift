@@ -3,6 +3,10 @@ import HeadsetControlCLib
 @testable import HeadsetControl_MacOSTray
 
 final class NativeHeadsetResultsTests: XCTestCase {
+    func testNativeBluetoothPowerOnWritesPreserveUpstreamProfileBehavior() async {
+        await verifyNativeWrites([.bluetoothWhenPoweredOn(false), .bluetoothWhenPoweredOn(true)])
+    }
+
     func testNativeMicMuteLedBrightnessClampsAndPreservesUpstreamProfileBehavior() async {
         await verifyNativeWrites([Int.min, -1, 0, 1, 2, 3, 4, Int.max].map(HeadsetCommand.microphoneMuteLedBrightness))
     }
