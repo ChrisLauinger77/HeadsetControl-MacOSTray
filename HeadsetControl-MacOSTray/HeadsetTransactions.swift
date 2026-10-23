@@ -46,6 +46,8 @@ nonisolated struct HeadsetDevice: Sendable {
     var battery: Result<HeadsetBattery, HeadsetFailure>? = nil
     var chatmix: Result<Int, HeadsetFailure>? = nil
     var sidetone: Result<HeadsetSidetone, HeadsetFailure>? = nil
+    var microphoneMuted: Result<Bool, HeadsetFailure>? = nil
+    var microphoneAttached: Result<Bool, HeadsetFailure>? = nil
     var equalizerPresets: Result<[HeadsetEqualizerPreset], HeadsetFailure>? = nil
     var target: HeadsetTarget? = nil
 
@@ -54,6 +56,8 @@ nonisolated struct HeadsetDevice: Sendable {
         if case .failure(let error) = battery { result.append(error) }
         if case .failure(let error) = chatmix { result.append(error) }
         if case .failure(let error) = sidetone { result.append(error) }
+        if case .failure(let error) = microphoneMuted { result.append(error) }
+        if case .failure(let error) = microphoneAttached { result.append(error) }
         if case .failure(let error) = equalizerPresets { result.append(error) }
         return result
     }
@@ -70,6 +74,8 @@ nonisolated struct HeadsetDevice: Sendable {
         result["battery"] = battery
         result["chatmix"] = chatmix
         result["sidetone"] = sidetone
+        result["microphoneMuted"] = microphoneMuted
+        result["microphoneAttached"] = microphoneAttached
         result["equalizerPresets"] = equalizerPresets
         return result
     }

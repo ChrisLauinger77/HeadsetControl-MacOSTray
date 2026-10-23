@@ -6,6 +6,8 @@ nonisolated enum HeadsetOperation: String, Sendable {
     case battery = "Battery"
     case chatmix = "Chatmix"
     case sidetone = "Sidetone"
+    case microphone = "Microphone"
+    case boomMicrophone = "Boom mic"
     case equalizer = "Equalizer Preset"
     case command = "Control"
 }

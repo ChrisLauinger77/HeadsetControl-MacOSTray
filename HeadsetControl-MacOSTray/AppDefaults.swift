@@ -24,6 +24,7 @@ nonisolated enum AppDefaults {
     static let lowBatteryThreshold = 25
     static let lowBatteryThresholdRange = 1...30
     static let notifyOnLowBattery = true
+    static let showMicrophoneMuteIcon = true
     static let equalizerPresets = "Preset 1,Preset 2,Preset 3,Preset 4"
     static let inactiveTimeOptions = [1, 2, 5, 10, 15, 30, 45, 60, 75, 90]
     static var inactiveTimeOptionsRaw: String { inactiveTimeOptions.map(String.init).joined(separator: ",") }
@@ -54,6 +55,7 @@ nonisolated enum AppDefaults {
         var values: [String: Any] = [
             "updateInterval": Double(updateInterval), "testMode": testProfile,
             "notifyOnLowBattery": notifyOnLowBattery, "lowBatteryThreshold": lowBatteryThreshold,
+            "showMicrophoneMuteIcon": showMicrophoneMuteIcon,
             "equalizerPresets": equalizerPresets, "inactiveTimeOptions": inactiveTimeOptionsRaw
         ]
         for (key, value) in zip(sidetoneKeys, sidetoneValues) { values[key] = value }
@@ -64,6 +66,9 @@ nonisolated enum AppDefaults {
     }
 
     static func validate(in store: UserDefaults) {
+        if store.object(forKey: "showMicrophoneMuteIcon") as? Bool == nil {
+            store.set(showMicrophoneMuteIcon, forKey: "showMicrophoneMuteIcon")
+        }
         if store.object(forKey: "notifyOnLowBattery") as? Bool == nil {
             store.set(notifyOnLowBattery, forKey: "notifyOnLowBattery")
         }

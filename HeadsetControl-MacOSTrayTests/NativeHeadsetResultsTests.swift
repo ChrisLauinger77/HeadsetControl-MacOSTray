@@ -3,6 +3,31 @@ import HeadsetControlCLib
 @testable import HeadsetControl_MacOSTray
 
 final class NativeHeadsetResultsTests: XCTestCase {
+    func testNativeMicrophoneResultsKeepDeviceAndPreserveErrorCodes() async throws {
+        let service = HeadsetControlService()
+        let results = await withCheckedContinuation { continuation in
+            HeadsetIOWorker.shared.enqueue {
+                continuation.resume(returning: [7, 1, 4].map { service.fetchDevices(testProfile: $0) })
+            }
+        }
+        let normal = try XCTUnwrap(results[0].get().first)
+        XCTAssertEqual(normal.microphoneMuted?.successValue, false)
+        XCTAssertEqual(normal.microphoneAttached?.successValue, true)
+        XCTAssertEqual(normal.battery?.successValue?.percentage, 10)
+        let failed = try XCTUnwrap(results[1].get().first)
+        let muteError = HeadsetFailure(operation: .microphone, kind: .native(-5))
+        let attachmentError = HeadsetFailure(operation: .boomMicrophone, kind: .native(-5))
+        XCTAssertEqual(failed.microphoneMuted?.failureValue, muteError)
+        XCTAssertEqual(failed.microphoneAttached?.failureValue, attachmentError)
+        XCTAssertTrue(failed.failures.contains(muteError))
+        XCTAssertTrue(failed.failures.contains(attachmentError))
+        XCTAssertEqual(failed.equalizerPresets?.successValue?.count, 4)
+        let batteryOffline = try XCTUnwrap(results[2].get().first)
+        XCTAssertEqual(batteryOffline.battery?.failureValue?.kind, .native(-3))
+        XCTAssertEqual(batteryOffline.microphoneMuted?.successValue, false)
+        XCTAssertEqual(batteryOffline.microphoneAttached?.successValue, true)
+    }
+
     func testNativeBluetoothCallVolumeClampsAndPreservesUpstreamProfileBehavior() async {
         await verifyNativeWrites([Int.min, -1, 0, 50, 100, 101, Int.max].map(HeadsetCommand.bluetoothCallVolume))
     }

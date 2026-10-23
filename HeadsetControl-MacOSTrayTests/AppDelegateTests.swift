@@ -3,6 +3,94 @@ import XCTest
 @testable import HeadsetControl_MacOSTray
 
 @MainActor class AppDelegateTests: XCTestCase {
+    private func microphoneDevice(muted: Result<Bool, HeadsetFailure>?, attached: Result<Bool, HeadsetFailure>?) -> HeadsetDevice {
+        HeadsetDevice(usbID: .testDevice, name: "Headset", vendor: "Vendor", product: "Product", capabilities: ["CAP_LIGHTS"],
+                      battery: .success(.init(level: 42, status: .available)), microphoneMuted: muted, microphoneAttached: attached,
+                      target: .test(profile: 7))
+    }
+
+    func testMicrophoneRowsShowBothStatesAndOmitUnsupportedReadings() async {
+        let delegate = AppDelegate()
+        for (muted, attached) in [(false, true), (true, false)] {
+            let device = microphoneDevice(muted: .success(muted), attached: .success(attached))
+            delegate.latestDevices = [device.menuDictionary]
+            let menu = NSMenu()
+            delegate.rebuildMenu(menu)
+            XCTAssertTrue(menu.items.contains { $0.title == String(format: localized("Microphone: %@"), localized(muted ? "Muted" : "On")) })
+            XCTAssertTrue(menu.items.contains { $0.title == String(format: localized("Boom mic: %@"), localized(attached ? "Attached" : "Detached")) })
+        }
+        delegate.latestDevices = [microphoneDevice(muted: nil, attached: nil).menuDictionary]
+        let menu = NSMenu()
+        delegate.rebuildMenu(menu)
+        XCTAssertFalse(menu.items.contains { $0.title.hasPrefix(localized("Microphone") + ":") || $0.title.hasPrefix(localized("Boom mic") + ":") })
+    }
+
+    func testMicrophoneTimeoutsKeepBatteryAndOtherControlsVisible() async {
+        let muteError = HeadsetFailure(operation: .microphone, kind: .native(-4))
+        let attachmentError = HeadsetFailure(operation: .boomMicrophone, kind: .native(-3))
+        let device = microphoneDevice(muted: .failure(muteError), attached: .failure(attachmentError))
+        let delegate = AppDelegate()
+        delegate.latestDevices = [device.menuDictionary]
+        let menu = NSMenu()
+        delegate.rebuildMenu(menu)
+        XCTAssertTrue(menu.items.contains { $0.title == muteError.message })
+        XCTAssertTrue(menu.items.contains { $0.title == attachmentError.message })
+        XCTAssertTrue(menu.items.contains { $0.title == "\(localized("Battery")): 42%" })
+        XCTAssertNotNil(menu.items.first { $0.title == localized("Lights") }?.submenu)
+        XCTAssertEqual(device.failures, [muteError, attachmentError])
+    }
+
+    func testMuteIconPreferenceAndFreshnessUseCachedReadingsWithoutMenuQueries() async {
+        UserDefaults.standard.set(7, forKey: "testMode")
+        UserDefaults.standard.set(true, forKey: "showMicrophoneMuteIcon")
+        let provider = RecordingHeadsetProvider()
+        let executor = ManualHeadsetExecutor()
+        let controller = HeadsetController(provider: provider, executor: executor)
+        let delegate = AppDelegate(headsetController: controller)
+        provider.devices = [microphoneDevice(muted: nil, attached: nil), microphoneDevice(muted: .success(true), attached: .success(true))]
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+        XCTAssertEqual(delegate.statusIcon, .microphoneMuted)
+        let menu = NSMenu()
+        for _ in 0..<3 { delegate.menuNeedsUpdate(menu) }
+        XCTAssertEqual(provider.profiles, [7])
+        XCTAssertTrue(executor.jobs.isEmpty)
+        UserDefaults.standard.set(false, forKey: "showMicrophoneMuteIcon")
+        delegate.handleUserDefaultsChanged(Notification(name: UserDefaults.didChangeNotification))
+        await drainResults()
+        XCTAssertEqual(delegate.statusIcon, .headset)
+        XCTAssertTrue(executor.jobs.isEmpty)
+        UserDefaults.standard.set(true, forKey: "showMicrophoneMuteIcon")
+        delegate.handleUserDefaultsChanged(Notification(name: UserDefaults.didChangeNotification))
+        await drainResults()
+        XCTAssertEqual(delegate.statusIcon, .microphoneMuted)
+        XCTAssertTrue(executor.jobs.isEmpty)
+        controller.invalidateSnapshot()
+        XCTAssertEqual(delegate.statusIcon, .headset)
+        provider.devices = []
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+        XCTAssertEqual(delegate.statusIcon, .headset)
+        delegate.stop()
+        executor.finishStop()
+        await drainResults()
+    }
+
+    func testNativeTestModeMicrophoneMenuShowsOnAndAttached() async throws {
+        let service = HeadsetControlService()
+        let result = await withCheckedContinuation { continuation in
+            HeadsetIOWorker.shared.enqueue { continuation.resume(returning: service.fetchDevices(testProfile: 7)) }
+        }
+        let delegate = AppDelegate()
+        delegate.latestDevices = [try XCTUnwrap(result.get().first).menuDictionary]
+        let menu = NSMenu()
+        delegate.rebuildMenu(menu)
+        XCTAssertTrue(menu.items.contains { $0.title == String(format: localized("Microphone: %@"), localized("On")) })
+        XCTAssertTrue(menu.items.contains { $0.title == String(format: localized("Boom mic: %@"), localized("Attached")) })
+    }
+
     func testBluetoothCallVolumePresetsAppearAndDispatchWithoutReadback() async throws {
         UserDefaults.standard.set(-1, forKey: "bluetoothCallVolumeOff")
         UserDefaults.standard.set(43, forKey: "bluetoothCallVolumeMid")
@@ -95,6 +183,7 @@ import XCTest
         UserDefaults.standard.removeObject(forKey: "equalizerPresets")
         UserDefaults.standard.removeObject(forKey: "testMode")
         UserDefaults.standard.removeObject(forKey: "notifyOnLowBattery")
+        UserDefaults.standard.removeObject(forKey: "showMicrophoneMuteIcon")
         super.tearDown()
     }
 

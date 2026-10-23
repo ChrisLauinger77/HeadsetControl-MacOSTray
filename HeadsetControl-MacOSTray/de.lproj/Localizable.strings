@@ -135,3 +135,14 @@
 "Bluetooth on at Power-On" = "Bluetooth beim Einschalten aktivieren";
 
 "Bluetooth Call Volume" = "Bluetooth-Anruflautstärke";
+
+/* Microphone telemetry and menu bar feedback */
+"Microphone" = "Mikrofon";
+"Boom mic" = "Mikrofonarm";
+"Microphone: %@" = "Mikrofon: %@";
+"Boom mic: %@" = "Mikrofonarm: %@";
+"Muted" = "Stummgeschaltet";
+"Attached" = "Angeschlossen";
+"Detached" = "Abgenommen";
+"Show microphone mute status in the menu bar" = "Mikrofon-Stummschaltung in der Menüleiste anzeigen";
+"Microphone muted" = "Mikrofon stummgeschaltet";

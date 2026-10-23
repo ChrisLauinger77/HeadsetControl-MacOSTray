@@ -44,6 +44,8 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
         var batteryResult: Result<HeadsetBattery, HeadsetFailure>?
         var chatmixResult: Result<Int, HeadsetFailure>?
         var sidetoneResult: Result<HeadsetSidetone, HeadsetFailure>?
+        var microphoneMuted: Result<Bool, HeadsetFailure>?
+        var microphoneAttached: Result<Bool, HeadsetFailure>?
         var equalizerPresets: Result<[HeadsetEqualizerPreset], HeadsetFailure>?
         if hsc_supports(handle, HSC_CAP_BATTERY_STATUS) {
             var battery = hsc_battery_t()
@@ -78,6 +80,18 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
                 sidetoneResult = .failure(.init(operation: .sidetone, kind: .native(code.rawValue)))
             }
         }
+        if hsc_supports(handle, HeadsetCapability.microphoneMuteStatus.rawValue) {
+            var status = hsc_mic_mute_status_t()
+            let code = hsc_get_mic_mute_status(handle, &status)
+            microphoneMuted = code == HSC_RESULT_OK ? .success(status.muted)
+                : .failure(.init(operation: .microphone, kind: .native(code.rawValue)))
+        }
+        if hsc_supports(handle, HeadsetCapability.microphoneAttachmentStatus.rawValue) {
+            var status = hsc_mic_attachment_status_t()
+            let code = hsc_get_mic_attachment_status(handle, &status)
+            microphoneAttached = code == HSC_RESULT_OK ? .success(status.attached)
+                : .failure(.init(operation: .boomMicrophone, kind: .native(code.rawValue)))
+        }
         if hsc_supports(handle, HSC_CAP_EQUALIZER_PRESET) {
             equalizerPresets = HeadsetEqualizerPreset.read(count: Int(hsc_get_equalizer_presets_count(handle))) { index in
                 guard let name = hsc_get_equalizer_preset_name(handle, Int32(index)) else { return nil }
@@ -97,6 +111,8 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
             battery: batteryResult,
             chatmix: chatmixResult,
             sidetone: sidetoneResult,
+            microphoneMuted: microphoneMuted,
+            microphoneAttached: microphoneAttached,
             equalizerPresets: equalizerPresets
         )
     }
