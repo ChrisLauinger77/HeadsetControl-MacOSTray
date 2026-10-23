@@ -3,6 +3,82 @@ import XCTest
 @testable import HeadsetControl_MacOSTray
 
 @MainActor class AppDelegateTests: XCTestCase {
+    func testBluetoothCallVolumePresetsAppearAndDispatchWithoutReadback() async throws {
+        UserDefaults.standard.set(-1, forKey: "bluetoothCallVolumeOff")
+        UserDefaults.standard.set(43, forKey: "bluetoothCallVolumeMid")
+        defer { AppDefaults.bluetoothCallVolumeKeys.forEach { UserDefaults.standard.removeObject(forKey: $0) } }
+        try await verifyWriteOnlyControl(.bluetoothCallVolume, title: "Bluetooth Call Volume", values: [25, 43, 75, 100],
+                                        commands: [25, 43, 75, 100].map(HeadsetCommand.bluetoothCallVolume))
+    }
+
+    func testBluetoothPowerOnOffersOnAndOffWithoutReadback() async throws {
+        try await verifyWriteOnlyControl(.bluetoothWhenPoweredOn, title: "Bluetooth on at Power-On", values: [0, 1],
+                                        commands: [.bluetoothWhenPoweredOn(false), .bluetoothWhenPoweredOn(true)])
+    }
+
+    func testMicMuteLedBrightnessOffersAllFourStepsWithoutReadback() async throws {
+        try await verifyWriteOnlyControl(.microphoneMuteLedBrightness, title: "Mic Mute LED Brightness", values: [0, 1, 2, 3],
+                                        commands: [0, 1, 2, 3].map(HeadsetCommand.microphoneMuteLedBrightness))
+    }
+
+    func testVolumeLimiterOffersOnAndOffWithoutReadback() async throws {
+        try await verifyWriteOnlyControl(.volumeLimiter, title: "Volume Limiter", values: [0, 1], commands: [.volumeLimiter(false), .volumeLimiter(true)])
+    }
+
+    func testNoiseFilterOffersOffLowAndHighWithoutReadback() async throws {
+        try await verifyWriteOnlyControl(.noiseFilter, title: "Microphone Noise Filter", values: [0, 1, 2],
+                                        commands: [0, 1, 2].map(HeadsetCommand.noiseFilter))
+    }
+
+    private func verifyWriteOnlyControl(_ capability: HeadsetCapability, title: String, values: [Int], commands: [HeadsetCommand]) async throws {
+        UserDefaults.standard.set(7, forKey: "testMode")
+        let service = HeadsetControlService()
+        let result = await withCheckedContinuation { continuation in
+            HeadsetIOWorker.shared.enqueue { continuation.resume(returning: service.fetchDevices(testProfile: 7)) }
+        }
+        let device = try XCTUnwrap(result.get().first)
+        XCTAssertTrue(device.capabilities.contains(capability.legacyCapabilityString))
+        let provider = RecordingHeadsetProvider()
+        let executor = ManualHeadsetExecutor()
+        let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor))
+        delegate.latestDevices = [device.menuDictionary]
+        let menu = NSMenu()
+        delegate.rebuildMenu(menu)
+        let submenu = try XCTUnwrap(menu.items.first { $0.title == localized(title) }?.submenu)
+        XCTAssertEqual(submenu.items.compactMap { ($0.representedObject as? HeadsetMenuAction)?.value }, values)
+        for item in submenu.items {
+            XCTAssertEqual(item.state, .off)
+            XCTAssertEqual((item.representedObject as? HeadsetMenuAction)?.target, .test(profile: 7))
+            _ = delegate.perform(try XCTUnwrap(item.action), with: item)
+            executor.runNext()
+            await drainResults()
+        }
+        XCTAssertEqual(provider.commands.map { $0.0 }, commands)
+        provider.commandResult = .failure(.init(operation: .command, kind: .native(-5)))
+        let item = try XCTUnwrap(submenu.items.first)
+        _ = delegate.perform(try XCTUnwrap(item.action), with: item)
+        executor.runNext()
+        await drainResults()
+        XCTAssertTrue(delegate.commandFailure?.contains("-5") == true)
+        var ambiguous = device.menuDictionary
+        ambiguous.removeValue(forKey: "control_target")
+        delegate.latestDevices = [ambiguous]
+        delegate.rebuildMenu(menu)
+        XCTAssertTrue(try XCTUnwrap(menu.items.first { $0.title == localized(title) }?.submenu).items.allSatisfy { $0.action == nil })
+        ambiguous["capabilities"] = [String]()
+        delegate.latestDevices = [ambiguous]
+        delegate.rebuildMenu(menu)
+        XCTAssertFalse(menu.items.contains { $0.title == localized(title) })
+    }
+
+    func testMicrophoneVolumePresetsAppearAndDispatchWithoutReadback() async throws {
+        UserDefaults.standard.set(-1, forKey: "microphoneVolumeOff")
+        UserDefaults.standard.set(17, forKey: "microphoneVolumeLow")
+        defer { AppDefaults.microphoneVolumeKeys.forEach { UserDefaults.standard.removeObject(forKey: $0) } }
+        try await verifyWriteOnlyControl(.microphoneVolume, title: "Microphone Volume", values: [17, 64, 96, 128],
+                                        commands: [17, 64, 96, 128].map(HeadsetCommand.microphoneVolume))
+    }
+
     private func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
     }

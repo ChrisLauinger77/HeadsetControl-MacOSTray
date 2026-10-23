@@ -45,7 +45,17 @@ struct SettingsView: View {
     @AppStorage("sidetoneMid", store: AppDefaults.standard) var sidetoneMid: Int = AppDefaults.sidetoneValues[2]
     @AppStorage("sidetoneHigh", store: AppDefaults.standard) var sidetoneHigh: Int = AppDefaults.sidetoneValues[3]
     @AppStorage("sidetoneMax", store: AppDefaults.standard) var sidetoneMax: Int = AppDefaults.sidetoneValues[4]
+    @AppStorage("microphoneVolumeOff", store: AppDefaults.standard) var microphoneVolumeOff: Int = AppDefaults.microphoneVolumeValues[0]
+    @AppStorage("microphoneVolumeLow", store: AppDefaults.standard) var microphoneVolumeLow: Int = AppDefaults.microphoneVolumeValues[1]
+    @AppStorage("microphoneVolumeMid", store: AppDefaults.standard) var microphoneVolumeMid: Int = AppDefaults.microphoneVolumeValues[2]
+    @AppStorage("microphoneVolumeHigh", store: AppDefaults.standard) var microphoneVolumeHigh: Int = AppDefaults.microphoneVolumeValues[3]
+    @AppStorage("microphoneVolumeMax", store: AppDefaults.standard) var microphoneVolumeMax: Int = AppDefaults.microphoneVolumeValues[4]
     var onClose: (() -> Void)? = nil
+    @AppStorage("bluetoothCallVolumeOff", store: AppDefaults.standard) var bluetoothCallVolumeOff: Int = AppDefaults.bluetoothCallVolumeValues[0]
+    @AppStorage("bluetoothCallVolumeLow", store: AppDefaults.standard) var bluetoothCallVolumeLow: Int = AppDefaults.bluetoothCallVolumeValues[1]
+    @AppStorage("bluetoothCallVolumeMid", store: AppDefaults.standard) var bluetoothCallVolumeMid: Int = AppDefaults.bluetoothCallVolumeValues[2]
+    @AppStorage("bluetoothCallVolumeHigh", store: AppDefaults.standard) var bluetoothCallVolumeHigh: Int = AppDefaults.bluetoothCallVolumeValues[3]
+    @AppStorage("bluetoothCallVolumeMax", store: AppDefaults.standard) var bluetoothCallVolumeMax: Int = AppDefaults.bluetoothCallVolumeValues[4]
     @AppStorage("updateInterval", store: AppDefaults.standard) var updateInterval: Double = Double(AppDefaults.updateInterval)
     @AppStorage("testMode", store: AppDefaults.standard) var testMode: Int = AppDefaults.testProfile
     @AppStorage("equalizerPresets", store: AppDefaults.standard) var equalizerPresets: String = AppDefaults.equalizerPresets
@@ -274,46 +284,86 @@ struct SettingsView: View {
         }
     }
 
-    private var sidetoneSettingsTab: some View {
-        ScrollView {
-            SettingsSection(
-                title: NSLocalizedString("Sidetone", comment: "Sidetone section header"),
-                systemImage: "waveform"
-            ) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(NSLocalizedString("Sidetone Level Values", comment: "Sidetone level info title"))
-                    Text(NSLocalizedString("Valid range: -1...128. Use -1 to hide a menu entry.", comment: "Sidetone level range info"))
-                }
+    private func volumePresetSettings(title: String, values: [Binding<Int>], range: ClosedRange<Int>) -> some View {
+        SettingsSection(title: title, systemImage: "slider.horizontal.3") {
+            Text(String(format: NSLocalizedString("Valid range: -1...%d. Use -1 to hide a menu entry.", comment: "Configurable volume preset range"), range.upperBound))
                 .font(.subheadline)
                 .foregroundColor(.secondary)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    sidetoneRow(
-                        title: NSLocalizedString("Off:", comment: "Sidetone off label"),
-                        placeholder: NSLocalizedString("Off", comment: "Sidetone off field"),
-                        value: $sidetoneOff
-                    )
-                    sidetoneRow(
-                        title: NSLocalizedString("Low:", comment: "Sidetone low label"),
-                        placeholder: NSLocalizedString("Low", comment: "Sidetone low field"),
-                        value: $sidetoneLow
-                    )
-                    sidetoneRow(
-                        title: NSLocalizedString("Medium:", comment: "Sidetone medium label"),
-                        placeholder: NSLocalizedString("Medium", comment: "Sidetone medium field"),
-                        value: $sidetoneMid
-                    )
-                    sidetoneRow(
-                        title: NSLocalizedString("High:", comment: "Sidetone high label"),
-                        placeholder: NSLocalizedString("High", comment: "Sidetone high field"),
-                        value: $sidetoneHigh
-                    )
-                    sidetoneRow(
-                        title: NSLocalizedString("Maximum:", comment: "Sidetone maximum label"),
-                        placeholder: NSLocalizedString("Maximum", comment: "Sidetone maximum field"),
-                        value: $sidetoneMax
-                    )
+            ForEach(values.indices, id: \.self) { index in
+                let value = Binding(
+                    get: { AppDefaults.validatedLevelPreset(values[index].wrappedValue, range: range, fallback: 0) },
+                    set: { values[index].wrappedValue = AppDefaults.validatedLevelPreset($0, range: range, fallback: 0) }
+                )
+                HStack(spacing: 12) {
+                    Text(NSLocalizedString(AppDefaults.levelPresetNames[index], comment: "Volume preset label"))
+                        .frame(width: sidetoneLabelWidth, alignment: .trailing)
+                    TextField("", value: value, formatter: volumePresetFormatter(range: range))
+                        .frame(width: sidetoneFieldWidth)
+                        .multilineTextAlignment(.trailing)
+                        .textFieldStyle(.roundedBorder)
+                    Stepper("", value: value, in: range).labelsHidden()
                 }
+            }
+        }
+    }
+
+    private func volumePresetFormatter(range: ClosedRange<Int>) -> NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .none
+        formatter.allowsFloats = false
+        formatter.minimum = NSNumber(value: range.lowerBound)
+        formatter.maximum = NSNumber(value: range.upperBound)
+        return formatter
+    }
+
+    private var levelSettingsTab: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                SettingsSection(
+                    title: NSLocalizedString("Sidetone", comment: "Sidetone section header"),
+                    systemImage: "waveform"
+                ) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(NSLocalizedString("Sidetone Level Values", comment: "Sidetone level info title"))
+                        Text(NSLocalizedString("Valid range: -1...128. Use -1 to hide a menu entry.", comment: "Sidetone level range info"))
+                    }
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        sidetoneRow(
+                            title: NSLocalizedString("Off:", comment: "Sidetone off label"),
+                            placeholder: NSLocalizedString("Off", comment: "Sidetone off field"),
+                            value: $sidetoneOff
+                        )
+                        sidetoneRow(
+                            title: NSLocalizedString("Low:", comment: "Sidetone low label"),
+                            placeholder: NSLocalizedString("Low", comment: "Sidetone low field"),
+                            value: $sidetoneLow
+                        )
+                        sidetoneRow(
+                            title: NSLocalizedString("Medium:", comment: "Sidetone medium label"),
+                            placeholder: NSLocalizedString("Medium", comment: "Sidetone medium field"),
+                            value: $sidetoneMid
+                        )
+                        sidetoneRow(
+                            title: NSLocalizedString("High:", comment: "Sidetone high label"),
+                            placeholder: NSLocalizedString("High", comment: "Sidetone high field"),
+                            value: $sidetoneHigh
+                        )
+                        sidetoneRow(
+                            title: NSLocalizedString("Maximum:", comment: "Sidetone maximum label"),
+                            placeholder: NSLocalizedString("Maximum", comment: "Sidetone maximum field"),
+                            value: $sidetoneMax
+                        )
+                    }
+                }
+                volumePresetSettings(title: NSLocalizedString("Microphone Volume", comment: "Microphone volume presets"),
+                                     values: [$microphoneVolumeOff, $microphoneVolumeLow, $microphoneVolumeMid, $microphoneVolumeHigh, $microphoneVolumeMax],
+                                     range: AppDefaults.microphoneVolumePresetRange)
+                volumePresetSettings(title: NSLocalizedString("Bluetooth Call Volume", comment: "Bluetooth call volume presets"),
+                                     values: [$bluetoothCallVolumeOff, $bluetoothCallVolumeLow, $bluetoothCallVolumeMid, $bluetoothCallVolumeHigh, $bluetoothCallVolumeMax],
+                                     range: AppDefaults.bluetoothCallVolumePresetRange)
             }
             .padding(20)
         }
@@ -431,9 +481,9 @@ struct SettingsView: View {
                         Label(NSLocalizedString("General", comment: "General settings tab"), systemImage: "gearshape")
                     }
 
-                sidetoneSettingsTab
+                levelSettingsTab
                     .tabItem {
-                        Label(NSLocalizedString("Sidetone", comment: "Sidetone tab"), systemImage: "waveform")
+                        Label(NSLocalizedString("Levels", comment: "Level presets tab"), systemImage: "waveform")
                     }
 
                 inactiveTimeSettingsTab

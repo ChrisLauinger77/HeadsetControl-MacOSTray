@@ -120,3 +120,18 @@
 "Device data may be out of date" = "Los datos del dispositivo pueden estar desactualizados";
 "Last checked: %@" = "Última comprobación: %@";
 "No devices in last check" = "No había dispositivos en la última comprobación";
+
+/* Microphone volume presets */
+"Microphone Volume" = "Volumen del micrófono";
+"Levels" = "Niveles";
+"Valid range: -1...%d. Use -1 to hide a menu entry." = "Rango válido: -1...%d. Usa -1 para ocultar una entrada del menú.";
+
+"Microphone Noise Filter" = "Filtro de ruido del micrófono";
+
+"Volume Limiter" = "Limitador de volumen";
+
+"Mic Mute LED Brightness" = "Brillo del LED de silencio del micrófono";
+
+"Bluetooth on at Power-On" = "Activar Bluetooth al encender";
+
+"Bluetooth Call Volume" = "Volumen de llamadas Bluetooth";

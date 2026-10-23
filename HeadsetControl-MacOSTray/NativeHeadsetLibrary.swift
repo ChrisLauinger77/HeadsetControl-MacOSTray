@@ -105,6 +105,28 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
         assertWorker()
         let handle = handles[connection.index]
         switch command {
+        case .bluetoothCallVolume(let level):
+            guard hsc_supports(handle, HSC_CAP_BT_CALL_VOLUME) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
+            let range = AppDefaults.bluetoothCallVolumeRange
+            return HeadsetFailure.result(code: hsc_set_bluetooth_call_volume(handle, UInt8(max(range.lowerBound, min(range.upperBound, level)))).rawValue, operation: .command)
+        case .bluetoothWhenPoweredOn(let enabled):
+            guard hsc_supports(handle, HSC_CAP_BT_WHEN_POWERED_ON) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
+            return HeadsetFailure.result(code: hsc_set_bluetooth_when_powered_on(handle, enabled).rawValue, operation: .command)
+        case .microphoneMuteLedBrightness(let level):
+            guard hsc_supports(handle, HSC_CAP_MICROPHONE_MUTE_LED_BRIGHTNESS) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
+            let range = AppDefaults.microphoneMuteLedBrightnessRange
+            return HeadsetFailure.result(code: hsc_set_mic_mute_led_brightness(handle, UInt8(max(range.lowerBound, min(range.upperBound, level)))).rawValue, operation: .command)
+        case .volumeLimiter(let enabled):
+            guard hsc_supports(handle, HSC_CAP_VOLUME_LIMITER) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
+            return HeadsetFailure.result(code: hsc_set_volume_limiter(handle, enabled).rawValue, operation: .command)
+        case .noiseFilter(let level):
+            guard hsc_supports(handle, HSC_CAP_NOISE_FILTER) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
+            let range = AppDefaults.noiseFilterRange
+            return HeadsetFailure.result(code: hsc_set_noise_filter(handle, UInt8(max(range.lowerBound, min(range.upperBound, level)))).rawValue, operation: .command)
+        case .microphoneVolume(let level):
+            guard hsc_supports(handle, HSC_CAP_MICROPHONE_VOLUME) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
+            let range = AppDefaults.microphoneVolumeRange
+            return HeadsetFailure.result(code: hsc_set_mic_volume(handle, UInt8(max(range.lowerBound, min(range.upperBound, level)))).rawValue, operation: .command)
         case .sidetone(let level):
             guard hsc_supports(handle, HSC_CAP_SIDETONE) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
             return HeadsetFailure.result(code: hsc_set_sidetone(handle, UInt8(max(0, min(128, level))), nil).rawValue, operation: .command)

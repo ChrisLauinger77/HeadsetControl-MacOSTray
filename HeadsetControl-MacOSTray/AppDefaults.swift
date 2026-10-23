@@ -5,6 +5,17 @@ nonisolated enum AppDefaults {
     static let sidetoneKeys = ["sidetoneOff", "sidetoneLow", "sidetoneMid", "sidetoneHigh", "sidetoneMax"]
     static let sidetoneValues = [0, 32, 64, 96, 128]
     static let sidetoneRange = -1...128
+    static let levelPresetNames = ["Off", "Low", "Medium", "High", "Maximum"]
+    static let microphoneVolumeKeys = ["microphoneVolumeOff", "microphoneVolumeLow", "microphoneVolumeMid", "microphoneVolumeHigh", "microphoneVolumeMax"]
+    static let microphoneVolumeValues = [0, 32, 64, 96, 128]
+    static let microphoneVolumeRange = 0...128
+    static let noiseFilterRange = 0...2
+    static let microphoneMuteLedBrightnessRange = 0...3
+    static let microphoneVolumePresetRange = -1...128
+    static let bluetoothCallVolumeKeys = ["bluetoothCallVolumeOff", "bluetoothCallVolumeLow", "bluetoothCallVolumeMid", "bluetoothCallVolumeHigh", "bluetoothCallVolumeMax"]
+    static let bluetoothCallVolumeValues = [0, 25, 50, 75, 100]
+    static let bluetoothCallVolumeRange = 0...100
+    static let bluetoothCallVolumePresetRange = -1...100
     static let updateInterval = 600
     static let updateIntervalRange = 60...3600
     static let snapshotFreshnessGrace: TimeInterval = 60
@@ -46,6 +57,8 @@ nonisolated enum AppDefaults {
             "equalizerPresets": equalizerPresets, "inactiveTimeOptions": inactiveTimeOptionsRaw
         ]
         for (key, value) in zip(sidetoneKeys, sidetoneValues) { values[key] = value }
+        for (key, value) in zip(microphoneVolumeKeys, microphoneVolumeValues) { values[key] = value }
+        for (key, value) in zip(bluetoothCallVolumeKeys, bluetoothCallVolumeValues) { values[key] = value }
         store.register(defaults: values)
         validate(in: store)
     }
@@ -59,6 +72,12 @@ nonisolated enum AppDefaults {
         repair("lowBatteryThreshold", value: validatedLowBatteryThreshold(store.object(forKey: "lowBatteryThreshold")), in: store)
         for (key, fallback) in zip(sidetoneKeys, sidetoneValues) {
             repair(key, value: validatedSidetone(store.object(forKey: key), fallback: fallback), in: store)
+        }
+        for (key, fallback) in zip(microphoneVolumeKeys, microphoneVolumeValues) {
+            repair(key, value: validatedLevelPreset(store.object(forKey: key), range: microphoneVolumePresetRange, fallback: fallback), in: store)
+        }
+        for (key, fallback) in zip(bluetoothCallVolumeKeys, bluetoothCallVolumeValues) {
+            repair(key, value: validatedLevelPreset(store.object(forKey: key), range: bluetoothCallVolumePresetRange, fallback: fallback), in: store)
         }
     }
 
@@ -76,6 +95,10 @@ nonisolated enum AppDefaults {
 
     static func validatedSidetone(_ value: Any?, fallback: Int) -> Int {
         boundedInteger(value, range: sidetoneRange, fallback: fallback)
+    }
+
+    static func validatedLevelPreset(_ value: Any?, range: ClosedRange<Int>, fallback: Int) -> Int {
+        boundedInteger(value, range: range, fallback: fallback)
     }
 
     static func validatedTestProfile(_ value: Any?) -> Int {

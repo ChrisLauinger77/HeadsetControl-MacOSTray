@@ -17,6 +17,23 @@ import UserNotifications
             (NSLocalizedString("Maximum", comment: "Sidetone level Maximum"), max)
         ]
     }
+    var microphoneVolumeLevelsFromSettings: [(String, Int)] {
+        configuredLevels(keys: AppDefaults.microphoneVolumeKeys, values: AppDefaults.microphoneVolumeValues,
+                         range: AppDefaults.microphoneVolumePresetRange)
+    }
+
+    var bluetoothCallVolumeLevelsFromSettings: [(String, Int)] {
+        configuredLevels(keys: AppDefaults.bluetoothCallVolumeKeys, values: AppDefaults.bluetoothCallVolumeValues,
+                         range: AppDefaults.bluetoothCallVolumePresetRange)
+    }
+
+    private func configuredLevels(keys: [String], values: [Int], range: ClosedRange<Int>) -> [(String, Int)] {
+        zip(keys, values).enumerated().map { index, entry in
+            (NSLocalizedString(AppDefaults.levelPresetNames[index], comment: "Configured level preset"),
+             AppDefaults.validatedLevelPreset(AppDefaults.standard.object(forKey: entry.0), range: range, fallback: entry.1))
+        }.filter { $0.1 != -1 }
+    }
+
     private let headsetController: HeadsetController
     private let lifecycleObserver: HeadsetLifecycleObserving
     private weak var trackingMenu: NSMenu?
@@ -119,6 +136,30 @@ import UserNotifications
 
     @objc func setSidetoneLevel(_ sender: NSMenuItem) {
         runControlAction(sender) { .sidetone($0) }
+    }
+
+    @objc func setMicrophoneVolume(_ sender: NSMenuItem) {
+        runControlAction(sender) { .microphoneVolume($0) }
+    }
+
+    @objc func setNoiseFilter(_ sender: NSMenuItem) {
+        runControlAction(sender) { .noiseFilter($0) }
+    }
+
+    @objc func setVolumeLimiter(_ sender: NSMenuItem) {
+        runControlAction(sender) { .volumeLimiter($0 != 0) }
+    }
+
+    @objc func setMicrophoneMuteLedBrightness(_ sender: NSMenuItem) {
+        runControlAction(sender) { .microphoneMuteLedBrightness($0) }
+    }
+
+    @objc func setBluetoothWhenPoweredOn(_ sender: NSMenuItem) {
+        runControlAction(sender) { .bluetoothWhenPoweredOn($0 != 0) }
+    }
+
+    @objc func setBluetoothCallVolume(_ sender: NSMenuItem) {
+        runControlAction(sender) { .bluetoothCallVolume($0) }
     }
 
     private var currentTestProfile: Int {
@@ -420,6 +461,24 @@ import UserNotifications
 
     // Rendering is separate from refresh requests: a result may update an open
     // menu, but must never recursively schedule another native transaction.
+    private var onOffOptions: [(String, Int)] {
+        [(NSLocalizedString("Off", comment: "Control off"), 0), (NSLocalizedString("On", comment: "Control on"), 1)]
+    }
+
+    private func addChoiceMenu(to menu: NSMenu, title: String, options: [(String, Int)], action: Selector,
+                               target: HeadsetTarget?, deviceName: String) {
+        let submenu = NSMenu(title: title)
+        for (optionTitle, value) in options {
+            let item = NSMenuItem(title: optionTitle, action: target == nil ? nil : action, keyEquivalent: "")
+            item.target = self
+            item.representedObject = HeadsetMenuAction(target: target, value: value, deviceName: deviceName)
+            submenu.addItem(item)
+        }
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        menu.addItem(item)
+        menu.setSubmenu(submenu, for: item)
+    }
+
     func rebuildMenu(_ menu: NSMenu) {
         menu.removeAllItems()
         guard !stopping else { return }
@@ -468,6 +527,12 @@ import UserNotifications
                     menu.addItem(withTitle: NSLocalizedString("Controls unavailable: device connection is not unique", comment: "Cannot safely select a USB attachment"), action: nil, keyEquivalent: "")
                 }
                 let capabilityMap: [(String, String)] = [
+                    ("CAP_BT_CALL_VOLUME", NSLocalizedString("Bluetooth Call Volume", comment: "Bluetooth call volume capability")),
+                    ("CAP_BT_WHEN_POWERED_ON", NSLocalizedString("Bluetooth on at Power-On", comment: "Bluetooth power-on capability")),
+                    ("CAP_MICROPHONE_MUTE_LED_BRIGHTNESS", NSLocalizedString("Mic Mute LED Brightness", comment: "Microphone mute LED capability")),
+                    ("CAP_VOLUME_LIMITER", NSLocalizedString("Volume Limiter", comment: "Volume limiter capability")),
+                    ("CAP_NOISE_FILTER", NSLocalizedString("Microphone Noise Filter", comment: "Microphone noise filter capability")),
+                    ("CAP_MICROPHONE_VOLUME", NSLocalizedString("Microphone Volume", comment: "Microphone volume capability")),
                     ("CAP_SIDETONE", NSLocalizedString("Sidetone", comment: "Sidetone capability")),
                     ("CAP_LIGHTS", NSLocalizedString("Lights", comment: "Lights capability")),
                     ("CAP_INACTIVE_TIME", NSLocalizedString("Inactive Time", comment: "Inactive Time capability")),
@@ -478,6 +543,31 @@ import UserNotifications
                 for (cap, title) in capabilityMap {
                     if capabilities.contains(cap) {
                         switch cap {
+                        case "CAP_BT_CALL_VOLUME":
+                            addChoiceMenu(to: menu, title: title, options: bluetoothCallVolumeLevelsFromSettings,
+                                          action: #selector(setBluetoothCallVolume(_:)), target: controlTarget, deviceName: deviceName)
+                        case "CAP_BT_WHEN_POWERED_ON":
+                            addChoiceMenu(to: menu, title: title, options: onOffOptions,
+                                          action: #selector(setBluetoothWhenPoweredOn(_:)), target: controlTarget, deviceName: deviceName)
+                        case "CAP_MICROPHONE_MUTE_LED_BRIGHTNESS":
+                            let options = [(NSLocalizedString("Off", comment: "Mute LED off"), 0),
+                                           (NSLocalizedString("Low", comment: "Low mute LED brightness"), 1),
+                                           (NSLocalizedString("Medium", comment: "Medium mute LED brightness"), 2),
+                                           (NSLocalizedString("High", comment: "High mute LED brightness"), 3)]
+                            addChoiceMenu(to: menu, title: title, options: options,
+                                          action: #selector(setMicrophoneMuteLedBrightness(_:)), target: controlTarget, deviceName: deviceName)
+                        case "CAP_VOLUME_LIMITER":
+                            addChoiceMenu(to: menu, title: title, options: onOffOptions,
+                                          action: #selector(setVolumeLimiter(_:)), target: controlTarget, deviceName: deviceName)
+                        case "CAP_NOISE_FILTER":
+                            let options = [(NSLocalizedString("Off", comment: "Noise filter off"), 0),
+                                           (NSLocalizedString("Low", comment: "Low noise filtering"), 1),
+                                           (NSLocalizedString("High", comment: "High noise filtering"), 2)]
+                            addChoiceMenu(to: menu, title: title, options: options,
+                                          action: #selector(setNoiseFilter(_:)), target: controlTarget, deviceName: deviceName)
+                        case "CAP_MICROPHONE_VOLUME":
+                            addChoiceMenu(to: menu, title: title, options: microphoneVolumeLevelsFromSettings,
+                                          action: #selector(setMicrophoneVolume(_:)), target: controlTarget, deviceName: deviceName)
                         case "CAP_SIDETONE":
                             let sidetoneMenu = NSMenu(title: NSLocalizedString("Sidetone", comment: "Sidetone capability"))
                             let reading = device["sidetone"] as? Result<HeadsetSidetone, HeadsetFailure>

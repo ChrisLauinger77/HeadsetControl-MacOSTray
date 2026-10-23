@@ -2,6 +2,38 @@ import XCTest
 @testable import HeadsetControl_MacOSTray
 
 final class AppDefaultsTests: XCTestCase {
+    func testBluetoothCallVolumePresetsRegisterRepairAndPreserveCustomValues() throws {
+        let name = "BluetoothCallVolumeTests.\(UUID())"
+        let store = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { store.removePersistentDomain(forName: name) }
+        AppDefaults.register(in: store)
+        XCTAssertEqual(AppDefaults.bluetoothCallVolumeKeys.map { store.integer(forKey: $0) }, [0, 25, 50, 75, 100])
+        store.set(-100, forKey: "bluetoothCallVolumeOff")
+        store.set(true, forKey: "bluetoothCallVolumeLow")
+        store.set(43, forKey: "bluetoothCallVolumeMid")
+        store.set(Int.max, forKey: "bluetoothCallVolumeMax")
+        AppDefaults.validate(in: store)
+        XCTAssertEqual(store.integer(forKey: "bluetoothCallVolumeOff"), -1)
+        XCTAssertEqual(store.integer(forKey: "bluetoothCallVolumeLow"), 25)
+        XCTAssertEqual(store.integer(forKey: "bluetoothCallVolumeMid"), 43)
+        XCTAssertEqual(store.integer(forKey: "bluetoothCallVolumeMax"), 100)
+    }
+
+    func testMicrophoneVolumePresetsRegisterRepairAndPreserveHiddenEntries() throws {
+        let name = "MicrophoneVolumeTests.\(UUID())"
+        let store = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { store.removePersistentDomain(forName: name) }
+        AppDefaults.register(in: store)
+        XCTAssertEqual(AppDefaults.microphoneVolumeKeys.map { store.integer(forKey: $0) }, [0, 32, 64, 96, 128])
+        store.set(-1, forKey: "microphoneVolumeOff")
+        store.set(Int.max, forKey: "microphoneVolumeHigh")
+        store.set("invalid", forKey: "microphoneVolumeLow")
+        AppDefaults.validate(in: store)
+        XCTAssertEqual(store.integer(forKey: "microphoneVolumeOff"), -1)
+        XCTAssertEqual(store.integer(forKey: "microphoneVolumeHigh"), 128)
+        XCTAssertEqual(store.integer(forKey: "microphoneVolumeLow"), 32)
+    }
+
     func testLanguageSelectionOverridesAndRestoresSystemPreference() throws {
         let name = "HeadsetLanguageTests.\(UUID())"
         let store = try XCTUnwrap(UserDefaults(suiteName: name))
