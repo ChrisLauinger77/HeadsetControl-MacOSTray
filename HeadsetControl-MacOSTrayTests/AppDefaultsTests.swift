@@ -2,6 +2,20 @@ import XCTest
 @testable import HeadsetControl_MacOSTray
 
 final class AppDefaultsTests: XCTestCase {
+    func testMicrophoneMuteIconDefaultsOnAndPreservesOptOut() throws {
+        let name = "MicrophoneIconDefaults.\(UUID())"
+        let store = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { store.removePersistentDomain(forName: name) }
+        AppDefaults.register(in: store)
+        XCTAssertTrue(store.bool(forKey: "showMicrophoneMuteIcon"))
+        store.set(false, forKey: "showMicrophoneMuteIcon")
+        AppDefaults.register(in: store)
+        XCTAssertFalse(store.bool(forKey: "showMicrophoneMuteIcon"))
+        store.set("invalid", forKey: "showMicrophoneMuteIcon")
+        AppDefaults.validate(in: store)
+        XCTAssertTrue(store.bool(forKey: "showMicrophoneMuteIcon"))
+    }
+
     func testBluetoothCallVolumePresetsRegisterRepairAndPreserveCustomValues() throws {
         let name = "BluetoothCallVolumeTests.\(UUID())"
         let store = try XCTUnwrap(UserDefaults(suiteName: name))

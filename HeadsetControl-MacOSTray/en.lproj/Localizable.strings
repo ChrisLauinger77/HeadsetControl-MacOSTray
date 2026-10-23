@@ -135,3 +135,14 @@
 "Bluetooth on at Power-On" = "Bluetooth on at Power-On";
 
 "Bluetooth Call Volume" = "Bluetooth Call Volume";
+
+/* Microphone telemetry and menu bar feedback */
+"Microphone" = "Microphone";
+"Boom mic" = "Boom mic";
+"Microphone: %@" = "Microphone: %@";
+"Boom mic: %@" = "Boom mic: %@";
+"Muted" = "Muted";
+"Attached" = "Attached";
+"Detached" = "Detached";
+"Show microphone mute status in the menu bar" = "Show microphone mute status in the menu bar";
+"Microphone muted" = "Microphone muted";

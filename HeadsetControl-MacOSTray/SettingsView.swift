@@ -60,6 +60,7 @@ struct SettingsView: View {
     @AppStorage("testMode", store: AppDefaults.standard) var testMode: Int = AppDefaults.testProfile
     @AppStorage("equalizerPresets", store: AppDefaults.standard) var equalizerPresets: String = AppDefaults.equalizerPresets
     @AppStorage("notifyOnLowBattery", store: AppDefaults.standard) var notifyOnLowBattery: Bool = AppDefaults.notifyOnLowBattery
+    @AppStorage("showMicrophoneMuteIcon", store: AppDefaults.standard) var showMicrophoneMuteIcon: Bool = AppDefaults.showMicrophoneMuteIcon
     @AppStorage("lowBatteryThreshold", store: AppDefaults.standard) var lowBatteryThreshold: Int = AppDefaults.lowBatteryThreshold
     @AppStorage("inactiveTimeOptions", store: AppDefaults.standard) private var inactiveTimeOptionsRaw: String = AppDefaults.inactiveTimeOptionsRaw
 
@@ -191,6 +192,7 @@ struct SettingsView: View {
                     title: NSLocalizedString("General Settings", comment: "General settings section header"),
                     systemImage: "gearshape"
                 ) {
+                    Toggle(NSLocalizedString("Show microphone mute status in the menu bar", comment: "Muted menu bar icon toggle"), isOn: $showMicrophoneMuteIcon)
                     HStack(alignment: .center, spacing: 12) {
                         settingsLabel(NSLocalizedString("Language:", comment: "App language label"))
                         Picker("", selection: $selectedLanguage) {

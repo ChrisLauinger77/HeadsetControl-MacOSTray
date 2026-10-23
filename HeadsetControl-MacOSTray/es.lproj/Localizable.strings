@@ -135,3 +135,14 @@
 "Bluetooth on at Power-On" = "Activar Bluetooth al encender";
 
 "Bluetooth Call Volume" = "Volumen de llamadas Bluetooth";
+
+/* Microphone telemetry and menu bar feedback */
+"Microphone" = "Micrófono";
+"Boom mic" = "Micrófono de brazo";
+"Microphone: %@" = "Micrófono: %@";
+"Boom mic: %@" = "Micrófono de brazo: %@";
+"Muted" = "Silenciado";
+"Attached" = "Conectado";
+"Detached" = "Desconectado";
+"Show microphone mute status in the menu bar" = "Mostrar el silencio del micrófono en la barra de menús";
+"Microphone muted" = "Micrófono silenciado";

@@ -44,6 +44,8 @@ import UserNotifications
     private var lastNotificationThreshold: Int?
     private let lowBatteryNotifications: LowBatteryNotifications
     private var statusBatteryText: String?
+    private var microphoneMuteStatuses: [Result<Bool, HeadsetFailure>?] = []
+    private(set) var statusIcon: AppIconProvider.StatusIcon = .headset
     // Last title applied to AppKit, also observable in tests without a live status item.
     private(set) var statusTitle = ""
     private var telemetryFailures: [HeadsetFailure] = []
@@ -204,12 +206,7 @@ import UserNotifications
         notificationCenter?.delegate = self
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = statusItem?.button {
-            if let sfImage = NSImage(systemSymbolName: "headset", accessibilityDescription: NSLocalizedString("Headset", comment: "Headset symbol accessibility description")) {
-                button.image = sfImage
-                button.image?.isTemplate = true
-            }
-        }
+        statusItem?.button?.image = AppIconProvider.image(for: statusIcon)
 
         let menu = NSMenu()
         menu.delegate = self
@@ -299,6 +296,7 @@ import UserNotifications
                 self.lowBatteryNotifications.suspend()
                 self.updateStatusItem()
             }
+            self.updateStatusPresentation() // Icon preference changes need no native query.
         }
     }
 
@@ -308,6 +306,7 @@ import UserNotifications
         if profile != lastRequestedProfile {
             latestDevices = []
             statusBatteryText = nil
+            microphoneMuteStatuses = []
             telemetryFailures = []
             refreshFailure = nil
             commandFailure = nil
@@ -334,6 +333,7 @@ import UserNotifications
         case .success(let devices):
             refreshFailure = nil
             latestDevices = devices.map(\.menuDictionary)
+            microphoneMuteStatuses = devices.map(\.microphoneMuted)
             telemetryFailures = devices.flatMap(\.failures)
             if let first = devices.first, case .success(let battery) = first.battery {
                 statusBatteryText = battery.chargeText
@@ -356,6 +356,12 @@ import UserNotifications
         if !AppDefaults.standard.bool(forKey: "notifyOnLowBattery") { notificationIssue = nil }
         let messages = feedbackMessages + telemetryFailures.map(\.message) + snapshotMessages
         let batteryText = headsetController.snapshotState == .fresh ? statusBatteryText : nil
+        let icon = AppIconProvider.statusIcon(muteStatuses: headsetController.snapshotState == .fresh ? microphoneMuteStatuses : [],
+                                             showMuted: AppDefaults.standard.bool(forKey: "showMicrophoneMuteIcon"))
+        if icon != statusIcon || statusItem?.button?.image == nil {
+            statusIcon = icon
+            statusItem?.button?.image = AppIconProvider.image(for: icon)
+        }
         statusTitle = (batteryText.map { " " + $0 } ?? "") + (messages.isEmpty ? "" : " ⚠︎")
         statusItem?.button?.title = statusTitle
         statusItem?.button?.toolTip = messages.isEmpty ? nil : messages.joined(separator: "\n")
@@ -392,6 +398,8 @@ import UserNotifications
             if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
             statusItem = nil
             statusTitle = ""
+            statusIcon = .headset
+            microphoneMuteStatuses = []
             statusMenu = nil
             latestDevices = nil
             if notificationCenter?.delegate === self { notificationCenter?.delegate = nil }
@@ -518,6 +526,22 @@ import UserNotifications
             if let chatmix = device["chatmix"] as? Result<Int, HeadsetFailure> {
                 switch chatmix {
                 case .success(let level): menu.addItem(withTitle: "\(NSLocalizedString("Chatmix", comment: "Chatmix label")): \(level)", action: nil, keyEquivalent: "")
+                case .failure(let error): menu.addItem(withTitle: error.message, action: nil, keyEquivalent: "")
+                }
+            }
+            if let mute = device["microphoneMuted"] as? Result<Bool, HeadsetFailure> {
+                switch mute {
+                case .success(let muted):
+                    let state = muted ? NSLocalizedString("Muted", comment: "Microphone muted state") : NSLocalizedString("On", comment: "Microphone on state")
+                    menu.addItem(withTitle: String(format: NSLocalizedString("Microphone: %@", comment: "Microphone mute status"), state), action: nil, keyEquivalent: "")
+                case .failure(let error): menu.addItem(withTitle: error.message, action: nil, keyEquivalent: "")
+                }
+            }
+            if let attachment = device["microphoneAttached"] as? Result<Bool, HeadsetFailure> {
+                switch attachment {
+                case .success(let attached):
+                    let state = attached ? NSLocalizedString("Attached", comment: "Boom microphone attached state") : NSLocalizedString("Detached", comment: "Boom microphone detached state")
+                    menu.addItem(withTitle: String(format: NSLocalizedString("Boom mic: %@", comment: "Boom microphone attachment status"), state), action: nil, keyEquivalent: "")
                 case .failure(let error): menu.addItem(withTitle: error.message, action: nil, keyEquivalent: "")
                 }
             }
