@@ -3,6 +3,10 @@ import HeadsetControlCLib
 @testable import HeadsetControl_MacOSTray
 
 final class NativeHeadsetResultsTests: XCTestCase {
+    func testNativeBluetoothCallVolumeClampsAndPreservesUpstreamProfileBehavior() async {
+        await verifyNativeWrites([Int.min, -1, 0, 50, 100, 101, Int.max].map(HeadsetCommand.bluetoothCallVolume))
+    }
+
     func testNativeBluetoothPowerOnWritesPreserveUpstreamProfileBehavior() async {
         await verifyNativeWrites([.bluetoothWhenPoweredOn(false), .bluetoothWhenPoweredOn(true)])
     }

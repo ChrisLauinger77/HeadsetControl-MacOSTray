@@ -3,6 +3,14 @@ import XCTest
 @testable import HeadsetControl_MacOSTray
 
 @MainActor class AppDelegateTests: XCTestCase {
+    func testBluetoothCallVolumePresetsAppearAndDispatchWithoutReadback() async throws {
+        UserDefaults.standard.set(-1, forKey: "bluetoothCallVolumeOff")
+        UserDefaults.standard.set(43, forKey: "bluetoothCallVolumeMid")
+        defer { AppDefaults.bluetoothCallVolumeKeys.forEach { UserDefaults.standard.removeObject(forKey: $0) } }
+        try await verifyWriteOnlyControl(.bluetoothCallVolume, title: "Bluetooth Call Volume", values: [25, 43, 75, 100],
+                                        commands: [25, 43, 75, 100].map(HeadsetCommand.bluetoothCallVolume))
+    }
+
     func testBluetoothPowerOnOffersOnAndOffWithoutReadback() async throws {
         try await verifyWriteOnlyControl(.bluetoothWhenPoweredOn, title: "Bluetooth on at Power-On", values: [0, 1],
                                         commands: [.bluetoothWhenPoweredOn(false), .bluetoothWhenPoweredOn(true)])

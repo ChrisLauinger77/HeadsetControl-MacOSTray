@@ -51,6 +51,11 @@ struct SettingsView: View {
     @AppStorage("microphoneVolumeHigh", store: AppDefaults.standard) var microphoneVolumeHigh: Int = AppDefaults.microphoneVolumeValues[3]
     @AppStorage("microphoneVolumeMax", store: AppDefaults.standard) var microphoneVolumeMax: Int = AppDefaults.microphoneVolumeValues[4]
     var onClose: (() -> Void)? = nil
+    @AppStorage("bluetoothCallVolumeOff", store: AppDefaults.standard) var bluetoothCallVolumeOff: Int = AppDefaults.bluetoothCallVolumeValues[0]
+    @AppStorage("bluetoothCallVolumeLow", store: AppDefaults.standard) var bluetoothCallVolumeLow: Int = AppDefaults.bluetoothCallVolumeValues[1]
+    @AppStorage("bluetoothCallVolumeMid", store: AppDefaults.standard) var bluetoothCallVolumeMid: Int = AppDefaults.bluetoothCallVolumeValues[2]
+    @AppStorage("bluetoothCallVolumeHigh", store: AppDefaults.standard) var bluetoothCallVolumeHigh: Int = AppDefaults.bluetoothCallVolumeValues[3]
+    @AppStorage("bluetoothCallVolumeMax", store: AppDefaults.standard) var bluetoothCallVolumeMax: Int = AppDefaults.bluetoothCallVolumeValues[4]
     @AppStorage("updateInterval", store: AppDefaults.standard) var updateInterval: Double = Double(AppDefaults.updateInterval)
     @AppStorage("testMode", store: AppDefaults.standard) var testMode: Int = AppDefaults.testProfile
     @AppStorage("equalizerPresets", store: AppDefaults.standard) var equalizerPresets: String = AppDefaults.equalizerPresets
@@ -356,6 +361,9 @@ struct SettingsView: View {
                 volumePresetSettings(title: NSLocalizedString("Microphone Volume", comment: "Microphone volume presets"),
                                      values: [$microphoneVolumeOff, $microphoneVolumeLow, $microphoneVolumeMid, $microphoneVolumeHigh, $microphoneVolumeMax],
                                      range: AppDefaults.microphoneVolumePresetRange)
+                volumePresetSettings(title: NSLocalizedString("Bluetooth Call Volume", comment: "Bluetooth call volume presets"),
+                                     values: [$bluetoothCallVolumeOff, $bluetoothCallVolumeLow, $bluetoothCallVolumeMid, $bluetoothCallVolumeHigh, $bluetoothCallVolumeMax],
+                                     range: AppDefaults.bluetoothCallVolumePresetRange)
             }
             .padding(20)
         }

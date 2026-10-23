@@ -22,6 +22,11 @@ import UserNotifications
                          range: AppDefaults.microphoneVolumePresetRange)
     }
 
+    var bluetoothCallVolumeLevelsFromSettings: [(String, Int)] {
+        configuredLevels(keys: AppDefaults.bluetoothCallVolumeKeys, values: AppDefaults.bluetoothCallVolumeValues,
+                         range: AppDefaults.bluetoothCallVolumePresetRange)
+    }
+
     private func configuredLevels(keys: [String], values: [Int], range: ClosedRange<Int>) -> [(String, Int)] {
         zip(keys, values).enumerated().map { index, entry in
             (NSLocalizedString(AppDefaults.levelPresetNames[index], comment: "Configured level preset"),
@@ -151,6 +156,10 @@ import UserNotifications
 
     @objc func setBluetoothWhenPoweredOn(_ sender: NSMenuItem) {
         runControlAction(sender) { .bluetoothWhenPoweredOn($0 != 0) }
+    }
+
+    @objc func setBluetoothCallVolume(_ sender: NSMenuItem) {
+        runControlAction(sender) { .bluetoothCallVolume($0) }
     }
 
     private var currentTestProfile: Int {
@@ -518,6 +527,7 @@ import UserNotifications
                     menu.addItem(withTitle: NSLocalizedString("Controls unavailable: device connection is not unique", comment: "Cannot safely select a USB attachment"), action: nil, keyEquivalent: "")
                 }
                 let capabilityMap: [(String, String)] = [
+                    ("CAP_BT_CALL_VOLUME", NSLocalizedString("Bluetooth Call Volume", comment: "Bluetooth call volume capability")),
                     ("CAP_BT_WHEN_POWERED_ON", NSLocalizedString("Bluetooth on at Power-On", comment: "Bluetooth power-on capability")),
                     ("CAP_MICROPHONE_MUTE_LED_BRIGHTNESS", NSLocalizedString("Mic Mute LED Brightness", comment: "Microphone mute LED capability")),
                     ("CAP_VOLUME_LIMITER", NSLocalizedString("Volume Limiter", comment: "Volume limiter capability")),
@@ -533,6 +543,9 @@ import UserNotifications
                 for (cap, title) in capabilityMap {
                     if capabilities.contains(cap) {
                         switch cap {
+                        case "CAP_BT_CALL_VOLUME":
+                            addChoiceMenu(to: menu, title: title, options: bluetoothCallVolumeLevelsFromSettings,
+                                          action: #selector(setBluetoothCallVolume(_:)), target: controlTarget, deviceName: deviceName)
                         case "CAP_BT_WHEN_POWERED_ON":
                             addChoiceMenu(to: menu, title: title, options: onOffOptions,
                                           action: #selector(setBluetoothWhenPoweredOn(_:)), target: controlTarget, deviceName: deviceName)

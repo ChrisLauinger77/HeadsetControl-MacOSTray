@@ -54,6 +54,7 @@ nonisolated struct HeadsetCapability {
         .volumeLimiter,
         .microphoneMuteLedBrightness,
         .bluetoothWhenPoweredOn,
+        .bluetoothCallVolume,
         .lights,
         .inactiveTime,
         .voicePrompts,

@@ -12,6 +12,10 @@ nonisolated enum AppDefaults {
     static let noiseFilterRange = 0...2
     static let microphoneMuteLedBrightnessRange = 0...3
     static let microphoneVolumePresetRange = -1...128
+    static let bluetoothCallVolumeKeys = ["bluetoothCallVolumeOff", "bluetoothCallVolumeLow", "bluetoothCallVolumeMid", "bluetoothCallVolumeHigh", "bluetoothCallVolumeMax"]
+    static let bluetoothCallVolumeValues = [0, 25, 50, 75, 100]
+    static let bluetoothCallVolumeRange = 0...100
+    static let bluetoothCallVolumePresetRange = -1...100
     static let updateInterval = 600
     static let updateIntervalRange = 60...3600
     static let snapshotFreshnessGrace: TimeInterval = 60
@@ -54,6 +58,7 @@ nonisolated enum AppDefaults {
         ]
         for (key, value) in zip(sidetoneKeys, sidetoneValues) { values[key] = value }
         for (key, value) in zip(microphoneVolumeKeys, microphoneVolumeValues) { values[key] = value }
+        for (key, value) in zip(bluetoothCallVolumeKeys, bluetoothCallVolumeValues) { values[key] = value }
         store.register(defaults: values)
         validate(in: store)
     }
@@ -70,6 +75,9 @@ nonisolated enum AppDefaults {
         }
         for (key, fallback) in zip(microphoneVolumeKeys, microphoneVolumeValues) {
             repair(key, value: validatedLevelPreset(store.object(forKey: key), range: microphoneVolumePresetRange, fallback: fallback), in: store)
+        }
+        for (key, fallback) in zip(bluetoothCallVolumeKeys, bluetoothCallVolumeValues) {
+            repair(key, value: validatedLevelPreset(store.object(forKey: key), range: bluetoothCallVolumePresetRange, fallback: fallback), in: store)
         }
     }
 
