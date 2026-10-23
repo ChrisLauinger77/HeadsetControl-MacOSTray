@@ -77,6 +77,20 @@ final class HeadsetControlServiceTests: XCTestCase {
         XCTAssertEqual(library.writes.count, 1)
     }
 
+    func testLimitedCapabilityProfileSelectsOnlyItsOwnTestTarget() {
+        let library = RecordingHeadsetLibrary()
+        let fake = HeadsetConnection(index: 1, usbID: .testDevice)
+        library.connections = [HeadsetConnection(index: 0, usbID: a), fake]
+        let service = HeadsetControlService(library: library, inventory: FakeUSBInventory())
+        XCTAssertEqual(service.fetchDevices(testProfile: 10).successValue?.map(\.target), [.test(profile: 10)])
+        XCTAssertEqual(library.reads, [fake])
+        XCTAssertTrue(service.perform(.lights(false), on: .test(profile: 10), testProfile: 10).isSuccess)
+        XCTAssertFalse(service.perform(.lights(false), on: .test(profile: 7), testProfile: 10).isSuccess)
+        XCTAssertFalse(service.perform(.lights(false), on: .test(profile: 10), testProfile: 7).isSuccess)
+        XCTAssertEqual(library.writes.map { $0.1 }, [fake])
+        XCTAssertEqual(library.events.filter { $0.hasPrefix("profile:") }, ["profile:10", "profile:0", "profile:10", "profile:0"])
+    }
+
     func testMissingAmbiguousOrReplacedAttachmentsFailClosed() {
         let library = RecordingHeadsetLibrary()
         let inventory = FakeUSBInventory()
@@ -147,7 +161,7 @@ final class HeadsetControlServiceTests: XCTestCase {
     func testInvalidTestProfilesAreRejectedBeforeAnyLibraryCall() {
         let library = RecordingHeadsetLibrary()
         let service = HeadsetControlService(library: library, inventory: FakeUSBInventory())
-        for profile in [-1, 8, Int.max] {
+        for profile in [-1, 8, 9, 11, Int.max] {
             XCTAssertEqual(service.fetchDevices(testProfile: profile).failureValue?.kind, .invalidTestProfile(profile))
             XCTAssertEqual(service.perform(.lights(false), on: .test(profile: profile), testProfile: profile).failureValue?.kind, .invalidTestProfile(profile))
         }

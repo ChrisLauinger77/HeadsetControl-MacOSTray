@@ -169,7 +169,7 @@ nonisolated enum EqualizerCurve: Codable, Equatable, Sendable {
     }
 
     func load(usbID: HeadsetUSBID, kind: EqualizerKind, testProfile: Int) -> EqualizerCurve? {
-        guard AppDefaults.testProfileRange.contains(testProfile), (usbID == .testDevice) == (testProfile > 0),
+        guard AppDefaults.isSupportedTestProfile(testProfile), (usbID == .testDevice) == (testProfile > 0),
               let archive = read(), archive.version == 1,
               let curve = archive.curves[Self.key(usbID: usbID, kind: kind, testProfile: testProfile)],
               curve.kind == kind, curve.isValid else { return nil }
@@ -177,7 +177,7 @@ nonisolated enum EqualizerCurve: Codable, Equatable, Sendable {
     }
 
     @discardableResult func save(_ curve: EqualizerCurve, usbID: HeadsetUSBID, testProfile: Int) -> Bool {
-        guard curve.isValid, AppDefaults.testProfileRange.contains(testProfile),
+        guard curve.isValid, AppDefaults.isSupportedTestProfile(testProfile),
               (usbID == .testDevice) == (testProfile > 0) else { return false }
         // Do not overwrite a future schema with an older writer.
         if let data = defaults.data(forKey: AppDefaults.equalizerCurvesKey),

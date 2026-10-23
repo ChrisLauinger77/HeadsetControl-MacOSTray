@@ -104,8 +104,10 @@ final class AppDefaultsTests: XCTestCase {
         XCTAssertEqual(AppDefaults.validatedUpdateInterval("invalid"), 600)
         XCTAssertEqual(AppDefaults.validatedUpdateInterval(true), 600)
         XCTAssertEqual(AppDefaults.validatedUpdateInterval(60.4), 60)
-        for profile in 0...7 { XCTAssertEqual(AppDefaults.validatedTestProfile(profile), profile) }
-        for value: Any in [-1, 8, Int.max, 2.5, Double.nan, "7", true] {
+        XCTAssertEqual(AppDefaults.testProfiles, [0, 1, 2, 3, 4, 5, 6, 7, 10])
+        for profile in AppDefaults.testProfiles { XCTAssertEqual(AppDefaults.validatedTestProfile(profile), profile) }
+        XCTAssertEqual(AppDefaults.validatedTestProfile(10.0), 10)
+        for value: Any in [-1, 8, 9, 11, Int.max, 2.5, 10.5, Double.nan, "7", "10", true] {
             XCTAssertEqual(AppDefaults.validatedTestProfile(value), 0)
         }
     }

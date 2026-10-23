@@ -543,6 +543,31 @@ import XCTest
         }
     }
 
+    func testNativeLimitedCapabilityProfileShowsOnlySidetoneLightsAndBattery() async throws {
+        let service = HeadsetControlService()
+        let delegate = AppDelegate()
+        var capabilities: [Int: [String]] = [:]
+        for profile in [7, 10, 7] {
+            let result = await withCheckedContinuation { continuation in
+                HeadsetIOWorker.shared.enqueue { continuation.resume(returning: service.fetchDevices(testProfile: profile)) }
+            }
+            let device = try XCTUnwrap(result.get().first)
+            XCTAssertEqual(device.target, .test(profile: profile))
+            if let previous = capabilities[profile] { XCTAssertEqual(device.capabilities, previous, "Profile \(profile)") }
+            capabilities[profile] = device.capabilities
+            guard profile == 10 else { continue }
+            XCTAssertEqual(device.capabilities, ["CAP_SIDETONE", "CAP_LIGHTS"])
+            XCTAssertNil(device.sidetone)
+            XCTAssertTrue(device.failures.isEmpty)
+            delegate.latestDevices = [device.menuDictionary]
+            let menu = NSMenu()
+            delegate.rebuildMenu(menu)
+            XCTAssertTrue(menu.items.contains { $0.title == "\(localized("Battery")): 42%" })
+            XCTAssertEqual(menu.items.filter(\.hasSubmenu).map(\.title), [localized("Sidetone"), localized("Lights")])
+        }
+        XCTAssertTrue(try XCTUnwrap(capabilities[7]).contains("CAP_EQUALIZER"))
+    }
+
     func testChargingMenuFormatsTimeToFullWithoutUsingTimeToEmpty() async {
         let delegate = AppDelegate()
         for minutes in [nil, -1, 0, 1, 59, 60, 119, 120] as [Int?] {

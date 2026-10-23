@@ -28,7 +28,8 @@ nonisolated enum AppDefaults {
     static let updateIntervalRange = 60...3600
     static let snapshotFreshnessGrace: TimeInterval = 60
     static let testProfile = 0
-    static let testProfileRange = 0...7
+    // Dependency profiles 8 and 9 are reserved; 10 limits the test device's capabilities.
+    static let testProfiles = Array(0...7) + [10]
     static let lowBatteryThreshold = 25
     static let lowBatteryThresholdRange = 1...30
     static let notifyOnLowBattery = true
@@ -124,10 +125,14 @@ nonisolated enum AppDefaults {
         boundedInteger(value, range: range, fallback: fallback)
     }
 
+    static func isSupportedTestProfile(_ profile: Int) -> Bool {
+        testProfiles.contains(profile)
+    }
+
     static func validatedTestProfile(_ value: Any?) -> Int {
-        guard let number = finiteNumber(value), number.rounded() == number,
-              Double(testProfileRange.lowerBound)...Double(testProfileRange.upperBound) ~= number else { return testProfile }
-        return Int(number)
+        guard let number = finiteNumber(value),
+              let profile = testProfiles.first(where: { Double($0) == number }) else { return testProfile }
+        return profile
     }
 
     static func validatedANCStartupMode(_ value: Any?) -> Int {
