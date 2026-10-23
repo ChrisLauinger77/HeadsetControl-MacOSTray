@@ -177,6 +177,29 @@ import XCTest
         XCTAssertEqual(battery.percentage, 10)
         XCTAssertEqual(battery.status, .available)
     }
+
+    func testNativeBatteryProfilesKeepChargingOfflineAndTimeoutMenuRows() async throws {
+        let service = HeadsetControlService()
+        let delegate = AppDelegate()
+        for (profile, expected) in [
+            (2, "\(localized("Battery")): ⚡︎ 50%"),
+            (4, "\(localized("Battery")): \(localized("Device offline")) (-3)"),
+            (5, "\(localized("Battery")): \(localized("Timed out")) (-4)")
+        ] {
+            let result = await withCheckedContinuation { continuation in
+                HeadsetIOWorker.shared.enqueue { continuation.resume(returning: service.fetchDevices(testProfile: profile)) }
+            }
+            let device = try XCTUnwrap(result.get().first)
+            delegate.latestDevices = [device.menuDictionary]
+            let menu = NSMenu()
+            delegate.rebuildMenu(menu)
+            XCTAssertTrue(menu.items.contains { $0.title == expected }, "Profile \(profile)")
+            if profile != 2 {
+                XCTAssertFalse(menu.items.contains { $0.title.hasPrefix(localized("Battery") + ":") && $0.title.contains("%") })
+            }
+        }
+    }
+
     func testEveryMenuControlKeepsItsOwnDeviceAfterSnapshotChanges() async throws {
         UserDefaults.standard.set(0, forKey: "testMode")
         let provider = RecordingHeadsetProvider()

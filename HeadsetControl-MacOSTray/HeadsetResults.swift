@@ -1,4 +1,5 @@
 import Foundation
+import HeadsetControlCLib
 
 nonisolated enum HeadsetOperation: String, Sendable {
     case discovery = "Discovery"
@@ -40,7 +41,7 @@ nonisolated struct HeadsetFailure: Error, Equatable, Sendable {
             }
             reason = "\(NSLocalizedString(key, comment: "Native error")) (\(code))"
         case .batteryStatus(let status):
-            let key = status == 3 ? "HID communication failed" : "Timed out"
+            let key = status == Int(HSC_BATTERY_ERROR.rawValue) ? "HID communication failed" : "Timed out"
             reason = "\(NSLocalizedString(key, comment: "Battery error status")) (\(status))"
         case .invalidResponse: reason = NSLocalizedString("Invalid device response", comment: "Invalid telemetry")
         case .invalidTestProfile: reason = NSLocalizedString("Invalid test profile", comment: "Invalid test mode")
@@ -85,18 +86,14 @@ nonisolated struct HeadsetBattery: Equatable, Sendable {
         }
     }
 
-    // headsetcontrol 4.1.0's C wrapper casts lib/device.hpp's enum directly:
-    // unavailable=0, charging=1, available=2, HID error=3, timeout=4.
-    // Its public C header declares DIFFERENT values. Never interpret raw 0 as
-    // an available measurement. Native profile tests guard this ABI assumption.
     static func decode(level: Int, rawStatus: Int, timeToEmpty: Int? = nil) -> Result<Self, HeadsetFailure> {
         let status: Status
         switch rawStatus {
-        case 0: status = .unavailable
-        case 1: status = .charging
-        case 2: status = .available
-        case 3: return .failure(.init(operation: .battery, kind: .batteryStatus(3)))
-        case 4: return .failure(.init(operation: .battery, kind: .batteryStatus(4)))
+        case Int(HSC_BATTERY_UNAVAILABLE.rawValue): status = .unavailable
+        case Int(HSC_BATTERY_CHARGING.rawValue): status = .charging
+        case Int(HSC_BATTERY_AVAILABLE.rawValue): status = .available
+        case Int(HSC_BATTERY_ERROR.rawValue), Int(HSC_BATTERY_TIMEOUT.rawValue):
+            return .failure(.init(operation: .battery, kind: .batteryStatus(rawStatus)))
         default: status = .unknown(rawStatus)
         }
         if (status == .available && !(0...100).contains(level)) || (status == .charging && level > 100) {

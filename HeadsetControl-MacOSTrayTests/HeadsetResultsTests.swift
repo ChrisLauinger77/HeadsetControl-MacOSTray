@@ -1,4 +1,5 @@
 import XCTest
+import HeadsetControlCLib
 @testable import HeadsetControl_MacOSTray
 
 extension Result {
@@ -9,32 +10,34 @@ extension Result {
 
 final class HeadsetResultsTests: XCTestCase {
     func testBatteryContractDoesNotConfuseUnavailableWithZeroPercent() throws {
-        let unavailable = try HeadsetBattery.decode(level: 0, rawStatus: 0).get()
+        let unavailable = try HeadsetBattery.decode(level: 0, rawStatus: Int(HSC_BATTERY_UNAVAILABLE.rawValue)).get()
         XCTAssertEqual(unavailable.status, .unavailable)
         XCTAssertNil(unavailable.percentage)
         XCTAssertNil(unavailable.chargeText)
-        let empty = try HeadsetBattery.decode(level: 0, rawStatus: 2).get()
+        let empty = try HeadsetBattery.decode(level: 0, rawStatus: Int(HSC_BATTERY_AVAILABLE.rawValue)).get()
         XCTAssertEqual(empty.percentage, 0)
         XCTAssertEqual(empty.chargeText, "0%")
-        let low = try HeadsetBattery.decode(level: 10, rawStatus: 2).get()
+        let low = try HeadsetBattery.decode(level: 10, rawStatus: Int(HSC_BATTERY_AVAILABLE.rawValue)).get()
         XCTAssertEqual(low.percentage, 10)
         XCTAssertEqual(low.status, .available)
     }
 
     func testChargingUnknownAndMalformedMeasurements() throws {
-        XCTAssertEqual(try HeadsetBattery.decode(level: 50, rawStatus: 1).get().chargeText, "⚡︎ 50%")
-        XCTAssertEqual(try HeadsetBattery.decode(level: -1, rawStatus: 1).get().chargeText, "⚡︎")
+        XCTAssertEqual(try HeadsetBattery.decode(level: 50, rawStatus: Int(HSC_BATTERY_CHARGING.rawValue)).get().chargeText, "⚡︎ 50%")
+        XCTAssertEqual(try HeadsetBattery.decode(level: -1, rawStatus: Int(HSC_BATTERY_CHARGING.rawValue)).get().chargeText, "⚡︎")
         for level in [-100, -1, 101, Int.max] {
-            XCTAssertFalse(HeadsetBattery.decode(level: level, rawStatus: 2).isSuccess)
+            XCTAssertFalse(HeadsetBattery.decode(level: level, rawStatus: Int(HSC_BATTERY_AVAILABLE.rawValue)).isSuccess)
             XCTAssertNil(HeadsetBattery(level: level, status: .available).percentage)
             XCTAssertNil(HeadsetBattery(level: level, status: .charging).percentage)
         }
-        XCTAssertFalse(HeadsetBattery.decode(level: 101, rawStatus: 1).isSuccess)
+        XCTAssertFalse(HeadsetBattery.decode(level: 101, rawStatus: Int(HSC_BATTERY_CHARGING.rawValue)).isSuccess)
         for raw in [-101, -2, -1, 42] {
             XCTAssertNil(try HeadsetBattery.decode(level: 10, rawStatus: raw).get().percentage)
         }
-        XCTAssertEqual(HeadsetBattery.decode(level: 0, rawStatus: 3).failureValue?.kind, .batteryStatus(3))
-        XCTAssertEqual(HeadsetBattery.decode(level: 0, rawStatus: 4).failureValue?.kind, .batteryStatus(4))
+        for status in [HSC_BATTERY_ERROR, HSC_BATTERY_TIMEOUT] {
+            let rawStatus = Int(status.rawValue)
+            XCTAssertEqual(HeadsetBattery.decode(level: 0, rawStatus: rawStatus).failureValue?.kind, .batteryStatus(rawStatus))
+        }
     }
 
     func testPresetNamesKeepNativeIndicesIncludingMissingAndDuplicateNames() throws {
