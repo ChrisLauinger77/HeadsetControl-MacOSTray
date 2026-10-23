@@ -51,6 +51,7 @@ nonisolated struct HeadsetCapability {
         .sidetone,
         .microphoneVolume,
         .noiseFilter,
+        .volumeLimiter,
         .lights,
         .inactiveTime,
         .voicePrompts,

@@ -105,6 +105,9 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
         assertWorker()
         let handle = handles[connection.index]
         switch command {
+        case .volumeLimiter(let enabled):
+            guard hsc_supports(handle, HSC_CAP_VOLUME_LIMITER) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
+            return HeadsetFailure.result(code: hsc_set_volume_limiter(handle, enabled).rawValue, operation: .command)
         case .noiseFilter(let level):
             guard hsc_supports(handle, HSC_CAP_NOISE_FILTER) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
             let range = AppDefaults.noiseFilterRange

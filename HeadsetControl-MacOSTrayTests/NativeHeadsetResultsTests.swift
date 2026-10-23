@@ -3,6 +3,10 @@ import HeadsetControlCLib
 @testable import HeadsetControl_MacOSTray
 
 final class NativeHeadsetResultsTests: XCTestCase {
+    func testNativeVolumeLimiterWritesPreserveUpstreamProfileBehavior() async {
+        await verifyNativeWrites([.volumeLimiter(false), .volumeLimiter(true)])
+    }
+
     func testNativeNoiseFilterClampsAndPreservesProfileOneError() async {
         await verifyNativeWrites([Int.min, -1, 0, 1, 2, 3, Int.max].map(HeadsetCommand.noiseFilter), profileOneFails: true)
     }

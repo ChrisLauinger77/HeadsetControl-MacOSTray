@@ -141,6 +141,10 @@ import UserNotifications
         runControlAction(sender) { .noiseFilter($0) }
     }
 
+    @objc func setVolumeLimiter(_ sender: NSMenuItem) {
+        runControlAction(sender) { .volumeLimiter($0 != 0) }
+    }
+
     private var currentTestProfile: Int {
         AppDefaults.validatedTestProfile(AppDefaults.standard.object(forKey: "testMode"))
     }
@@ -440,6 +444,10 @@ import UserNotifications
 
     // Rendering is separate from refresh requests: a result may update an open
     // menu, but must never recursively schedule another native transaction.
+    private var onOffOptions: [(String, Int)] {
+        [(NSLocalizedString("Off", comment: "Control off"), 0), (NSLocalizedString("On", comment: "Control on"), 1)]
+    }
+
     private func addChoiceMenu(to menu: NSMenu, title: String, options: [(String, Int)], action: Selector,
                                target: HeadsetTarget?, deviceName: String) {
         let submenu = NSMenu(title: title)
@@ -502,6 +510,7 @@ import UserNotifications
                     menu.addItem(withTitle: NSLocalizedString("Controls unavailable: device connection is not unique", comment: "Cannot safely select a USB attachment"), action: nil, keyEquivalent: "")
                 }
                 let capabilityMap: [(String, String)] = [
+                    ("CAP_VOLUME_LIMITER", NSLocalizedString("Volume Limiter", comment: "Volume limiter capability")),
                     ("CAP_NOISE_FILTER", NSLocalizedString("Microphone Noise Filter", comment: "Microphone noise filter capability")),
                     ("CAP_MICROPHONE_VOLUME", NSLocalizedString("Microphone Volume", comment: "Microphone volume capability")),
                     ("CAP_SIDETONE", NSLocalizedString("Sidetone", comment: "Sidetone capability")),
@@ -514,6 +523,9 @@ import UserNotifications
                 for (cap, title) in capabilityMap {
                     if capabilities.contains(cap) {
                         switch cap {
+                        case "CAP_VOLUME_LIMITER":
+                            addChoiceMenu(to: menu, title: title, options: onOffOptions,
+                                          action: #selector(setVolumeLimiter(_:)), target: controlTarget, deviceName: deviceName)
                         case "CAP_NOISE_FILTER":
                             let options = [(NSLocalizedString("Off", comment: "Noise filter off"), 0),
                                            (NSLocalizedString("Low", comment: "Low noise filtering"), 1),

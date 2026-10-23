@@ -127,3 +127,5 @@
 "Valid range: -1...%d. Use -1 to hide a menu entry." = "Plage valide : -1...%d. Utilisez -1 pour masquer une entrée de menu.";
 
 "Microphone Noise Filter" = "Filtre de bruit du microphone";
+
+"Volume Limiter" = "Limiteur de volume";
