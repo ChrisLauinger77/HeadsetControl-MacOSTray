@@ -3,6 +3,31 @@ import HeadsetControlCLib
 @testable import HeadsetControl_MacOSTray
 
 final class NativeHeadsetResultsTests: XCTestCase {
+    func testSidetoneReadbackCopiesNamedLevelAndKeepsDeviceOnFailure() async throws {
+        let service = HeadsetControlService()
+        let result = await withCheckedContinuation { continuation in
+            HeadsetIOWorker.shared.enqueue {
+                let success = service.fetchDevices(testProfile: 7)
+                let failure = service.fetchDevices(testProfile: 1)
+                continuation.resume(returning: (success, failure))
+            }
+        }
+        let device = try XCTUnwrap(result.0.get().first)
+        let status = try XCTUnwrap(device.sidetone).get()
+        XCTAssertEqual(status.level, 85)
+        XCTAssertEqual(status.deviceLevel, 2)
+        XCTAssertEqual(status.deviceMin, 0)
+        XCTAssertEqual(status.deviceMax, 3)
+        XCTAssertEqual(status.levelName, "Medium") // Still owned after another query and both releases.
+        XCTAssertEqual(device.battery?.successValue?.percentage, 10)
+        let failed = try XCTUnwrap(result.1.get().first)
+        let error = HeadsetFailure(operation: .sidetone, kind: .native(-5))
+        XCTAssertEqual(failed.sidetone?.failureValue, error)
+        XCTAssertTrue(failed.failures.contains(error))
+        XCTAssertEqual(failed.equalizerPresets?.successValue?.count, 4)
+        XCTAssertTrue(failed.capabilities.contains("CAP_SIDETONE"))
+    }
+
     func testInstalledLibraryBatteryProfilesAndOrderedPresetMetadata() async {
         XCTAssertEqual(HSC_BATTERY_UNAVAILABLE.rawValue, 0)
         XCTAssertEqual(HSC_BATTERY_CHARGING.rawValue, 1)

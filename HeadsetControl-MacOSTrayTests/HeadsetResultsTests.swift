@@ -40,6 +40,32 @@ final class HeadsetResultsTests: XCTestCase {
         }
     }
 
+    func testSidetoneMatchesOnlyAnExactConfiguredPreset() throws {
+        let levels = [0, 32, 64, 96, 128]
+        let exact = try HeadsetSidetone.decode(level: 64, deviceLevel: 2, deviceMin: 0, deviceMax: 4, levelName: nil).get()
+        XCTAssertEqual(exact.matchingPresetIndex(in: levels), 2)
+        let between = try HeadsetSidetone.decode(level: 85, deviceLevel: 2, deviceMin: 0, deviceMax: 3, levelName: "Medium").get()
+        XCTAssertNil(between.matchingPresetIndex(in: levels))
+        XCTAssertEqual(between.matchingPresetIndex(in: [0, 85, 85, 128]), 1)
+        XCTAssertNil(exact.matchingPresetIndex(in: [-1, 32, 96]))
+    }
+
+    func testSidetoneDecodesOptionalNamesAndRejectsMalformedLevels() throws {
+        let named = try HeadsetSidetone.decode(level: 85, deviceLevel: 2, deviceMin: 0, deviceMax: 3, levelName: " Medium ").get()
+        XCTAssertEqual(named.levelName, "Medium")
+        XCTAssertEqual(named.deviceLevel, 2)
+        XCTAssertEqual(named.deviceMin, 0)
+        XCTAssertEqual(named.deviceMax, 3)
+        for name in [nil, "", " \n "] as [String?] {
+            XCTAssertNil(try HeadsetSidetone.decode(level: 0, deviceLevel: 0, deviceMin: 0, deviceMax: 3, levelName: name).get().levelName)
+        }
+        for level in [-1, 129] {
+            XCTAssertFalse(HeadsetSidetone.decode(level: level, deviceLevel: 0, deviceMin: 0, deviceMax: 3, levelName: nil).isSuccess)
+        }
+        XCTAssertFalse(HeadsetSidetone.decode(level: 64, deviceLevel: 4, deviceMin: 0, deviceMax: 3, levelName: nil).isSuccess)
+        XCTAssertFalse(HeadsetSidetone.decode(level: 64, deviceLevel: 0, deviceMin: 3, deviceMax: 0, levelName: nil).isSuccess)
+    }
+
     func testPresetNamesKeepNativeIndicesIncludingMissingAndDuplicateNames() throws {
         let names: [String?] = ["Flat", nil, "Flat", " Voice "]
         let presets = try HeadsetEqualizerPreset.read(count: 4) { names[$0] }.get()

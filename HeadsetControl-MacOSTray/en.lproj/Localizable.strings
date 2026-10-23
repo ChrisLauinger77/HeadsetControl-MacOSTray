@@ -72,6 +72,9 @@
 "Settings..." = "Settings...";
 "System" = "System";
 "Sidetone" = "Sidetone";
+"Sidetone: %@" = "Sidetone: %@";
+"%d/128" = "%d/128";
+"%d/128 (%@)" = "%d/128 (%@)";
 "Sidetone Level Values" = "Sidetone Level Values";
 "Test Mode:" = "Test Mode:";
 "Unknown Device" = "Unknown Device";

@@ -480,15 +480,29 @@ import UserNotifications
                         switch cap {
                         case "CAP_SIDETONE":
                             let sidetoneMenu = NSMenu(title: NSLocalizedString("Sidetone", comment: "Sidetone capability"))
-                            for (levelTitle, levelValue) in sidetoneLevelsFromSettings {
-                                if levelValue == -1 { continue }
+                            let reading = device["sidetone"] as? Result<HeadsetSidetone, HeadsetFailure>
+                            let current: HeadsetSidetone?
+                            if case .success(let status) = reading { current = status } else { current = nil }
+                            let presets = sidetoneLevelsFromSettings.filter { $0.1 != -1 }
+                            let matchedIndex = current?.matchingPresetIndex(in: presets.map { $0.1 })
+                            if case .failure(let error) = reading {
+                                sidetoneMenu.addItem(withTitle: error.message, action: nil, keyEquivalent: "")
+                                sidetoneMenu.addItem(.separator())
+                            }
+                            for (index, preset) in presets.enumerated() {
+                                let (levelTitle, levelValue) = preset
                                 let item = NSMenuItem(title: levelTitle, action: #selector(setSidetoneLevel(_:)), keyEquivalent: "")
+                                item.state = index == matchedIndex ? .on : .off
                                 item.target = self
                                 item.representedObject = HeadsetMenuAction(target: controlTarget, value: levelValue, deviceName: deviceName)
                                 if controlTarget == nil { item.action = nil }
                                 sidetoneMenu.addItem(item)
                             }
-                            let sidetoneMenuItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+                            let menuTitle: String
+                            if let current, matchedIndex == nil {
+                                menuTitle = String(format: NSLocalizedString("Sidetone: %@", comment: "Sidetone level between configured presets"), current.levelText)
+                            } else { menuTitle = title }
+                            let sidetoneMenuItem = NSMenuItem(title: menuTitle, action: nil, keyEquivalent: "")
                             menu.addItem(sidetoneMenuItem)
                             menu.setSubmenu(sidetoneMenu, for: sidetoneMenuItem)
                         case "CAP_LIGHTS":

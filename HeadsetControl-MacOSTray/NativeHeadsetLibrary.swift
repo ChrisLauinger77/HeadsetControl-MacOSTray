@@ -43,6 +43,7 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
         let handle = handles[connection.index]
         var batteryResult: Result<HeadsetBattery, HeadsetFailure>?
         var chatmixResult: Result<Int, HeadsetFailure>?
+        var sidetoneResult: Result<HeadsetSidetone, HeadsetFailure>?
         var equalizerPresets: Result<[HeadsetEqualizerPreset], HeadsetFailure>?
         if hsc_supports(handle, HSC_CAP_BATTERY_STATUS) {
             var battery = hsc_battery_t()
@@ -64,6 +65,19 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
                 chatmixResult = .failure(.init(operation: .chatmix, kind: .native(code.rawValue)))
             }
         }
+        if hsc_supports(handle, HeadsetCapability.sidetoneStatus.rawValue) {
+            var status = hsc_sidetone_status_t()
+            let code = hsc_get_sidetone(handle, &status)
+            if code == HSC_RESULT_OK {
+                // The name can expire on the next query. Copy it before any more native I/O.
+                let levelName = status.level_name.map { String(cString: $0) }
+                sidetoneResult = HeadsetSidetone.decode(level: Int(status.current_level), deviceLevel: Int(status.device_level),
+                                                       deviceMin: Int(status.device_min), deviceMax: Int(status.device_max),
+                                                       levelName: levelName)
+            } else {
+                sidetoneResult = .failure(.init(operation: .sidetone, kind: .native(code.rawValue)))
+            }
+        }
         if hsc_supports(handle, HSC_CAP_EQUALIZER_PRESET) {
             equalizerPresets = HeadsetEqualizerPreset.read(count: Int(hsc_get_equalizer_presets_count(handle))) { index in
                 guard let name = hsc_get_equalizer_preset_name(handle, Int32(index)) else { return nil }
@@ -82,6 +96,7 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
             },
             battery: batteryResult,
             chatmix: chatmixResult,
+            sidetone: sidetoneResult,
             equalizerPresets: equalizerPresets
         )
     }
