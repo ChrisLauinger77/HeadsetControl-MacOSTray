@@ -38,6 +38,7 @@ nonisolated enum HeadsetCommand: Equatable, Sendable {
     case voicePrompts(Bool)
     case rotateToMute(Bool)
     case equalizerPreset(Int)
+    case customEqualizer(EqualizerCurve)
 }
 
 // Store the cycle as one value so a checkbox edit cannot persist an empty
@@ -72,6 +73,8 @@ nonisolated struct HeadsetDevice: Sendable {
     var microphoneMuted: Result<Bool, HeadsetFailure>? = nil
     var microphoneAttached: Result<Bool, HeadsetFailure>? = nil
     var equalizerPresets: Result<[HeadsetEqualizerPreset], HeadsetFailure>? = nil
+    var equalizerInfo: Result<GraphicEqualizerInfo, HeadsetFailure>? = nil
+    var parametricEqualizerInfo: Result<ParametricEqualizerInfo, HeadsetFailure>? = nil
     var target: HeadsetTarget? = nil
 
     var failures: [HeadsetFailure] {
@@ -83,6 +86,10 @@ nonisolated struct HeadsetDevice: Sendable {
         if case .failure(let error) = microphoneMuted { result.append(error) }
         if case .failure(let error) = microphoneAttached { result.append(error) }
         if case .failure(let error) = equalizerPresets { result.append(error) }
+        // Missing optional layout metadata is expected on some devices until
+        // an EQ command. It must not turn normal discovery into a recovery loop.
+        if case .failure(let error) = equalizerInfo, error.kind != .native(-2) { result.append(error) }
+        if case .failure(let error) = parametricEqualizerInfo, error.kind != .native(-2) { result.append(error) }
         return result
     }
 
@@ -102,6 +109,9 @@ nonisolated struct HeadsetDevice: Sendable {
         result["microphoneMuted"] = microphoneMuted
         result["microphoneAttached"] = microphoneAttached
         result["equalizerPresets"] = equalizerPresets
+        result["usbID"] = usbID
+        result["equalizerInfo"] = equalizerInfo
+        result["parametricEqualizerInfo"] = parametricEqualizerInfo
         return result
     }
 }
@@ -124,4 +134,9 @@ struct HeadsetMenuAction {
     let target: HeadsetTarget?
     let value: Int
     var deviceName: String = ""
+}
+
+struct HeadsetEqualizerMenuAction {
+    let target: HeadsetTarget
+    let curve: EqualizerCurve
 }

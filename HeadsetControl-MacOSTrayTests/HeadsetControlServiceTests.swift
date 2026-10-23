@@ -38,16 +38,18 @@ final class HeadsetControlServiceTests: XCTestCase {
     private let a = HeadsetUSBID(vendor: 1, product: 2)
     private let b = HeadsetUSBID(vendor: 3, product: 4)
 
-    func testEveryCommandSelectsOnlyItsInitiatingDevice() {
+    func testEveryCommandSelectsOnlyItsInitiatingDevice() throws {
         let library = RecordingHeadsetLibrary()
         let inventory = FakeUSBInventory()
         library.connections = [HeadsetConnection(index: 0, usbID: a), HeadsetConnection(index: 1, usbID: b)]
         inventory.devices = [a: [11], b: [22]]
         let service = HeadsetControlService(library: library, inventory: inventory)
+        let parametric = try XCTUnwrap(EqualizerCurve.neutral(for: EqualizerFixtures.device(), kind: .parametric))
         let commands: [HeadsetCommand] = [
             .sidetone(10), .microphoneVolume(64), .noiseFilter(1), .volumeLimiter(true), .microphoneMuteLedBrightness(2),
             .bluetoothWhenPoweredOn(true), .bluetoothCallVolume(50), .lights(false), .inactiveTime(5), .voicePrompts(true),
-            .rotateToMute(false), .equalizerPreset(1)
+            .rotateToMute(false), .equalizerPreset(1), .customEqualizer(EqualizerFixtures.curve),
+            .customEqualizer(parametric)
         ]
         for command in commands {
             XCTAssertTrue(service.perform(command, on: .physical(b, attachmentID: 22), testProfile: 0).isSuccess)
@@ -150,6 +152,33 @@ final class HeadsetControlServiceTests: XCTestCase {
             XCTAssertEqual(service.perform(.lights(false), on: .test(profile: profile), testProfile: profile).failureValue?.kind, .invalidTestProfile(profile))
         }
         XCTAssertTrue(library.events.isEmpty)
+    }
+
+    func testCustomEqualizersRejectChangedAttachmentsAndSelectOnlyReservedTestDevice() throws {
+        let library = RecordingHeadsetLibrary()
+        let inventory = FakeUSBInventory()
+        let service = HeadsetControlService(library: library, inventory: inventory)
+        let parametric = try XCTUnwrap(EqualizerCurve.neutral(for: EqualizerFixtures.device(), kind: .parametric))
+        for curve in [EqualizerFixtures.curve, parametric] {
+            library.connections = [.init(index: 0, usbID: a)]
+            for attachments: [HeadsetUSBID: [UInt64]]? in [nil, [:], [a: [12]], [a: [11, 12]]] {
+                inventory.devices = attachments
+                XCTAssertEqual(service.perform(.customEqualizer(curve), on: .physical(a, attachmentID: 11), testProfile: 0).failureValue?.kind, .targetUnavailable)
+            }
+            inventory.devices = [a: [11]]
+            library.onDiscover = { inventory.devices = [self.a: [12]] }
+            XCTAssertEqual(service.perform(.customEqualizer(curve), on: .physical(a, attachmentID: 11), testProfile: 0).failureValue?.kind, .targetUnavailable)
+            XCTAssertTrue(library.writes.isEmpty)
+            library.onDiscover = nil
+        }
+        let fake = HeadsetConnection(index: 1, usbID: .testDevice)
+        library.connections = [.init(index: 0, usbID: a), fake]
+        for curve in [EqualizerFixtures.curve, parametric] {
+            XCTAssertTrue(service.perform(.customEqualizer(curve), on: .test(profile: 7), testProfile: 7).isSuccess)
+            XCTAssertEqual(library.writes.last?.1, fake)
+            XCTAssertEqual(service.perform(.customEqualizer(curve), on: .physical(a, attachmentID: 11), testProfile: 7).failureValue?.kind, .targetUnavailable)
+        }
+        XCTAssertEqual(library.writes.count, 2)
     }
 
 }

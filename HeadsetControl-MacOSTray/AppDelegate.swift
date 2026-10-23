@@ -40,6 +40,7 @@ import UserNotifications
     }
 
     private let headsetController: HeadsetController
+    let equalizerSettings: EqualizerSettingsModel
     private let lifecycleObserver: HeadsetLifecycleObserving
     private weak var trackingMenu: NSMenu?
     private var notificationCenter: UNUserNotificationCenter?
@@ -64,16 +65,18 @@ import UserNotifications
         _ = AppDefaults.standard
         lowBatteryNotifications = LowBatteryNotifications(delivery: SystemLowBatteryNotificationDelivery())
         headsetController = HeadsetController(provider: HeadsetControlService(), executor: HeadsetIOWorker.shared)
+        equalizerSettings = EqualizerSettingsModel()
         lifecycleObserver = HeadsetLifecycleObserver()
         super.init()
         bindHeadsetController()
     }
 
     init(headsetController: HeadsetController, notificationDelivery: LowBatteryNotificationDelivering? = nil,
-         lifecycleObserver: HeadsetLifecycleObserving? = nil) {
+         lifecycleObserver: HeadsetLifecycleObserving? = nil, equalizerSettings: EqualizerSettingsModel? = nil) {
         _ = AppDefaults.standard
         lowBatteryNotifications = LowBatteryNotifications(delivery: notificationDelivery ?? SystemLowBatteryNotificationDelivery())
         self.headsetController = headsetController
+        self.equalizerSettings = equalizerSettings ?? EqualizerSettingsModel()
         self.lifecycleObserver = lifecycleObserver ?? HeadsetLifecycleObserver()
         super.init()
         bindHeadsetController()
@@ -85,7 +88,19 @@ import UserNotifications
         headsetController.onSnapshotInvalidated = { [weak self] in
             guard let self, !self.stopping else { return }
             self.lowBatteryNotifications.suspend()
+            self.equalizerSettings.invalidate()
             self.updateStatusPresentation()
+        }
+        equalizerSettings.onApply = { [weak self] curve, target, completion in
+            guard let self, !self.stopping, self.headsetController.snapshotState == .fresh,
+                  self.headsetController.snapshot.devices?.contains(where: {
+                      $0.target == target && curve.isCompatible(with: $0)
+                  }) == true else {
+                completion(.failure(.init(operation: .equalizer, kind: .targetUnavailable)))
+                return
+            }
+            let name = self.headsetController.snapshot.devices?.first(where: { $0.target == target })?.name ?? ""
+            self.performControlCommand(.customEqualizer(curve), on: target, deviceName: name, completion: completion)
         }
         lowBatteryNotifications.isStillAllowed = { [weak self] notice in
             guard let self, !self.stopping else { return false }
@@ -133,16 +148,23 @@ import UserNotifications
         performControlCommand(command, on: target, deviceName: device.name)
     }
 
-    private func performControlCommand(_ command: HeadsetCommand, on target: HeadsetTarget, deviceName: String) {
+    private func performControlCommand(_ command: HeadsetCommand, on target: HeadsetTarget, deviceName: String,
+                                       completion: @escaping (Result<Void, HeadsetFailure>) -> Void = { _ in }) {
+        let generation = equalizerSettings.generation
         headsetController.perform(command, on: target,
                                   testProfile: currentTestProfile) { [weak self] result in
             guard let self, !self.stopping else { return }
             switch result {
-            case .success: self.commandFailure = nil
+            case .success:
+                self.commandFailure = nil
+                if case .equalizerPreset(let index) = command {
+                    self.equalizerSettings.record(.preset(index), on: target, generation: generation)
+                }
             case .failure(let error):
-                guard !error.isCancelled else { return }
+                guard !error.isCancelled else { completion(result); return }
                 self.commandFailure = deviceName.isEmpty ? error.message : "\(deviceName): \(error.message)"
             }
+            completion(result)
             self.updateStatusPresentation()
         }
     }
@@ -153,6 +175,17 @@ import UserNotifications
 
     @objc func setEqualizerPreset(_ sender: NSMenuItem) {
         runControlAction(sender) { .equalizerPreset($0) }
+    }
+
+    @objc func applySavedEqualizer(_ sender: NSMenuItem) {
+        guard !stopping, let action = sender.representedObject as? HeadsetEqualizerMenuAction else { return }
+        equalizerSettings.apply(action.curve, to: action.target)
+    }
+
+    @objc func editEqualizer(_ sender: NSMenuItem) {
+        guard !stopping, let usbID = sender.representedObject as? HeadsetUSBID else { return }
+        equalizerSettings.select(usbID)
+        openSettings()
     }
 
     @objc func setRotateToMute(_ sender: NSMenuItem) {
@@ -315,6 +348,9 @@ import UserNotifications
         RunLoop.main.add(timer, forMode: .common)
         statusUpdateTimer = timer
         headsetController.updateRefreshInterval(interval)
+        if currentTestProfile == lastRequestedProfile, headsetController.snapshotState == .fresh {
+            equalizerSettings.update(devices: headsetController.snapshot.devices ?? [], isFresh: true, testProfile: currentTestProfile)
+        }
         updateStatusPresentation() // An increased interval may restore age-expired cached data.
     }
 
@@ -343,6 +379,7 @@ import UserNotifications
         guard !stopping else { return }
         let profile = currentTestProfile
         if profile != lastRequestedProfile {
+            equalizerSettings.invalidate()
             latestDevices = []
             statusBatteryText = nil
             microphoneMuteStatuses = []
@@ -363,6 +400,8 @@ import UserNotifications
         guard !stopping else { return }
         // A defaults notification can still be queued behind this result.
         guard currentTestProfile == lastRequestedProfile else { updateStatusItem(); return }
+        equalizerSettings.update(devices: headsetController.snapshot.devices ?? [],
+                                 isFresh: headsetController.snapshotState == .fresh, testProfile: currentTestProfile)
         switch result {
         case .failure(let error):
             refreshFailure = error
@@ -423,6 +462,8 @@ import UserNotifications
     func stop(completion: @escaping () -> Void = {}) {
         if !stopping {
             stopping = true
+            equalizerSettings.invalidate()
+            equalizerSettings.onApply = nil
             lowBatteryNotifications.stop()
             lifecycleObserver.stop()
             statusUpdateTimer?.invalidate()
@@ -534,6 +575,62 @@ import UserNotifications
         return submenu
     }
 
+    private func addEqualizerMenu(to menu: NSMenu, device: [String: Any], target: HeadsetTarget?, name: String,
+                                  capabilities: [String]) {
+        let hasCustom = capabilities.contains("CAP_EQUALIZER") || capabilities.contains("CAP_PARAMETRIC_EQUALIZER")
+        let title = hasCustom ? NSLocalizedString("Equalizer", comment: "Equalizer menu")
+            : NSLocalizedString("Equalizer Preset", comment: "Equalizer presets menu")
+        let submenu = NSMenu(title: title)
+        let metadata = device["equalizerPresets"] as? Result<[HeadsetEqualizerPreset], HeadsetFailure>
+        if case .success(let presets) = metadata, !presets.isEmpty {
+            let fallback = AppDefaults.standard.string(forKey: "equalizerPresets") ?? AppDefaults.equalizerPresets
+            for preset in presets {
+                let item = NSMenuItem(title: preset.name ?? AppDefaults.presetName(index: preset.index, fallbackNames: fallback),
+                                      action: target == nil ? nil : #selector(setEqualizerPreset(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = HeadsetMenuAction(target: target, value: preset.index, deviceName: name)
+                submenu.addItem(item)
+            }
+        } else if capabilities.contains("CAP_EQUALIZER_PRESET") {
+            let message: String
+            if case .failure(let error) = metadata { message = error.message }
+            else { message = NSLocalizedString("Preset metadata unavailable", comment: "Missing preset indices") }
+            submenu.addItem(withTitle: message, action: nil, keyEquivalent: "")
+        }
+        if hasCustom, let usbID = device["usbID"] as? HeadsetUSBID {
+            let current = equalizerSettings.devices.first { $0.usbID == usbID }
+            submenu.addItem(.separator())
+            for kind in EqualizerKind.allCases where capabilities.contains(kind == .graphic ? "CAP_EQUALIZER" : "CAP_PARAMETRIC_EQUALIZER") {
+                let title = kind == .graphic ? NSLocalizedString("Apply Saved Custom Curve", comment: "Apply graphic EQ")
+                    : NSLocalizedString("Apply Saved Parametric EQ", comment: "Apply parametric EQ")
+                let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+                if let current, let target, let curve = equalizerSettings.savedCurve(for: current, kind: kind),
+                   equalizerSettings.canApply(curve, to: target) {
+                    item.action = #selector(applySavedEqualizer(_:))
+                    item.target = self
+                    item.representedObject = HeadsetEqualizerMenuAction(target: target, curve: curve)
+                }
+                submenu.addItem(item)
+            }
+            if let target, let selection = equalizerSettings.lastApplied[target] {
+                let selectedName: String
+                switch selection {
+                case .preset(let index):
+                    if case .success(let presets) = metadata, let preset = presets.first(where: { $0.index == index }) {
+                        selectedName = preset.name ?? AppDefaults.presetName(index: index, fallbackNames: AppDefaults.standard.string(forKey: "equalizerPresets") ?? AppDefaults.equalizerPresets)
+                    } else { selectedName = NSLocalizedString("Equalizer Preset", comment: "Preset selection") }
+                case .curve(let curve): selectedName = curve.kind.title
+                }
+                submenu.addItem(withTitle: String(format: NSLocalizedString("Last applied by this app: %@", comment: "Not device readback"), selectedName), action: nil, keyEquivalent: "")
+            }
+            let edit = submenu.addItem(withTitle: NSLocalizedString("Edit Equalizer…", comment: "Open equalizer Settings"), action: #selector(editEqualizer(_:)), keyEquivalent: "")
+            edit.target = self
+            edit.representedObject = usbID
+        }
+        let item = menu.addItem(withTitle: title, action: nil, keyEquivalent: "")
+        menu.setSubmenu(submenu, for: item)
+    }
+
     func rebuildMenu(_ menu: NSMenu) {
         menu.removeAllItems()
         guard !stopping else { return }
@@ -617,7 +714,7 @@ import UserNotifications
                     ("CAP_EQUALIZER_PRESET", NSLocalizedString("Equalizer Preset", comment: "Equalizer Preset capability"))
                 ]
                 for (cap, title) in capabilityMap {
-                    if capabilities.contains(cap) {
+                    if capabilities.contains(cap) || (cap == "CAP_EQUALIZER_PRESET" && (capabilities.contains("CAP_EQUALIZER") || capabilities.contains("CAP_PARAMETRIC_EQUALIZER"))) {
                         switch cap {
                         case "CAP_HEADSET_VOLUME":
                             let reading = device["headsetVolume"] as? Result<HeadsetVolume, HeadsetFailure>
@@ -761,27 +858,7 @@ import UserNotifications
                             menu.addItem(inactiveTimeMenuItem)
                             menu.setSubmenu(inactiveTimeMenu, for: inactiveTimeMenuItem)
                         case "CAP_EQUALIZER_PRESET":
-                            let eqPresetMenu = NSMenu(title: NSLocalizedString("Equalizer Preset", comment: "Equalizer Preset capability"))
-                            let metadata = device["equalizerPresets"] as? Result<[HeadsetEqualizerPreset], HeadsetFailure>
-                            if case .success(let presets) = metadata, !presets.isEmpty {
-                                let fallback = AppDefaults.standard.string(forKey: "equalizerPresets") ?? AppDefaults.equalizerPresets
-                                for preset in presets {
-                                    let name = preset.name ?? AppDefaults.presetName(index: preset.index, fallbackNames: fallback)
-                                    let item = NSMenuItem(title: name, action: #selector(setEqualizerPreset(_:)), keyEquivalent: "")
-                                    item.target = self
-                                    item.representedObject = HeadsetMenuAction(target: controlTarget, value: preset.index, deviceName: deviceName)
-                                    if controlTarget == nil { item.action = nil }
-                                    eqPresetMenu.addItem(item)
-                                }
-                            } else {
-                                let message: String
-                                if case .failure(let error) = metadata { message = error.message }
-                                else { message = NSLocalizedString("Preset metadata unavailable", comment: "No supported preset indices available") }
-                                eqPresetMenu.addItem(withTitle: message, action: nil, keyEquivalent: "")
-                            }
-                            let eqPresetMenuItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-                            menu.addItem(eqPresetMenuItem)
-                            menu.setSubmenu(eqPresetMenu, for: eqPresetMenuItem)
+                            addEqualizerMenu(to: menu, device: device, target: controlTarget, name: deviceName, capabilities: capabilities)
                         default:
                             print("Unhandled capability: \(cap)")
                         }

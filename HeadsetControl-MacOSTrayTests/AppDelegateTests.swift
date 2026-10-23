@@ -651,7 +651,7 @@ import XCTest
         delegate.latestDevices = [menuDevice(target: a), menuDevice(target: b)]
         let menu = NSMenu()
         delegate.rebuildMenu(menu)
-        let titles = ["Sidetone", "Lights", "Inactive Time", "Voice Prompts", "Rotate to Mute", "Equalizer Preset", "Noise cancelling", "Headset volume"]
+        let titles = ["Sidetone", "Lights", "Inactive Time", "Voice Prompts", "Rotate to Mute", "Equalizer", "Noise cancelling", "Headset volume"]
         let controls = try titles.map { title in
             try XCTUnwrap(menu.items.last { $0.title == localized(title) }?.submenu?.items.first)
         }
@@ -790,6 +790,7 @@ import XCTest
     func testEqualizerMenuPreservesExplicitOrderAndNeverInventsUnknownIndices() async throws {
         let delegate = AppDelegate()
         var device = menuDevice(target: .test(profile: 7))
+        device["capabilities"] = ["CAP_EQUALIZER_PRESET"]
         device["equalizerPresets"] = Result<[HeadsetEqualizerPreset], HeadsetFailure>.success([
             .init(index: 3, name: "Voice"), .init(index: 1, name: "Flat"), .init(index: 2, name: "Flat")
         ])

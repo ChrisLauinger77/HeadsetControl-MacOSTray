@@ -9,7 +9,7 @@ nonisolated enum HeadsetOperation: String, Sendable {
     case headsetVolume = "Headset volume"
     case microphone = "Microphone"
     case boomMicrophone = "Boom mic"
-    case equalizer = "Equalizer Preset"
+    case equalizer = "Equalizer"
     case command = "Control"
 }
 
@@ -21,6 +21,7 @@ nonisolated struct HeadsetFailure: Error, Equatable, Sendable {
         case invalidTestProfile(Int)
         case targetUnavailable
         case unsupportedPreset(Int)
+        case equalizerLayoutChanged
         case stopped
         case reentrant
         case cancelled
@@ -51,6 +52,7 @@ nonisolated struct HeadsetFailure: Error, Equatable, Sendable {
         case .invalidTestProfile: reason = NSLocalizedString("Invalid test profile", comment: "Invalid test mode")
         case .targetUnavailable: reason = NSLocalizedString("Device connection changed or is ambiguous", comment: "Unsafe command target")
         case .unsupportedPreset: reason = NSLocalizedString("Preset is not supported", comment: "Invalid preset index")
+        case .equalizerLayoutChanged: reason = NSLocalizedString("Equalizer layout changed. Reset or review the saved curve.", comment: "Incompatible equalizer curve")
         case .stopped, .cancelled: reason = NSLocalizedString("Operation cancelled", comment: "Stopped operation")
         case .reentrant: reason = NSLocalizedString("Operation already in progress", comment: "Nested native operation")
         }
@@ -172,6 +174,7 @@ nonisolated struct HeadsetVolume: Equatable, Sendable {
 nonisolated struct HeadsetEqualizerPreset: Equatable, Sendable {
     let index: Int
     let name: String?
+    var bands: Result<[Double], HeadsetFailure>? = nil
 
     static func read(count: Int, nameAt: (Int) -> String?) -> Result<[Self], HeadsetFailure> {
         guard (0...255).contains(count) else {

@@ -16,7 +16,7 @@ ARCHES = {"arm64", "x86_64"}
 FRAMEWORKS = {"AppKit", "Foundation", "CoreFoundation", "IOKit", "SwiftUI", "UserNotifications"}
 SWIFT_LIBRARIES = {
     "Core", "CoreAudio", "CoreFoundation", "CoreImage", "Darwin", "Dispatch",
-    "IOKit", "Metal", "OSLog", "ObjectiveC", "QuartzCore", "Spatial",
+    "IOKit", "Metal", "OSLog", "ObjectiveC", "Observation", "QuartzCore", "Spatial",
     "UniformTypeIdentifiers", "XPC", "_Concurrency", "os", "simd",
 }
 SYSTEM_LIBRARIES = {"/usr/lib/libc++.1.dylib", "/usr/lib/libobjc.A.dylib", "/usr/lib/libSystem.B.dylib"}
