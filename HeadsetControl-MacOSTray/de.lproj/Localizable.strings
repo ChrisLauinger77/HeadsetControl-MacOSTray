@@ -72,6 +72,9 @@
 "Settings..." = "Einstellungen...";
 "System" = "System";
 "Sidetone" = "Mithörton";
+"Sidetone: %@" = "Mithörton: %@";
+"%d/128" = "%d/128";
+"%d/128 (%@)" = "%d/128 (%@)";
 "Sidetone Level Values" = "Mithörton-Werte";
 "Test Mode:" = "Testmodus:";
 "Unknown Device" = "Unbekanntes Gerät";

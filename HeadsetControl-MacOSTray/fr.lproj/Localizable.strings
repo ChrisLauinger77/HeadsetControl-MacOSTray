@@ -72,6 +72,9 @@
 "Settings..." = "Réglages...";
 "System" = "Système";
 "Sidetone" = "Retour micro";
+"Sidetone: %@" = "Retour micro : %@";
+"%d/128" = "%d/128";
+"%d/128 (%@)" = "%d/128 (%@)";
 "Sidetone Level Values" = "Valeurs du retour micro";
 "Test Mode:" = "Mode de test :";
 "Unknown Device" = "Appareil inconnu";

@@ -161,6 +161,7 @@ import XCTest
 
     func testKnownCapabilitiesExposeLegacyMenuStrings() async {
         XCTAssertEqual(HeadsetCapability.sidetone.legacyCapabilityString, "CAP_SIDETONE")
+        XCTAssertEqual(HeadsetCapability.sidetoneStatus.legacyCapabilityString, "CAP_SIDETONE_STATUS")
         XCTAssertEqual(HeadsetCapability.lights.legacyCapabilityString, "CAP_LIGHTS")
         XCTAssertEqual(HeadsetCapability.inactiveTime.legacyCapabilityString, "CAP_INACTIVE_TIME")
         XCTAssertEqual(HeadsetCapability.voicePrompts.legacyCapabilityString, "CAP_VOICE_PROMPTS")
@@ -198,6 +199,85 @@ import XCTest
                 XCTAssertFalse(menu.items.contains { $0.title.hasPrefix(localized("Battery") + ":") && $0.title.contains("%") })
             }
         }
+    }
+
+    func testSidetoneMenuMatchesExactLevelAndShowsBetweenPresetsOrUnreadableState() async throws {
+        let exact = HeadsetSidetone(level: 64, deviceLevel: 2, deviceMin: 0, deviceMax: 4, levelName: nil)
+        let between = HeadsetSidetone(level: 85, deviceLevel: 2, deviceMin: 0, deviceMax: 3, levelName: "Medium")
+        let unnamed = HeadsetSidetone(level: 85, deviceLevel: 2, deviceMin: 0, deviceMax: 3, levelName: nil)
+        let failure = HeadsetFailure(operation: .sidetone, kind: .native(-4))
+        let cases: [(Result<HeadsetSidetone, HeadsetFailure>?, Int?, String)] = [
+            (.success(exact), 64, localized("Sidetone")),
+            (.success(between), nil, String(format: localized("Sidetone: %@"), between.levelText)),
+            (.success(unnamed), nil, String(format: localized("Sidetone: %@"), unnamed.levelText)),
+            (nil, nil, localized("Sidetone")),
+            (.failure(failure), nil, localized("Sidetone"))
+        ]
+        let delegate = AppDelegate()
+        for (reading, matchedLevel, title) in cases {
+            var device = menuDevice(target: .test(profile: 7))
+            device["sidetone"] = reading
+            delegate.latestDevices = [device]
+            let menu = NSMenu()
+            delegate.rebuildMenu(menu)
+            let item = try XCTUnwrap(menu.items.first { $0.title == title })
+            let submenu = try XCTUnwrap(item.submenu)
+            let presets = submenu.items.filter { $0.representedObject is HeadsetMenuAction }
+            XCTAssertEqual(presets.count, 5)
+            let checked = presets.filter { $0.state == .on }
+            XCTAssertEqual(checked.compactMap { ($0.representedObject as? HeadsetMenuAction)?.value }, matchedLevel.map { [$0] } ?? [])
+            if case .failure = reading {
+                XCTAssertEqual(submenu.items.first?.title, failure.message)
+            }
+            XCTAssertTrue(menu.items.contains { $0.title == localized("Lights") })
+        }
+    }
+
+    func testSidetoneCommandRefreshesMenuFromObservedLevel() async throws {
+        UserDefaults.standard.set(7, forKey: "testMode")
+        let provider = RecordingHeadsetProvider()
+        let executor = ManualHeadsetExecutor()
+        let controller = HeadsetController(provider: provider, executor: executor)
+        let delegate = AppDelegate(headsetController: controller)
+        let device = HeadsetDevice(usbID: .testDevice, name: "Fake", vendor: "Vendor", product: "Product", capabilities: ["CAP_SIDETONE"],
+                                   sidetone: .success(.init(level: 64, deviceLevel: 2, deviceMin: 0, deviceMax: 4, levelName: nil)), target: .test(profile: 7))
+        provider.devices = [device]
+        delegate.updateStatusItem()
+        executor.runNext()
+        await drainResults()
+        let menu = NSMenu()
+        delegate.rebuildMenu(menu)
+        let submenu = try XCTUnwrap(menu.items.first { $0.title == localized("Sidetone") }?.submenu)
+        XCTAssertEqual(submenu.items.first { $0.state == .on }?.title, localized("Medium"))
+        let low = try XCTUnwrap(submenu.items.first { ($0.representedObject as? HeadsetMenuAction)?.value == 32 })
+        delegate.setSidetoneLevel(low)
+        executor.runNext()
+        await drainResults()
+        XCTAssertEqual(provider.commands.map { $0.0 }, [.sidetone(32)])
+        XCTAssertEqual(executor.jobs.count, 1)
+        // Read back 96 instead of the requested 32 to ensure the UI trusts the device.
+        provider.devices[0].sidetone = .success(.init(level: 96, deviceLevel: 3, deviceMin: 0, deviceMax: 4, levelName: nil))
+        executor.runNext()
+        await drainResults()
+        delegate.rebuildMenu(menu)
+        let refreshed = try XCTUnwrap(menu.items.first { $0.title == localized("Sidetone") }?.submenu)
+        XCTAssertEqual(refreshed.items.first { $0.state == .on }?.title, localized("High"))
+        XCTAssertEqual(provider.profiles, [7, 7])
+    }
+
+    func testNativeTestDeviceSidetoneMenuShowsItsCurrentNamedLevel() async throws {
+        let service = HeadsetControlService()
+        let result = await withCheckedContinuation { continuation in
+            HeadsetIOWorker.shared.enqueue { continuation.resume(returning: service.fetchDevices(testProfile: 7)) }
+        }
+        let device = try XCTUnwrap(result.get().first)
+        let delegate = AppDelegate()
+        delegate.latestDevices = [device.menuDictionary]
+        let menu = NSMenu()
+        delegate.rebuildMenu(menu)
+        let expectedLevel = String(format: localized("%d/128 (%@)"), 85, "Medium")
+        let item = try XCTUnwrap(menu.items.first { $0.title == String(format: localized("Sidetone: %@"), expectedLevel) })
+        XCTAssertFalse(try XCTUnwrap(item.submenu).items.contains { $0.state == .on })
     }
 
     func testEveryMenuControlKeepsItsOwnDeviceAfterSnapshotChanges() async throws {

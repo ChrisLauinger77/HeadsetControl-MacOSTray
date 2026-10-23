@@ -5,6 +5,7 @@ nonisolated struct HeadsetCapability {
     let rawValue: hsc_capability_t
 
     static let sidetone = HeadsetCapability(rawValue: HSC_CAP_SIDETONE)
+    static let sidetoneStatus = HeadsetCapability(rawValue: HSC_CAP_SIDETONE_STATUS)
     static let batteryStatus = HeadsetCapability(rawValue: HSC_CAP_BATTERY_STATUS)
     static let notificationSound = HeadsetCapability(rawValue: HSC_CAP_NOTIFICATION_SOUND)
     static let lights = HeadsetCapability(rawValue: HSC_CAP_LIGHTS)
@@ -24,6 +25,7 @@ nonisolated struct HeadsetCapability {
     var legacyCapabilityString: String {
         switch rawValue {
         case HSC_CAP_SIDETONE: return "CAP_SIDETONE"
+        case HSC_CAP_SIDETONE_STATUS: return "CAP_SIDETONE_STATUS"
         case HSC_CAP_BATTERY_STATUS: return "CAP_BATTERY_STATUS"
         case HSC_CAP_NOTIFICATION_SOUND: return "CAP_NOTIFICATION_SOUND"
         case HSC_CAP_LIGHTS: return "CAP_LIGHTS"
@@ -118,7 +120,7 @@ nonisolated final class HeadsetControlService: HeadsetControlProviding, @uncheck
             let after = testProfile > 0 ? nil : inventory.attachments()
             return .success(connections.compactMap { connection in
                 // The library adds its test device to physical discovery. Filter
-                // BEFORE battery/chatmix calls so fake mode never queries hardware.
+                // BEFORE telemetry calls so fake mode never queries hardware.
                 guard (connection.usbID == .testDevice) == (testProfile > 0) else { return nil }
                 var device = library.readDevice(connection)
                 if testProfile > 0 {

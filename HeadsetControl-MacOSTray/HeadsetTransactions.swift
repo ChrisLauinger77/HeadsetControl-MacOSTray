@@ -39,6 +39,7 @@ nonisolated struct HeadsetDevice: Sendable {
     let capabilities: [String]
     var battery: Result<HeadsetBattery, HeadsetFailure>? = nil
     var chatmix: Result<Int, HeadsetFailure>? = nil
+    var sidetone: Result<HeadsetSidetone, HeadsetFailure>? = nil
     var equalizerPresets: Result<[HeadsetEqualizerPreset], HeadsetFailure>? = nil
     var target: HeadsetTarget? = nil
 
@@ -46,6 +47,7 @@ nonisolated struct HeadsetDevice: Sendable {
         var result: [HeadsetFailure] = []
         if case .failure(let error) = battery { result.append(error) }
         if case .failure(let error) = chatmix { result.append(error) }
+        if case .failure(let error) = sidetone { result.append(error) }
         if case .failure(let error) = equalizerPresets { result.append(error) }
         return result
     }
@@ -61,6 +63,7 @@ nonisolated struct HeadsetDevice: Sendable {
         result["control_target"] = target
         result["battery"] = battery
         result["chatmix"] = chatmix
+        result["sidetone"] = sidetone
         result["equalizerPresets"] = equalizerPresets
         return result
     }

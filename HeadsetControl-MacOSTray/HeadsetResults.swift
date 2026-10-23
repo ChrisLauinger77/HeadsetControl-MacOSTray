@@ -5,6 +5,7 @@ nonisolated enum HeadsetOperation: String, Sendable {
     case discovery = "Discovery"
     case battery = "Battery"
     case chatmix = "Chatmix"
+    case sidetone = "Sidetone"
     case equalizer = "Equalizer Preset"
     case command = "Control"
 }
@@ -100,6 +101,36 @@ nonisolated struct HeadsetBattery: Equatable, Sendable {
             return .failure(.init(operation: .battery, kind: .invalidResponse("Battery level \(level)")))
         }
         return .success(Self(level: level, status: status, timeToEmpty: timeToEmpty.flatMap { $0 > 0 ? $0 : nil }))
+    }
+}
+
+nonisolated struct HeadsetSidetone: Equatable, Sendable {
+    let level: Int
+    let deviceLevel: Int
+    let deviceMin: Int
+    let deviceMax: Int
+    let levelName: String?
+
+    static func decode(level: Int, deviceLevel: Int, deviceMin: Int, deviceMax: Int,
+                       levelName: String?) -> Result<Self, HeadsetFailure> {
+        guard (0...128).contains(level), deviceMin <= deviceMax,
+              (deviceMin...deviceMax).contains(deviceLevel) else {
+            return .failure(.init(operation: .sidetone, kind: .invalidResponse("Sidetone level \(level), device level \(deviceLevel)")))
+        }
+        let name = levelName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return .success(Self(level: level, deviceLevel: deviceLevel, deviceMin: deviceMin, deviceMax: deviceMax,
+                             levelName: name?.isEmpty == false ? name : nil))
+    }
+
+    func matchingPresetIndex(in levels: [Int]) -> Int? {
+        levels.firstIndex(of: level)
+    }
+
+    var levelText: String {
+        if let levelName {
+            return String(format: NSLocalizedString("%d/128 (%@)", comment: "Sidetone level and device-reported name"), level, levelName)
+        }
+        return String(format: NSLocalizedString("%d/128", comment: "Normalized sidetone level"), level)
     }
 }
 

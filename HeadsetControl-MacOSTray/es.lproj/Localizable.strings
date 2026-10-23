@@ -72,6 +72,9 @@
 "Settings..." = "Ajustes...";
 "System" = "Sistema";
 "Sidetone" = "Retorno del micrófono";
+"Sidetone: %@" = "Retorno del micrófono: %@";
+"%d/128" = "%d/128";
+"%d/128 (%@)" = "%d/128 (%@)";
 "Sidetone Level Values" = "Valores del retorno del micrófono";
 "Test Mode:" = "Modo de prueba:";
 "Unknown Device" = "Dispositivo desconocido";
