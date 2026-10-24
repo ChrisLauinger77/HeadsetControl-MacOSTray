@@ -104,6 +104,35 @@ import XCTest
                                         commands: [0, 1, 2].map(HeadsetCommand.anc))
     }
 
+    func testLightsMenuOffersOnOffAndColorPresetsWithoutReadback() async throws {
+        let colors = AppDefaults.lightColorValues
+        try await verifyWriteOnlyControl(.lightColor, title: "Lights", values: [0, 1] + colors,
+                                        commands: [.lights(false), .lights(true)] + colors.map { .lightColor(HeadsetLightColor(rgb: $0)) })
+    }
+
+    func testLightColorsFollowSettingsAndAppearWithoutLightsCapability() throws {
+        UserDefaults.standard.set(0x123456, forKey: "lightColor2")
+        UserDefaults.standard.set("invalid", forKey: "lightColor3")
+        defer { AppDefaults.lightColorKeys.forEach { UserDefaults.standard.removeObject(forKey: $0) } }
+        let delegate = AppDelegate()
+        let colorTitles = ["#FFFFFF", "#123456", "#00FF00", "#0000FF"]
+        for (capabilities, titles) in [(["CAP_LIGHTS", "CAP_LIGHT_COLOR"], [localized("Off"), localized("On"), ""] + colorTitles),
+                                       (["CAP_LIGHT_COLOR"], colorTitles)] {
+            let device = HeadsetDevice(usbID: .testDevice, name: "Headset", vendor: "Vendor", product: "Product",
+                                       capabilities: capabilities, target: .test(profile: 7))
+            delegate.latestDevices = [device.menuDictionary]
+            let menu = NSMenu()
+            delegate.rebuildMenu(menu)
+            let submenu = try XCTUnwrap(menu.items.first { $0.title == localized("Lights") }?.submenu)
+            XCTAssertEqual(submenu.items.map(\.title), titles)
+            XCTAssertEqual(submenu.items.filter(\.isSeparatorItem).count, capabilities.count - 1)
+            for item in submenu.items.suffix(colorTitles.count) {
+                XCTAssertNotNil(item.image)
+                XCTAssertEqual(item.action, #selector(AppDelegate.setLightColor(_:)))
+            }
+        }
+    }
+
     func testNativeANCMenuCommandsSucceedInTestMode() async throws {
         UserDefaults.standard.set(7, forKey: "testMode")
         let controller = HeadsetController(provider: HeadsetControlService(), executor: HeadsetIOWorker.shared)
@@ -307,7 +336,7 @@ import XCTest
         delegate.rebuildMenu(menu)
         let submenu = try XCTUnwrap(menu.items.first { $0.title == localized(title) }?.submenu)
         XCTAssertEqual(submenu.items.compactMap { ($0.representedObject as? HeadsetMenuAction)?.value }, values)
-        for item in submenu.items {
+        for item in submenu.items where !item.isSeparatorItem {
             XCTAssertEqual(item.state, .off)
             XCTAssertEqual((item.representedObject as? HeadsetMenuAction)?.target, .test(profile: 7))
             _ = delegate.perform(try XCTUnwrap(item.action), with: item)
@@ -505,6 +534,7 @@ import XCTest
         XCTAssertEqual(HeadsetCapability.sidetone.legacyCapabilityString, "CAP_SIDETONE")
         XCTAssertEqual(HeadsetCapability.sidetoneStatus.legacyCapabilityString, "CAP_SIDETONE_STATUS")
         XCTAssertEqual(HeadsetCapability.lights.legacyCapabilityString, "CAP_LIGHTS")
+        XCTAssertEqual(HeadsetCapability.lightColor.legacyCapabilityString, "CAP_LIGHT_COLOR")
         XCTAssertEqual(HeadsetCapability.inactiveTime.legacyCapabilityString, "CAP_INACTIVE_TIME")
         XCTAssertEqual(HeadsetCapability.voicePrompts.legacyCapabilityString, "CAP_VOICE_PROMPTS")
         XCTAssertEqual(HeadsetCapability.rotateToMute.legacyCapabilityString, "CAP_ROTATE_TO_MUTE")
@@ -564,6 +594,9 @@ import XCTest
             delegate.rebuildMenu(menu)
             XCTAssertTrue(menu.items.contains { $0.title == "\(localized("Battery")): 42%" })
             XCTAssertEqual(menu.items.filter(\.hasSubmenu).map(\.title), [localized("Sidetone"), localized("Lights")])
+            // The limited profile has no CAP_LIGHT_COLOR, so no color presets.
+            XCTAssertEqual(menu.items.first { $0.title == localized("Lights") }?.submenu?.items.map(\.title),
+                           [localized("Off"), localized("On")])
         }
         XCTAssertTrue(try XCTUnwrap(capabilities[7]).contains("CAP_EQUALIZER"))
     }

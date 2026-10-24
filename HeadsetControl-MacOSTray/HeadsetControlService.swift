@@ -10,6 +10,7 @@ nonisolated struct HeadsetCapability {
     static let batteryStatus = HeadsetCapability(rawValue: HSC_CAP_BATTERY_STATUS)
     static let notificationSound = HeadsetCapability(rawValue: HSC_CAP_NOTIFICATION_SOUND)
     static let lights = HeadsetCapability(rawValue: HSC_CAP_LIGHTS)
+    static let lightColor = HeadsetCapability(rawValue: HSC_CAP_LIGHT_COLOR)
     static let inactiveTime = HeadsetCapability(rawValue: HSC_CAP_INACTIVE_TIME)
     static let chatmixStatus = HeadsetCapability(rawValue: HSC_CAP_CHATMIX_STATUS)
     static let voicePrompts = HeadsetCapability(rawValue: HSC_CAP_VOICE_PROMPTS)
@@ -37,6 +38,7 @@ nonisolated struct HeadsetCapability {
         case HSC_CAP_BATTERY_STATUS: return "CAP_BATTERY_STATUS"
         case HSC_CAP_NOTIFICATION_SOUND: return "CAP_NOTIFICATION_SOUND"
         case HSC_CAP_LIGHTS: return "CAP_LIGHTS"
+        case HSC_CAP_LIGHT_COLOR: return "CAP_LIGHT_COLOR"
         case HSC_CAP_INACTIVE_TIME: return "CAP_INACTIVE_TIME"
         case HSC_CAP_CHATMIX_STATUS: return "CAP_CHATMIX_STATUS"
         case HSC_CAP_VOICE_PROMPTS: return "CAP_VOICE_PROMPTS"
@@ -72,6 +74,7 @@ nonisolated struct HeadsetCapability {
         .bluetoothWhenPoweredOn,
         .bluetoothCallVolume,
         .lights,
+        .lightColor,
         .inactiveTime,
         .voicePrompts,
         .rotateToMute,

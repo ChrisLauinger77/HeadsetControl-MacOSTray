@@ -292,6 +292,8 @@ struct SettingsSection<Content: View>: View {
                 }
 
                 ANCSettingsView(onCommand: onANCCommand)
+
+                LightColorSettingsView()
             }
             .padding(20)
         }
@@ -626,6 +628,64 @@ struct ANCSettingsView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
+    }
+}
+
+// Presets for the Lights menu. Nothing is sent from here: the headset cannot
+// report its color, so a choice only takes effect from the menu.
+struct LightColorSettingsView: View {
+    @AppStorage("lightColor1", store: AppDefaults.standard) private var lightColor1 = AppDefaults.lightColorValues[0]
+    @AppStorage("lightColor2", store: AppDefaults.standard) private var lightColor2 = AppDefaults.lightColorValues[1]
+    @AppStorage("lightColor3", store: AppDefaults.standard) private var lightColor3 = AppDefaults.lightColorValues[2]
+    @AppStorage("lightColor4", store: AppDefaults.standard) private var lightColor4 = AppDefaults.lightColorValues[3]
+
+    private var presets: [Binding<Int>] { [$lightColor1, $lightColor2, $lightColor3, $lightColor4] }
+
+    func preset(_ index: Int) -> HeadsetLightColor {
+        HeadsetLightColor(rgb: AppDefaults.validatedLightColor(presets[index].wrappedValue, fallback: AppDefaults.lightColorValues[index]))
+    }
+
+    func colorBinding(_ index: Int) -> Binding<Color> {
+        Binding(
+            get: { Color(nsColor: preset(index).nsColor) },
+            set: { newValue in
+                guard let color = HeadsetLightColor(nsColor: NSColor(newValue)) else { return }
+                presets[index].wrappedValue = color.rgb
+            }
+        )
+    }
+
+    var body: some View {
+        SettingsSection(title: NSLocalizedString("Light Colors", comment: "Light color presets section"), systemImage: "lightbulb") {
+            Text(NSLocalizedString("Colors offered in the Lights menu on headsets that support them. Choosing one also turns the lights on; black may turn them off.", comment: "Light color presets explanation"))
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            ForEach(AppDefaults.lightColorKeys.indices, id: \.self) { index in
+                let label = String(format: NSLocalizedString("Color %d:", comment: "Light color preset label"), index + 1)
+                HStack(spacing: 12) {
+                    Text(label)
+                        .frame(width: 96, alignment: .trailing)
+                    ColorPicker(label, selection: colorBinding(index), supportsOpacity: false)
+                        .labelsHidden()
+                    Text(verbatim: preset(index).hexString)
+                        .monospaced()
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+    }
+}
+
+extension HeadsetLightColor {
+    var nsColor: NSColor {
+        NSColor(srgbRed: CGFloat(red) / 255, green: CGFloat(green) / 255, blue: CGFloat(blue) / 255, alpha: 1)
+    }
+
+    // The color panel can return any color space; the headset takes sRGB bytes.
+    init?(nsColor: NSColor) {
+        guard let srgb = nsColor.usingColorSpace(.sRGB) else { return nil }
+        func byte(_ component: CGFloat) -> UInt8 { UInt8((max(0, min(1, component)) * 255).rounded()) }
+        self.init(red: byte(srgb.redComponent), green: byte(srgb.greenComponent), blue: byte(srgb.blueComponent))
     }
 }
 

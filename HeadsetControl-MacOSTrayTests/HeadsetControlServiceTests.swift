@@ -47,7 +47,8 @@ final class HeadsetControlServiceTests: XCTestCase {
         let parametric = try XCTUnwrap(EqualizerCurve.neutral(for: EqualizerFixtures.device(), kind: .parametric))
         let commands: [HeadsetCommand] = [
             .sidetone(10), .microphoneVolume(64), .noiseFilter(1), .volumeLimiter(true), .microphoneMuteLedBrightness(2),
-            .bluetoothWhenPoweredOn(true), .bluetoothCallVolume(50), .lights(false), .inactiveTime(5), .voicePrompts(true),
+            .bluetoothWhenPoweredOn(true), .bluetoothCallVolume(50), .lights(false), .lightColor(HeadsetLightColor(rgb: 0x112233)),
+            .inactiveTime(5), .voicePrompts(true),
             .rotateToMute(false), .equalizerPreset(1), .customEqualizer(EqualizerFixtures.curve),
             .customEqualizer(parametric)
         ]

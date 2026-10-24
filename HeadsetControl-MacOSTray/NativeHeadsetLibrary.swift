@@ -243,6 +243,9 @@ nonisolated final class NativeHeadsetLibrary: HeadsetLibraryAccess {
         case .lights(let enabled):
             guard hsc_supports(handle, HSC_CAP_LIGHTS) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
             return HeadsetFailure.result(code: hsc_set_lights(handle, enabled).rawValue, operation: .command)
+        case .lightColor(let color):
+            guard hsc_supports(handle, HSC_CAP_LIGHT_COLOR) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
+            return HeadsetFailure.result(code: hsc_set_light_color(handle, color.red, color.green, color.blue).rawValue, operation: .command)
         case .inactiveTime(let minutes):
             guard hsc_supports(handle, HSC_CAP_INACTIVE_TIME) else { return .failure(.init(operation: .command, kind: .native(HSC_RESULT_NOT_SUPPORTED.rawValue))) }
             return HeadsetFailure.result(code: hsc_set_inactive_time(handle, UInt8(max(0, min(90, minutes))), nil).rawValue, operation: .command)

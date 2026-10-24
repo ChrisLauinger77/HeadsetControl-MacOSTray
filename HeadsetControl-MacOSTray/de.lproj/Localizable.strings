@@ -204,3 +204,6 @@
 "Reset to Neutral" = "Auf neutral zurücksetzen";
 "Save Curve" = "Kurve speichern";
 "Use finite values within the device’s ranges and gain step." = "Endliche Werte innerhalb der Gerätebereiche und Verstärkungsschritte verwenden.";
+"Light Colors" = "LED-Farben";
+"Colors offered in the Lights menu on headsets that support them. Choosing one also turns the lights on; black may turn them off." = "Farben im LED-Menü für Headsets, die das unterstützen. Eine Farbe schaltet die LEDs auch ein; Schwarz kann sie ausschalten.";
+"Color %d:" = "Farbe %d:";

@@ -204,3 +204,6 @@
 "Reset to Neutral" = "Restablecer a neutro";
 "Save Curve" = "Guardar curva";
 "Use finite values within the device’s ranges and gain step." = "Usa valores finitos dentro de los rangos y del paso de ganancia del dispositivo.";
+"Light Colors" = "Colores de las luces";
+"Colors offered in the Lights menu on headsets that support them. Choosing one also turns the lights on; black may turn them off." = "Colores que ofrece el menú Luces en los auriculares compatibles. Elegir uno también enciende las luces; el negro puede apagarlas.";
+"Color %d:" = "Color %d:";

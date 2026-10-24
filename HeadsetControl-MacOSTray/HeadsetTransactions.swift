@@ -34,11 +34,36 @@ nonisolated enum HeadsetCommand: Equatable, Sendable {
     case bluetoothWhenPoweredOn(Bool)
     case bluetoothCallVolume(Int)
     case lights(Bool)
+    case lightColor(HeadsetLightColor)
     case inactiveTime(Int)
     case voicePrompts(Bool)
     case rotateToMute(Bool)
     case equalizerPreset(Int)
     case customEqualizer(EqualizerCurve)
+}
+
+// Menu items and stored presets carry a color packed as 0xRRGGBB. Black is a
+// valid color; a device may treat it as switching the lights off.
+nonisolated struct HeadsetLightColor: Equatable, Sendable {
+    static let rgbRange = 0...0xFFFFFF
+
+    let red: UInt8
+    let green: UInt8
+    let blue: UInt8
+
+    init(red: UInt8, green: UInt8, blue: UInt8) {
+        self.red = red
+        self.green = green
+        self.blue = blue
+    }
+
+    init(rgb: Int) {
+        let packed = max(Self.rgbRange.lowerBound, min(Self.rgbRange.upperBound, rgb))
+        self.init(red: UInt8(packed >> 16), green: UInt8((packed >> 8) & 0xFF), blue: UInt8(packed & 0xFF))
+    }
+
+    var rgb: Int { Int(red) << 16 | Int(green) << 8 | Int(blue) }
+    var hexString: String { String(format: "#%06X", rgb) }
 }
 
 // Store the cycle as one value so a checkbox edit cannot persist an empty

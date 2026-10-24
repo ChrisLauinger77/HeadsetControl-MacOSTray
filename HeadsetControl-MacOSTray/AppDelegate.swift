@@ -32,6 +32,12 @@ import UserNotifications
                          range: AppDefaults.bluetoothCallVolumePresetRange)
     }
 
+    var lightColorsFromSettings: [HeadsetLightColor] {
+        zip(AppDefaults.lightColorKeys, AppDefaults.lightColorValues).map { key, fallback in
+            HeadsetLightColor(rgb: AppDefaults.validatedLightColor(AppDefaults.standard.object(forKey: key), fallback: fallback))
+        }
+    }
+
     private func configuredLevels(keys: [String], values: [Int], range: ClosedRange<Int>) -> [(String, Int)] {
         zip(keys, values).enumerated().map { index, entry in
             (NSLocalizedString(AppDefaults.levelPresetNames[index], comment: "Configured level preset"),
@@ -202,6 +208,10 @@ import UserNotifications
 
     @objc func setLights(_ sender: NSMenuItem) {
         runControlAction(sender) { .lights($0 != 0) }
+    }
+
+    @objc func setLightColor(_ sender: NSMenuItem) {
+        runControlAction(sender) { .lightColor(HeadsetLightColor(rgb: $0)) }
     }
 
     @objc func setSidetoneLevel(_ sender: NSMenuItem) {
@@ -575,6 +585,52 @@ import UserNotifications
         return submenu
     }
 
+    // Colors share the Lights submenu because choosing one also turns the lights
+    // on. A device may report either capability without the other.
+    private func addLightsMenu(to menu: NSMenu, title: String, capabilities: [String], target: HeadsetTarget?,
+                               deviceName: String) {
+        let submenu = NSMenu(title: title)
+        if capabilities.contains("CAP_LIGHTS") {
+            let lightsOptions = [
+                (NSLocalizedString("Off", comment: "Lights off option"), 0),
+                (NSLocalizedString("On", comment: "Lights on option"), 1)
+            ]
+            for (optionTitle, optionValue) in lightsOptions {
+                let item = NSMenuItem(title: optionTitle, action: target == nil ? nil : #selector(setLights(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = HeadsetMenuAction(target: target, value: optionValue, deviceName: deviceName)
+                submenu.addItem(item)
+            }
+        }
+        if capabilities.contains("CAP_LIGHT_COLOR") {
+            if submenu.numberOfItems > 0 { submenu.addItem(.separator()) }
+            for color in lightColorsFromSettings {
+                let item = NSMenuItem(title: color.hexString, action: target == nil ? nil : #selector(setLightColor(_:)), keyEquivalent: "")
+                item.target = self
+                item.image = lightColorSwatch(color)
+                item.representedObject = HeadsetMenuAction(target: target, value: color.rgb, deviceName: deviceName)
+                submenu.addItem(item)
+            }
+        }
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        menu.addItem(item)
+        menu.setSubmenu(submenu, for: item)
+    }
+
+    private func lightColorSwatch(_ color: HeadsetLightColor) -> NSImage {
+        let fill = color.nsColor
+        return NSImage(size: NSSize(width: 12, height: 12), flipped: false) { rect in
+            // NSInsetRect, not insetBy: the build contract allows no direct CoreGraphics link.
+            let path = NSBezierPath(roundedRect: NSInsetRect(rect, 0.5, 0.5), xRadius: 3, yRadius: 3)
+            fill.setFill()
+            path.fill()
+            // The outline keeps white and black swatches visible in both menu appearances.
+            NSColor.tertiaryLabelColor.setStroke()
+            path.stroke()
+            return true
+        }
+    }
+
     private func addEqualizerMenu(to menu: NSMenu, device: [String: Any], target: HeadsetTarget?, name: String,
                                   capabilities: [String]) {
         let hasCustom = capabilities.contains("CAP_EQUALIZER") || capabilities.contains("CAP_PARAMETRIC_EQUALIZER")
@@ -714,7 +770,8 @@ import UserNotifications
                     ("CAP_EQUALIZER_PRESET", NSLocalizedString("Equalizer Preset", comment: "Equalizer Preset capability"))
                 ]
                 for (cap, title) in capabilityMap {
-                    if capabilities.contains(cap) || (cap == "CAP_EQUALIZER_PRESET" && (capabilities.contains("CAP_EQUALIZER") || capabilities.contains("CAP_PARAMETRIC_EQUALIZER"))) {
+                    if capabilities.contains(cap) || (cap == "CAP_EQUALIZER_PRESET" && (capabilities.contains("CAP_EQUALIZER") || capabilities.contains("CAP_PARAMETRIC_EQUALIZER")))
+                        || (cap == "CAP_LIGHTS" && capabilities.contains("CAP_LIGHT_COLOR")) {
                         switch cap {
                         case "CAP_HEADSET_VOLUME":
                             let reading = device["headsetVolume"] as? Result<HeadsetVolume, HeadsetFailure>
@@ -794,21 +851,7 @@ import UserNotifications
                             menu.addItem(sidetoneMenuItem)
                             menu.setSubmenu(sidetoneMenu, for: sidetoneMenuItem)
                         case "CAP_LIGHTS":
-                            let lightsMenu = NSMenu(title: NSLocalizedString("Lights", comment: "Lights capability"))
-                            let lightsOptions = [
-                                (NSLocalizedString("Off", comment: "Lights off option"), 0),
-                                (NSLocalizedString("On", comment: "Lights on option"), 1)
-                            ]
-                            for (optionTitle, optionValue) in lightsOptions {
-                                let item = NSMenuItem(title: optionTitle, action: #selector(setLights(_:)), keyEquivalent: "")
-                                item.target = self
-                                item.representedObject = HeadsetMenuAction(target: controlTarget, value: optionValue, deviceName: deviceName)
-                                if controlTarget == nil { item.action = nil }
-                                lightsMenu.addItem(item)
-                            }
-                            let lightsMenuItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-                            menu.addItem(lightsMenuItem)
-                            menu.setSubmenu(lightsMenu, for: lightsMenuItem)
+                            addLightsMenu(to: menu, title: title, capabilities: capabilities, target: controlTarget, deviceName: deviceName)
                         case "CAP_VOICE_PROMPTS":
                             let voicePromptsMenu = NSMenu(title: NSLocalizedString("Voice Prompts", comment: "Voice Prompts capability"))
                             let voicePromptsOptions = [
