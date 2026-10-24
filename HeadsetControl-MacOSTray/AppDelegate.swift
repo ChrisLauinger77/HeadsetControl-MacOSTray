@@ -620,7 +620,8 @@ import UserNotifications
     private func lightColorSwatch(_ color: HeadsetLightColor) -> NSImage {
         let fill = color.nsColor
         return NSImage(size: NSSize(width: 12, height: 12), flipped: false) { rect in
-            let path = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 3, yRadius: 3)
+            // NSInsetRect, not insetBy: the build contract allows no direct CoreGraphics link.
+            let path = NSBezierPath(roundedRect: NSInsetRect(rect, 0.5, 0.5), xRadius: 3, yRadius: 3)
             fill.setFill()
             path.fill()
             // The outline keeps white and black swatches visible in both menu appearances.
