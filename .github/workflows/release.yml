@@ -1,21 +1,18 @@
 name: Release
 
-# Stage 1 (manual run on main): build, test and retain a release candidate.
-# Stage 2 (annotated vX.Y.Z tag with a Candidate-Run line): publish that
-# candidate's exact bytes. Publication never rebuilds the application.
+# One manual run on main builds, tests and retains a release candidate, then
+# waits for approval of the release environment. Approval creates the annotated
+# vX.Y.Z tag naming this run and publishes the same run's exact bytes.
+# Publication never rebuilds the application.
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "v*"
 
 permissions:
   contents: read
 
-# Candidates never wait for or cancel each other. Publication and its retries
-# share one per-tag lock without canceling an active publisher.
+# Candidates never wait for or cancel each other; a version's tag can be created only once.
 concurrency:
-  group: ${{ github.event_name == 'push' && format('release-{0}', github.ref) || format('release-candidate-{0}', github.run_id) }}
+  group: release-candidate-${{ github.run_id }}
   cancel-in-progress: false
 
 env:
@@ -24,11 +21,11 @@ env:
 
 jobs:
   validate:
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.source.outputs.tag }}
+      sha: ${{ github.sha }}
       build_number: ${{ steps.build-number.outputs.value }}
 
     steps:
@@ -160,7 +157,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Print publishing commands
+      - name: Print approval instructions
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           VERSION: ${{ needs.validate.outputs.version }}
@@ -173,13 +170,56 @@ jobs:
             core.info(text);
             await core.summary.addRaw(text).write();
 
+  approve-and-tag:
+    needs: [validate, package]
+    # Waits for a required reviewer to approve the tested candidate before tagging.
+    environment: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      # Credentials stay persisted so this job can push the tag with GITHUB_TOKEN.
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Create and push annotated release tag
+        env:
+          TAG: ${{ needs.validate.outputs.tag }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          SOURCE_SHA: ${{ needs.validate.outputs.sha }}
+          CANDIDATE_RUN_ID: ${{ github.run_id }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898283+github-actions[bot]@users.noreply.github.com'
+          if git rev-parse --quiet --verify "refs/tags/$TAG" > /dev/null; then
+            echo "::error::$TAG already exists locally; nothing was tagged or published"
+            exit 1
+          fi
+          # ls-remote exits 2 when the tag is absent; any other failure must not look like absence.
+          remote=0
+          git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null || remote=$?
+          if [ "$remote" -eq 0 ]; then
+            echo "::error::$TAG already exists on origin; nothing was tagged or published"
+            exit 1
+          elif [ "$remote" -ne 2 ]; then
+            echo "::error::Could not check origin for $TAG (git ls-remote exited $remote)"
+            exit 1
+          fi
+          git tag -a "$TAG" "$SOURCE_SHA" \
+            -m "HeadsetControl-MacOSTray $VERSION" \
+            -m "Candidate-Run: $CANDIDATE_RUN_ID"
+          # Tags pushed with GITHUB_TOKEN do not trigger workflow runs.
+          git push origin "refs/tags/$TAG"
+
   publish:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [validate, approve-and-tag]
     # Archive validation inspects Mach-O slices and signatures with macOS tools.
     runs-on: macos-15
     permissions:
       contents: write
-      actions: read
 
     steps:
       - name: Checkout repository
@@ -188,45 +228,39 @@ jobs:
           persist-credentials: false
 
       - name: Check tag matches application version
-        run: python3 -B scripts/release-artifact.py project HeadsetControl-MacOSTray.xcodeproj/project.pbxproj --tag "$GITHUB_REF_NAME"
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+        run: python3 -B scripts/release-artifact.py project HeadsetControl-MacOSTray.xcodeproj/project.pbxproj --tag "$RELEASE_TAG"
 
-      - name: Verify annotated tag and candidate run
-        id: candidate
+      - name: Verify annotated release tag
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
         with:
           script: |
-            const { resolveCandidate } = require('./scripts/release.cjs');
-            const result = await resolveCandidate(github, context.repo, { tag: process.env.RELEASE_TAG,
-              commit: context.sha, currentRunID: context.runId, defaultBranch: process.env.DEFAULT_BRANCH });
-            core.info(`Publishing candidate run ${result.runID}, artifact ${result.artifactID}`);
-            core.setOutput('run_id', result.runID);
-            core.setOutput('artifact_id', result.artifactID);
+            const { verifyReleaseTag } = require('./scripts/release.cjs');
+            await verifyReleaseTag(github, context.repo, { tag: process.env.RELEASE_TAG,
+              commit: context.sha, runID: context.runId });
 
-      - name: Download verified candidate
+      # The candidate retained by this run's package job; it is never rebuilt.
+      - name: Download this run's candidate
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
-          artifact-ids: ${{ steps.candidate.outputs.artifact_id }}
-          run-id: ${{ steps.candidate.outputs.run_id }}
-          github-token: ${{ github.token }}
+          name: release-assets
           path: ${{ runner.temp }}/release-assets
-          merge-multiple: true
 
       - name: Verify candidate files and publish exact bytes
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
           CANDIDATE_DIR: ${{ runner.temp }}/release-assets
-          CANDIDATE_RUN_ID: ${{ steps.candidate.outputs.run_id }}
         with:
           script: |
             const { verifyCandidateFiles, prepareRelease, publishRelease } = require('./scripts/release.cjs');
             const tag = process.env.RELEASE_TAG;
             // All candidate checks happen before any release mutation.
             const { archivePath, digest } = verifyCandidateFiles(process.env.CANDIDATE_DIR, { tag, commit: context.sha,
-              runID: Number(process.env.CANDIDATE_RUN_ID), repository: `${context.repo.owner}/${context.repo.repo}` });
+              runID: context.runId, repository: `${context.repo.owner}/${context.repo.repo}` });
             const { releaseID } = await prepareRelease(github, context.repo, tag);
             const result = await publishRelease(github, context.repo, { tag, releaseID, archivePath, expectedDigest: digest });
             core.info(`Verified release ${result.releaseID}: ${result.digest}`);

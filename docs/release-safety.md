@@ -1,9 +1,10 @@
 # Release publication and recovery
 
-Releases use two stages in `.github/workflows/release.yml`: build once, test the
-candidate, tag the exact source commit, and publish the already verified bytes.
+Releases run as one manual run of `.github/workflows/release.yml`: build once,
+test the candidate, approve it, then let the same run tag the exact source commit
+and publish the already verified bytes.
 
-## Stage 1: build a candidate (manual run)
+## Stage 1: build a candidate
 
 Start **Release** with “Run workflow” on `main`. The run:
 
@@ -21,54 +22,65 @@ Start **Release** with “Run workflow” on `main`. The run:
    - `HeadsetControl-MacOSTray.zip` — the release asset;
    - `SHA256SUMS` — its SHA-256;
    - `candidate.json` — repository, version, tag, source commit, run ID and attempt.
-7. Writes the exact tagging commands to the job summary.
+7. Writes the approval instructions, source commit, run ID and checksum to the job
+   summary.
 
-This stage has read-only repository permissions, no secrets, and never creates
-releases, tags or package-repository updates. Candidate runs do not share a
-concurrency group, so they never cancel each other.
+These candidate jobs have read-only repository permissions, no secrets, and never
+create releases, tags or package-repository updates. Candidate runs do not share
+a concurrency group, so they never cancel each other.
 
 ## Approving and tagging
 
-Download the complete `release-assets` artifact from the successful run and test
-it. When satisfied, run the commands from the job summary, for example:
+After the candidate jobs finish, the `approve-and-tag` job waits for approval of
+the `release` environment. Download the complete `release-assets` artifact from
+the waiting run and test it. When satisfied, open the run, choose **Review
+deployments**, select `release` and approve. To discard the candidate, reject the
+deployment instead.
+
+On approval, `approve-and-tag` checks out the repository as `github-actions[bot]`
+and fails without tagging if `vX.Y.Z` already exists locally or on `origin`.
+Otherwise it creates and pushes only that annotated tag on the validated source
+commit (not the current `main`), equivalent to:
 
 ```bash
-git tag -a v3.2.2 <full commit SHA from the summary> \
+git tag -a v3.2.2 <validated source commit> \
   -m "HeadsetControl-MacOSTray 3.2.2" \
-  -m "Candidate-Run: <run ID from the summary>"
+  -m "Candidate-Run: <this run ID>"
 
-git push origin v3.2.2
+git push origin refs/tags/v3.2.2
 ```
 
-The command tags the candidate's source commit, not the local `HEAD`.
+The tag is pushed with `GITHUB_TOKEN`, which does not start another workflow run.
+Do not create or push release tags manually; a manually pushed tag publishes
+nothing.
 
-- Push the tag before the artifact expires (30 days, subject to repository limits).
-- For a different candidate, start a **new** manual run. Do not rerun a candidate
-  run: reruns can replace artifacts under the same run ID and are rejected.
+- Approve before the artifact expires (30 days, subject to repository limits). An
+  unanswered approval request also fails after 30 days.
+- For a different candidate, start a **new** manual run. Never use “Re-run all
+  jobs” on a candidate run: it can make the tested artifact unavailable, and the
+  candidate jobs reject reruns.
 
-## Stage 2: publish the candidate (tag push)
+The `release` environment must require a reviewer (with self-review allowed for a
+single maintainer) and should only accept deployments from `main`.
 
-The tag-triggered publish job builds nothing. Before any release mutation it
-verifies, using the GitHub REST API:
+## Stage 2: publish the candidate
 
-- the tag matches the Xcode marketing version at the tagged commit;
-- `refs/tags/vX.Y.Z` is an annotated tag that directly annotates the pushed commit
-  and contains exactly one `Candidate-Run: <run ID>` line;
-- the run belongs to this repository (also as head repository), is this same
-  workflow (path and workflow ID), used `workflow_dispatch` on the default branch,
-  completed with `success` on attempt 1, and built exactly the tagged commit;
-- the run has exactly one unexpired, non-empty `release-assets` artifact whose
-  recorded run and commit match.
+The `publish` job runs in the same workflow run after `approve-and-tag` succeeds
+and builds nothing. Before any release mutation it verifies:
 
-It downloads that artifact by run and artifact ID and requires exactly the three
+- the tag matches the Xcode marketing version at the candidate commit;
+- `refs/tags/vX.Y.Z` is an annotated tag that directly annotates the candidate
+  commit and contains exactly one `Candidate-Run: <run ID>` line naming this run.
+
+It downloads this run's `release-assets` artifact and requires exactly the three
 files above. `candidate.json` must match the tag, version, commit, run and
 repository, and the ZIP must match its original `SHA256SUMS` entry. Checksums are
 never regenerated. The ZIP is validated again (bundle identity, tag version,
 embedded source revision, both architecture slices) before upload.
 
-The publish job alone has `contents: write` (and `actions: read` to read the
-candidate). Publications are serialized per tag without canceling an active
-publisher.
+Only `approve-and-tag` and `publish` have `contents: write`; `approve-and-tag`
+only runs after environment approval. A version's tag can be created only once, so
+two candidates for the same version can never both publish.
 
 ## Publishing protocol
 
@@ -86,13 +98,26 @@ After successful publication, `request-cask-update` dispatches `update-cask` for
 
 ## Retry cases
 
+Recover a failed approval or publication with “Re-run failed jobs” on the same
+run. That keeps this run's `release-assets` artifact; the candidate jobs are not
+rerun.
+
 - **Candidate build/package failure:** fix the cause and start a new manual run.
   Do not rerun the failed candidate run; a rerun cannot be published.
-- **Tag rejected (lightweight, missing/invalid trailer, wrong commit or run):**
-  nothing was published. Delete the tag locally and on `origin`, then re-create it
-  with the commands from the candidate summary.
-- **Candidate artifact expired:** build a new candidate and tag that run. An
-  existing unpublished tag must be deleted and re-created with the new run ID.
+- **Approval rejected or timed out:** nothing was tagged or published. Start a new
+  manual run, or use “Re-run failed jobs” to request approval for the same
+  candidate again while its artifact is retained.
+- **Tag already exists when approving:** nothing was tagged or published. Another
+  candidate or a manual push already created `vX.Y.Z`. Bump `MARKETING_VERSION`
+  and build a new candidate, or delete the unpublished tag on `origin` and use
+  “Re-run failed jobs”.
+- **Tag push failed:** nothing was published. Fix the cause and use “Re-run failed
+  jobs”; approval is requested again.
+- **Tag rejected by `publish` (not annotated, wrong commit or run):** nothing was
+  published. Delete the tag on `origin`, then re-run the `approve-and-tag` job
+  (which also reruns `publish`) to recreate it after a new approval.
+- **Candidate artifact expired:** build a new candidate. An existing unpublished
+  tag must be deleted first.
 - **Upload failed before storing an asset:** rerun the publish job. It uploads
   only if the asset is absent.
 - **Upload completed but its response was lost:** rerun the publish job. It
@@ -108,9 +133,9 @@ After successful publication, `request-cask-update` dispatches `update-cask` for
 - **Missing, conflicting, or unverifiable published archive:** fail for maintainer
   inspection; never repair or overwrite it automatically.
 
-Publish-job reruns are safe: they re-resolve the same candidate and verify the
-published state. Once the candidate artifact has expired they fail clearly
-instead of accepting different bytes.
+Publish-job reruns are safe: they re-verify the same tag and candidate and the
+published state. Once the candidate artifact has expired they fail instead of
+accepting different bytes.
 
 ## Validation
 
@@ -121,9 +146,10 @@ node --test scripts/tests/*.test.cjs
 python3 -B -m unittest discover -s scripts/tests -p 'test_*.py' -v
 ```
 
-`scripts/tests/candidate.test.cjs` covers candidate source checks, tag/trailer
-parsing, run and artifact verification, expiry, and checksum/manifest checks with
-a mocked GitHub API. `scripts/tests/release.test.cjs` covers the resumable
+`scripts/tests/candidate.test.cjs` covers candidate source checks, the approval
+summary, tag/trailer parsing and verification, and checksum/manifest checks with
+a mocked GitHub API. `scripts/tests/test_native_contract.py` checks the workflow's
+job order, approval gate and permissions. `scripts/tests/release.test.cjs` covers the resumable
 publisher and exact-byte publication. The macOS fixtures compile small
 arm64/x86_64 executables and exercise the actual `ditto`, `lipo`, and `codesign`
 packaging path. None of these tests use headsets, GitHub credentials or real

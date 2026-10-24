@@ -204,9 +204,12 @@ class NativeContractTests(unittest.TestCase):
         import re
         parts = re.split(r"^  ([\w-]+):\n", release.split("\njobs:\n", 1)[1], flags=re.MULTILINE)
         jobs = dict(zip(parts[1::2], parts[2::2]))
-        self.assertEqual(list(jobs), ["validate", "build", "package", "publish", "request-cask-update"])
-        self.assertIn("if: github.event_name == 'workflow_dispatch'", jobs["validate"])
-        self.assertIn("if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')", jobs["publish"])
+        self.assertEqual(list(jobs), ["validate", "build", "package", "approve-and-tag", "publish", "request-cask-update"])
+        # Only a manual run starts a release; tag pushes no longer publish anything.
+        triggers = release.split("\npermissions:", 1)[0]
+        self.assertIn("workflow_dispatch:", triggers)
+        self.assertNotIn("push:", triggers)
+        self.assertIn("sha: ${{ github.sha }}", jobs["validate"])
         # Candidate jobs never receive write permissions or publication secrets.
         for name in ("validate", "build", "package"):
             self.assertNotIn("permissions:", jobs[name])
@@ -215,11 +218,27 @@ class NativeContractTests(unittest.TestCase):
         self.assertIn("name: release-assets", jobs["package"])
         self.assertIn("retention-days: 30", jobs["package"])
         self.assertIn("candidateSummary", jobs["package"])
-        # Publication downloads the candidate by run/artifact ID and never rebuilds it.
+        # The tag is created only after approval of the release environment, from validated values.
+        approval = jobs["approve-and-tag"]
+        self.assertIn("needs: [validate, package]", approval)
+        self.assertIn("environment: release", approval)
+        self.assertIn("contents: write", approval)
+        self.assertNotIn("secrets.", approval)
+        for value in ("needs.validate.outputs.tag", "needs.validate.outputs.version",
+                      "needs.validate.outputs.sha", "github.run_id"):
+            self.assertIn(value, approval)
+        self.assertIn('-m "Candidate-Run: $CANDIDATE_RUN_ID"', approval)
+        self.assertIn('git push origin "refs/tags/$TAG"', approval)
+        script = approval.split("        run: |\n", 1)[1]
+        self.assertNotIn("${{", script)
+        # Publication waits for the tag, reuses this run's candidate and never rebuilds it.
+        self.assertIn("needs: [validate, approve-and-tag]", jobs["publish"])
+        self.assertNotIn("if:", jobs["publish"])
         for builder in ("build-native-app.py", "create-universal-app.sh", "upload-artifact", "writeCandidate"):
             self.assertNotIn(builder, jobs["publish"])
-        for check in ("resolveCandidate", "verifyCandidateFiles", "run-id: ${{ steps.candidate.outputs.run_id }}"):
+        for check in ("verifyReleaseTag", "verifyCandidateFiles", "name: release-assets"):
             self.assertIn(check, jobs["publish"])
+        self.assertNotIn("run-id:", jobs["publish"])
         self.assertIn("needs: publish", jobs["request-cask-update"])
         self.assertIn("needs.publish.result == 'success'", jobs["request-cask-update"])
 

@@ -123,10 +123,9 @@ async function requestCaskUpdate(github) {
         event_type: 'update-cask', client_payload: { cask: 'headsetcontrol-macostray' } });
 }
 
-// Two-stage release: a manual run builds and retains a candidate; an annotated
-// tag naming that run publishes the candidate's exact bytes without rebuilding.
+// Gated release: a manual run builds and retains a candidate, then waits for approval.
+// The approved run tags its source commit and publishes the candidate's exact bytes without rebuilding.
 const PROJECT_NAME = 'HeadsetControl-MacOSTray';
-const WORKFLOW_PATH = '.github/workflows/release.yml';
 const CANDIDATE_ARTIFACT = 'release-assets';
 const CHECKSUMS = 'SHA256SUMS';
 const CANDIDATE_MANIFEST = 'candidate.json';
@@ -150,7 +149,7 @@ async function checkCandidateSource(github, repo, { event, ref, defaultBranch, r
     throw new Error(`${tag} already exists; bump MARKETING_VERSION before building a new candidate`);
 }
 
-// Records the verified candidate next to its archive. Stage 2 never regenerates these files.
+// Records the verified candidate next to its archive. Publication never regenerates these files.
 function writeCandidate(directory, { version, commit, runID, runAttempt, repository }) {
     if (Number(runAttempt) !== 1) throw new Error('Start a new manual workflow run instead of rerunning a candidate');
     const names = fs.readdirSync(directory);
@@ -170,26 +169,20 @@ function candidateSummary({ version, commit, runID, digest }) {
     return [
         '### Candidate ready for verification',
         '',
-        `After this run succeeds, download and test its complete \`${CANDIDATE_ARTIFACT}\` artifact.`,
+        `While this run waits for approval, download and test its complete \`${CANDIDATE_ARTIFACT}\` artifact.`,
         `It contains \`${ASSET_NAME}\` (\`${digest}\`), \`${CHECKSUMS}\` and \`${CANDIDATE_MANIFEST}\`.`,
         '',
-        'When satisfied, run these commands in your local checkout:',
-        '',
-        '```bash',
-        `git tag -a ${tag} ${commit} \\`,
-        `  -m "${PROJECT_NAME} ${version}" \\`,
-        `  -m "Candidate-Run: ${runID}"`,
-        '',
-        `git push origin ${tag}`,
-        '```',
+        'When satisfied, choose **Review deployments** on this run, select `release` and approve it.',
+        `Approval creates the annotated tag \`${tag}\` on \`${commit}\` with the message ` +
+            `\`${PROJECT_NAME} ${version}\` and \`Candidate-Run: ${runID}\`.`,
+        'The run then publishes these exact bytes without rebuilding and requests the Homebrew cask update.',
         '',
         `- Source commit: \`${commit}\``,
         `- Candidate run: \`${runID}\``,
-        `- The \`${CANDIDATE_ARTIFACT}\` artifact is retained for ${RETENTION_DAYS} days (subject to repository limits). ` +
-            'Push the tag before it expires; an expired candidate cannot be published.',
-        '- The tag publishes these exact bytes without rebuilding, then requests the Homebrew cask update.',
-        '- Only tag after you have tested and approved the artifact.',
-        '- For a different candidate, start a new manual workflow run. Do not rerun this run: reruns are rejected.',
+        `- The \`${CANDIDATE_ARTIFACT}\` artifact is retained for ${RETENTION_DAYS} days (subject to repository limits), ` +
+            'and an unanswered approval request fails after 30 days. An expired candidate cannot be published.',
+        '- Only approve after you have tested the artifact. Reject the deployment to discard this candidate.',
+        '- For a different candidate, start a new manual workflow run. Never use "Re-run all jobs": candidate reruns are rejected.',
         '',
     ].join('\n');
 }
@@ -202,64 +195,17 @@ function candidateRunID(message) {
     return Number(match[1]);
 }
 
-function verifyCandidateRun(run, { repository, commit, workflowID, defaultBranch }) {
-    const expected = {
-        'repository': [run.repository?.full_name, repository],
-        'head repository': [run.head_repository?.full_name, repository],
-        // The runs API may append "@<ref>" to the path; the ref itself is verified as the branch below.
-        'workflow path': [run.path?.split('@')[0], WORKFLOW_PATH],
-        'workflow ID': [run.workflow_id, workflowID],
-        'event': [run.event, 'workflow_dispatch'],
-        'branch': [run.head_branch, defaultBranch],
-        'status': [run.status, 'completed'],
-        'conclusion': [run.conclusion, 'success'],
-        // A rerun can replace artifacts under the same run ID; only a first attempt identifies tested bytes.
-        'run attempt': [run.run_attempt, 1],
-        'source commit': [run.head_sha, commit],
-    };
-    for (const [name, [actual, wanted]] of Object.entries(expected)) {
-        if (actual !== wanted) throw new Error(`Candidate run ${name} is ${JSON.stringify(actual)}; expected ${JSON.stringify(wanted)}`);
-    }
-}
-
-function selectCandidateArtifact(artifacts, { runID, commit }) {
-    const matches = artifacts.filter(artifact => artifact.name === CANDIDATE_ARTIFACT);
-    if (matches.length !== 1) throw new Error(`Candidate run must contain exactly one ${CANDIDATE_ARTIFACT} artifact`);
-    const [artifact] = matches;
-    if (artifact.expired) {
-        throw new Error(`Candidate ${CANDIDATE_ARTIFACT} has expired; start a new manual workflow run and tag that candidate`);
-    }
-    if (!(artifact.size_in_bytes > 0)) throw new Error(`Candidate ${CANDIDATE_ARTIFACT} is empty`);
-    if (artifact.workflow_run?.id !== runID || artifact.workflow_run?.head_sha !== commit) {
-        throw new Error(`Candidate ${CANDIDATE_ARTIFACT} does not belong to the verified run and commit`);
-    }
-    return artifact;
-}
-
-// Resolve tag → annotated tag object → Candidate-Run → workflow run → artifact using GitHub APIs only.
-async function resolveCandidate(github, repo, { tag, commit, currentRunID, defaultBranch }) {
+// Verify the tag created on approval: tag → annotated tag object → candidate commit and this run.
+async function verifyReleaseTag(github, repo, { tag, commit, runID }) {
     if (!/^v[0-9]+\.[0-9]+\.[0-9]+$/.test(tag || '')) throw new Error(`Unexpected release tag: ${tag}`);
     const { data: ref } = await github.rest.git.getRef({ ...repo, ref: `tags/${tag}` });
     if (ref.object?.type !== 'tag') throw new Error(`${tag} must be an annotated tag with a Candidate-Run line`);
     const { data: tagObject } = await github.rest.git.getTag({ ...repo, tag_sha: ref.object.sha });
     if (tagObject.tag !== tag || tagObject.object?.type !== 'commit' || tagObject.object.sha !== commit) {
-        throw new Error(`${tag} does not directly annotate the pushed commit ${commit}`);
+        throw new Error(`${tag} does not directly annotate the candidate commit ${commit}`);
     }
-    const runID = candidateRunID(tagObject.message);
-    const repository = `${repo.owner}/${repo.repo}`;
-    const { data: current } = await github.rest.actions.getWorkflowRun({ ...repo, run_id: currentRunID });
-    let run;
-    try {
-        ({ data: run } = await github.rest.actions.getWorkflowRun({ ...repo, run_id: runID }));
-    } catch (error) {
-        if (isNotFound(error)) throw new Error(`Candidate run ${runID} does not exist in ${repository}`);
-        throw error;
-    }
-    verifyCandidateRun(run, { repository, commit, workflowID: current.workflow_id, defaultBranch });
-    const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts,
-        { ...repo, run_id: runID, per_page: 100 });
-    const artifact = selectCandidateArtifact(artifacts, { runID, commit });
-    return { runID, artifactID: artifact.id };
+    const taggedRunID = candidateRunID(tagObject.message);
+    if (taggedRunID !== Number(runID)) throw new Error(`${tag} names candidate run ${taggedRunID}, not this run ${runID}`);
 }
 
 // Verify downloaded candidate files against the manifests recorded by the candidate run.
@@ -285,4 +231,4 @@ function verifyCandidateFiles(directory, { tag, commit, runID, repository }) {
 
 module.exports = { ASSET_NAME, CANDIDATE_ARTIFACT, CHECKSUMS, CANDIDATE_MANIFEST, sha256, validateArchive,
     prepareRelease, publishRelease, requestCaskUpdate, checkCandidateSource, writeCandidate, candidateSummary,
-    candidateRunID, verifyCandidateRun, selectCandidateArtifact, resolveCandidate, verifyCandidateFiles };
+    candidateRunID, verifyReleaseTag, verifyCandidateFiles };

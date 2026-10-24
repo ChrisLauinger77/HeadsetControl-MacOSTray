@@ -61,10 +61,11 @@ The app sandbox is disabled because headset/HID access is required.
 
 ## Release Workflow
 
-Releases use two stages (see `docs/release-safety.md`): a manual **Release**
-workflow run on `main` builds and retains a tested candidate; an annotated
-`vX.Y.Z` tag naming that run publishes the candidate's exact bytes without
-rebuilding.
+Releases use one gated run (see `docs/release-safety.md`): a manual **Release**
+workflow run on `main` builds and retains a tested candidate, then waits for
+approval of the `release` environment. Approval makes the same run create the
+annotated `vX.Y.Z` tag naming that run and publish the candidate's exact bytes
+without rebuilding.
 
 When asked to create release `X.Y.Z`, update both `MARKETING_VERSION` entries in
 `HeadsetControl-MacOSTray.xcodeproj/project.pbxproj` to `X.Y.Z`. Do not manually
@@ -77,11 +78,11 @@ git push
 gh workflow run release.yml --ref main
 ```
 
-Stop there. The maintainer must download and test the `release-assets` artifact.
-Only after their approval, run the exact `git tag -a ... -m "Candidate-Run: <id>"`
-and `git push origin vX.Y.Z` commands from that run's job summary. Never use a
-lightweight tag, tag local `HEAD` instead of the summary's commit, or rerun an
-old candidate run; build a new candidate instead. Candidates expire after 30 days.
+Stop there. The maintainer downloads and tests the `release-assets` artifact while
+the run waits, then approves the `release` deployment themselves. Never approve
+or reject the deployment, create or push release tags manually, or use “Re-run
+all jobs” on a candidate run; build a new candidate instead. Candidates and
+pending approvals expire after 30 days.
 
 ## Architecture Notes
 
