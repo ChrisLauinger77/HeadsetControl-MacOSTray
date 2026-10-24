@@ -4,7 +4,7 @@
   "xcode": {"version": "26.3", "build": "17C529"},
   "headsetcontrol": {
     "repository": "https://github.com/Sapd/HeadsetControl.git",
-    "revision": "8a859eed2862a92cf89612befd481bfb8ae62eaa",
+    "revision": "2c6790b63ae8220f7b35d7439cd9ea165ca58751",
     "version": "4.2.0",
     "channel": "snapshot"
   },
