@@ -204,3 +204,6 @@
 "Reset to Neutral" = "Reset to Neutral";
 "Save Curve" = "Save Curve";
 "Use finite values within the device’s ranges and gain step." = "Use finite values within the device’s ranges and gain step.";
+"Light Colors" = "Light Colors";
+"Colors offered in the Lights menu on headsets that support them. Choosing one also turns the lights on; black may turn them off." = "Colors offered in the Lights menu on headsets that support them. Choosing one also turns the lights on; black may turn them off.";
+"Color %d:" = "Color %d:";

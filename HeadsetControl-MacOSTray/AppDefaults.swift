@@ -24,6 +24,8 @@ nonisolated enum AppDefaults {
     static let bluetoothCallVolumeValues = [0, 25, 50, 75, 100]
     static let bluetoothCallVolumeRange = 0...100
     static let bluetoothCallVolumePresetRange = -1...100
+    static let lightColorKeys = ["lightColor1", "lightColor2", "lightColor3", "lightColor4"]
+    static let lightColorValues = [0xFFFFFF, 0xFF0000, 0x00FF00, 0x0000FF]
     static let updateInterval = 600
     static let updateIntervalRange = 60...3600
     static let snapshotFreshnessGrace: TimeInterval = 60
@@ -75,6 +77,7 @@ nonisolated enum AppDefaults {
         for (key, value) in zip(headsetVolumeKeys, headsetVolumeValues) { values[key] = value }
         for (key, value) in zip(microphoneVolumeKeys, microphoneVolumeValues) { values[key] = value }
         for (key, value) in zip(bluetoothCallVolumeKeys, bluetoothCallVolumeValues) { values[key] = value }
+        for (key, value) in zip(lightColorKeys, lightColorValues) { values[key] = value }
         store.register(defaults: values)
         validate(in: store)
     }
@@ -103,6 +106,9 @@ nonisolated enum AppDefaults {
         for (key, fallback) in zip(bluetoothCallVolumeKeys, bluetoothCallVolumeValues) {
             repair(key, value: validatedLevelPreset(store.object(forKey: key), range: bluetoothCallVolumePresetRange, fallback: fallback), in: store)
         }
+        for (key, fallback) in zip(lightColorKeys, lightColorValues) {
+            repair(key, value: validatedLightColor(store.object(forKey: key), fallback: fallback), in: store)
+        }
     }
 
     static func validatedUpdateInterval(_ value: Any?) -> Int {
@@ -123,6 +129,14 @@ nonisolated enum AppDefaults {
 
     static func validatedLevelPreset(_ value: Any?, range: ClosedRange<Int>, fallback: Int) -> Int {
         boundedInteger(value, range: range, fallback: fallback)
+    }
+
+    // Clamping a packed color would turn a bad value into an unrelated color,
+    // so anything that is not a whole 0xRRGGBB value restores the preset.
+    static func validatedLightColor(_ value: Any?, fallback: Int) -> Int {
+        guard let number = finiteNumber(value), number.rounded() == number,
+              Double(HeadsetLightColor.rgbRange.lowerBound)...Double(HeadsetLightColor.rgbRange.upperBound) ~= number else { return fallback }
+        return Int(number)
     }
 
     static func isSupportedTestProfile(_ profile: Int) -> Bool {

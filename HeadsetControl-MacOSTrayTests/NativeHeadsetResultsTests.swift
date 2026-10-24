@@ -83,6 +83,21 @@ final class NativeHeadsetResultsTests: XCTestCase {
         await fulfillment(of: [done], timeout: 5)
     }
 
+    func testNativeLightColorWritesPreserveUpstreamProfileBehavior() async {
+        await verifyNativeWrites([0x000000, 0xFF0000, 0x12AB3F, 0xFFFFFF].map { .lightColor(HeadsetLightColor(rgb: $0)) })
+    }
+
+    func testNativeLightColorIsUnsupportedOnTheLimitedProfile() async {
+        let done = expectation(description: "limited profile light color finishes")
+        HeadsetIOWorker.shared.enqueue {
+            let service = HeadsetControlService()
+            let result = service.perform(.lightColor(HeadsetLightColor(rgb: 0xFF0000)), on: .test(profile: 10), testProfile: 10)
+            XCTAssertEqual(result.failureValue?.kind, .native(HSC_RESULT_NOT_SUPPORTED.rawValue))
+            done.fulfill()
+        }
+        await fulfillment(of: [done], timeout: 5)
+    }
+
     func testNativeMicrophoneVolumeClampsBeforeCallingTheLibrary() async {
         await verifyNativeWrites([Int.min, -1, 0, 64, 128, 129, Int.max].map(HeadsetCommand.microphoneVolume))
     }
