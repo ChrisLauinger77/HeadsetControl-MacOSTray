@@ -16,7 +16,7 @@ const validate = (data, actualTag) => {
 
 // Stateful fake models persisted server state across failed requests and reruns.
 function server() {
-    const state = { releases: [], assets: [], mutations: [], uploadFailure: null,
+    const state = { releases: [], assets: [], mutations: [], publicationRequests: [], uploadFailure: null,
         publishFailure: false, dispatchFailure: false };
     const repos = {
         listReleases: async () => ({ data: structuredClone(state.releases) }),
@@ -39,6 +39,7 @@ function server() {
         },
         updateRelease: async request => {
             state.mutations.push('publish');
+            state.publicationRequests.push(structuredClone(request));
             Object.assign(state.releases[0], request);
             if (state.publishFailure) throw new Error('publish response lost');
             return { data: structuredClone(state.releases[0]) };
@@ -79,6 +80,29 @@ test('first publication verifies upload before publishing', async t => {
     assert.equal(result.digest, sha256(bytes));
     assert.equal(state.releases[0].draft, false);
     assert.deepEqual(state.mutations, ['create', 'upload', 'publish']);
+    assert.deepEqual(state.publicationRequests, [{ ...repo, release_id: 1, draft: false, make_latest: 'legacy' }]);
+});
+
+test('an older candidate delegates latest selection to GitHub when a newer release already exists', async t => {
+    const state = server();
+    const file = archive(t);
+    const { releaseID } = await prepareRelease(state.github, repo, tag);
+    // A different candidate can publish while this one waits for approval or uploads.
+    const newer = { id: 2, tag_name: 'v3.10.0', draft: false, name: 'Newer release' };
+    const upload = state.github.rest.repos.uploadReleaseAsset;
+    state.github.rest.repos.uploadReleaseAsset = async request => {
+        const result = await upload(request);
+        state.releases.push(structuredClone(newer));
+        return result;
+    };
+    await publishRelease(state.github, repo, { tag, releaseID, archivePath: file, expectedDigest: sha256(bytes) }, validate);
+    // This selects GitHub's atomic version/date ordering, rather than promoting the
+    // older candidate with the API default or racing a client-side latest lookup.
+    assert.equal(state.publicationRequests[0].make_latest, 'legacy');
+    assert.deepEqual(state.releases[1], newer);
+    state.publicationRequests = [];
+    await run(state);
+    assert.deepEqual(state.publicationRequests, [], 'a retry never changes latest selection again');
 });
 
 test('existing draft is reused without changing its title or notes', async t => {

@@ -179,40 +179,23 @@ jobs:
       contents: write
 
     steps:
-      # Credentials stay persisted so this job can push the tag with GITHUB_TOKEN.
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Create and push annotated release tag
+      - name: Create or verify annotated release tag
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           TAG: ${{ needs.validate.outputs.tag }}
-          VERSION: ${{ needs.validate.outputs.version }}
           SOURCE_SHA: ${{ needs.validate.outputs.sha }}
-          CANDIDATE_RUN_ID: ${{ github.run_id }}
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898283+github-actions[bot]@users.noreply.github.com'
-          if git rev-parse --quiet --verify "refs/tags/$TAG" > /dev/null; then
-            echo "::error::$TAG already exists locally; nothing was tagged or published"
-            exit 1
-          fi
-          # ls-remote exits 2 when the tag is absent; any other failure must not look like absence.
-          remote=0
-          git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null || remote=$?
-          if [ "$remote" -eq 0 ]; then
-            echo "::error::$TAG already exists on origin; nothing was tagged or published"
-            exit 1
-          elif [ "$remote" -ne 2 ]; then
-            echo "::error::Could not check origin for $TAG (git ls-remote exited $remote)"
-            exit 1
-          fi
-          git tag -a "$TAG" "$SOURCE_SHA" \
-            -m "HeadsetControl-MacOSTray $VERSION" \
-            -m "Candidate-Run: $CANDIDATE_RUN_ID"
-          # Tags pushed with GITHUB_TOKEN do not trigger workflow runs.
-          git push origin "refs/tags/$TAG"
+        with:
+          script: |
+            const { ensureReleaseTag } = require('./scripts/release.cjs');
+            // Tags created with GITHUB_TOKEN do not trigger workflow runs.
+            await ensureReleaseTag(github, context.repo, { tag: process.env.TAG,
+              commit: process.env.SOURCE_SHA, runID: context.runId });
+            core.info(`Verified approved tag ${process.env.TAG} for this candidate run`);
 
   publish:
     needs: [validate, approve-and-tag]

@@ -37,10 +37,12 @@ the waiting run and test it. When satisfied, open the run, choose **Review
 deployments**, select `release` and approve. To discard the candidate, reject the
 deployment instead.
 
-On approval, `approve-and-tag` checks out the repository as `github-actions[bot]`
-and fails without tagging if `vX.Y.Z` already exists locally or on `origin`.
-Otherwise it creates and pushes only that annotated tag on the validated source
-commit (not the current `main`), equivalent to:
+On approval, `approve-and-tag` creates the annotated tag as `github-actions[bot]`
+using the GitHub API. An existing tag is reused only if it directly annotates the
+validated source commit and has exactly one `Candidate-Run` line naming this run.
+A lightweight tag, another commit or another candidate run fails without changing
+the existing tag. A new tag names the validated source commit (not the current
+`main`), equivalent to:
 
 ```bash
 git tag -a v3.2.2 <validated source commit> \
@@ -50,7 +52,7 @@ git tag -a v3.2.2 <validated source commit> \
 git push origin refs/tags/v3.2.2
 ```
 
-The tag is pushed with `GITHUB_TOKEN`, which does not start another workflow run.
+The tag is created with `GITHUB_TOKEN`, which does not start another workflow run.
 Do not create or push release tags manually; a manually pushed tag publishes
 nothing.
 
@@ -92,6 +94,15 @@ its bytes match the candidate. There is no asset deletion or replacement
 operation. Ambiguous releases and existing prereleases require maintainer
 inspection.
 
+Publication explicitly uses [GitHub's `make_latest: legacy` policy](https://docs.github.com/en/rest/releases/releases#update-a-release), which orders
+releases by version and date instead of promoting whichever candidate is approved
+last. If an older candidate is approved after a newer release, the older version
+can still be published without replacing the newer latest release. GitHub applies
+this ordering when publishing, so there is no client-side latest-lookup race.
+Published-release retries only verify existing bytes and do not change this policy.
+The Homebrew updater follows the latest release, so the older publication does not
+downgrade the cask.
+
 After successful publication, `request-cask-update` dispatches `update-cask` for
 `headsetcontrol-macostray` to `ChrisLauinger77/homebrew-cask` using
 `PACKAGE_REPOSITORIES_TOKEN`. It never runs for candidates.
@@ -107,12 +118,13 @@ rerun.
 - **Approval rejected or timed out:** nothing was tagged or published. Start a new
   manual run, or use “Re-run failed jobs” to request approval for the same
   candidate again while its artifact is retained.
-- **Tag already exists when approving:** nothing was tagged or published. Another
-  candidate or a manual push already created `vX.Y.Z`. Bump `MARKETING_VERSION`
-  and build a new candidate, or delete the unpublished tag on `origin` and use
-  “Re-run failed jobs”.
-- **Tag push failed:** nothing was published. Fix the cause and use “Re-run failed
-  jobs”; approval is requested again.
+- **Tag already exists when approving:** a matching annotation for this commit and
+  candidate run is verified and reused. A conflicting tag fails without publication;
+  inspect it, then bump `MARKETING_VERSION` and build a new candidate, or explicitly
+  resolve the unpublished conflicting tag before using “Re-run failed jobs”.
+- **Tag creation failed or its response was lost:** use “Re-run failed jobs”;
+  approval is requested again. If the reference was stored, it is verified and
+  reused. Otherwise a new annotated tag is created. No tag is deleted or replaced.
 - **Tag rejected by `publish` (not annotated, wrong commit or run):** nothing was
   published. Delete the tag on `origin`, then re-run the `approve-and-tag` job
   (which also reruns `publish`) to recreate it after a new approval.
@@ -148,9 +160,11 @@ python3 -B -m unittest discover -s scripts/tests -p 'test_*.py' -v
 
 `scripts/tests/candidate.test.cjs` covers candidate source checks, the approval
 summary, tag/trailer parsing and verification, and checksum/manifest checks with
-a mocked GitHub API. `scripts/tests/test_native_contract.py` checks the workflow's
+a mocked GitHub API, including lost tag-reference responses and conflicting tags.
+`scripts/tests/test_native_contract.py` checks the workflow's
 job order, approval gate and permissions. `scripts/tests/release.test.cjs` covers the resumable
-publisher and exact-byte publication. The macOS fixtures compile small
+publisher, exact-byte publication and the latest-release policy when another
+candidate publishes first. The macOS fixtures compile small
 arm64/x86_64 executables and exercise the actual `ditto`, `lipo`, and `codesign`
 packaging path. None of these tests use headsets, GitHub credentials or real
 releases. CI and every candidate run execute them.

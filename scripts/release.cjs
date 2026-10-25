@@ -112,7 +112,9 @@ async function publishRelease(github, repo, { tag, releaseID, archivePath, expec
     const digest = await verifyAsset(github, repo, asset, tag, candidate, validate);
     release = await getRelease();
     if (release.draft) {
-        await github.rest.repos.updateRelease({ ...repo, release_id: releaseID, draft: false });
+        // Let GitHub order releases by version/date at publication time, including
+        // candidates approved out of order. The default promotes any new publication.
+        await github.rest.repos.updateRelease({ ...repo, release_id: releaseID, draft: false, make_latest: 'legacy' });
     }
     // A lost publish response is recovered by a later read, never by replacing assets.
     return { releaseID, digest, reusedPublishedRelease: false };
@@ -195,6 +197,28 @@ function candidateRunID(message) {
     return Number(match[1]);
 }
 
+// Reconcile a lost tag-creation response without replacing any existing reference.
+async function ensureReleaseTag(github, repo, { tag, commit, runID }) {
+    if (!/^v[0-9]+\.[0-9]+\.[0-9]+$/.test(tag || '')) throw new Error(`Unexpected release tag: ${tag}`);
+    if (!/^[a-f0-9]{40}$/.test(commit || '') || !/^[1-9][0-9]*$/.test(String(runID)) ||
+        !Number.isSafeInteger(Number(runID))) {
+        throw new Error('Release tagging requires a full commit SHA and a positive candidate run ID');
+    }
+    try {
+        await github.rest.git.getRef({ ...repo, ref: `tags/${tag}` });
+    } catch (error) {
+        // Authentication and transport failures must never be mistaken for absence.
+        if (!isNotFound(error)) throw error;
+        const { data: annotation } = await github.rest.git.createTag({ ...repo, tag,
+            message: `${PROJECT_NAME} ${tag.slice(1)}\n\nCandidate-Run: ${runID}\n`,
+            object: commit, type: 'commit',
+            tagger: { name: 'github-actions[bot]', email: '41898283+github-actions[bot]@users.noreply.github.com' } });
+        // Create only: a concurrent/conflicting tag must never be updated or deleted.
+        await github.rest.git.createRef({ ...repo, ref: `refs/tags/${tag}`, sha: annotation.sha });
+    }
+    await verifyReleaseTag(github, repo, { tag, commit, runID });
+}
+
 // Verify the tag created on approval: tag → annotated tag object → candidate commit and this run.
 async function verifyReleaseTag(github, repo, { tag, commit, runID }) {
     if (!/^v[0-9]+\.[0-9]+\.[0-9]+$/.test(tag || '')) throw new Error(`Unexpected release tag: ${tag}`);
@@ -231,4 +255,4 @@ function verifyCandidateFiles(directory, { tag, commit, runID, repository }) {
 
 module.exports = { ASSET_NAME, CANDIDATE_ARTIFACT, CHECKSUMS, CANDIDATE_MANIFEST, sha256, validateArchive,
     prepareRelease, publishRelease, requestCaskUpdate, checkCandidateSource, writeCandidate, candidateSummary,
-    candidateRunID, verifyReleaseTag, verifyCandidateFiles };
+    candidateRunID, ensureReleaseTag, verifyReleaseTag, verifyCandidateFiles };

@@ -224,12 +224,11 @@ class NativeContractTests(unittest.TestCase):
         self.assertIn("environment: release", approval)
         self.assertIn("contents: write", approval)
         self.assertNotIn("secrets.", approval)
-        for value in ("needs.validate.outputs.tag", "needs.validate.outputs.version",
-                      "needs.validate.outputs.sha", "github.run_id"):
+        for value in ("needs.validate.outputs.tag", "needs.validate.outputs.sha", "context.runId"):
             self.assertIn(value, approval)
-        self.assertIn('-m "Candidate-Run: $CANDIDATE_RUN_ID"', approval)
-        self.assertIn('git push origin "refs/tags/$TAG"', approval)
-        script = approval.split("        run: |\n", 1)[1]
+        self.assertIn("persist-credentials: false", approval)
+        self.assertIn("ensureReleaseTag", approval)
+        script = approval.split("          script: |\n", 1)[1]
         self.assertNotIn("${{", script)
         # Publication waits for the tag, reuses this run's candidate and never rebuilds it.
         self.assertIn("needs: [validate, approve-and-tag]", jobs["publish"])

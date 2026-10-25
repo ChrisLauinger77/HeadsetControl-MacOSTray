@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { ASSET_NAME, CHECKSUMS, CANDIDATE_MANIFEST, sha256, checkCandidateSource, writeCandidate,
-    candidateSummary, candidateRunID, verifyReleaseTag, verifyCandidateFiles } = require('../release.cjs');
+    candidateSummary, candidateRunID, ensureReleaseTag, verifyReleaseTag, verifyCandidateFiles } = require('../release.cjs');
 
 const repo = { owner: 'owner', repo: 'app' };
 const repository = 'owner/app';
@@ -56,6 +56,46 @@ function api(change = () => {}) {
 
 const verify = state => verifyReleaseTag(state.github, repo, { tag, commit, runID });
 const source = { event: 'workflow_dispatch', ref: 'refs/heads/main', defaultBranch: 'main', runAttempt: '1', version: '3.2.2' };
+
+// Persist tag objects and references independently, including lost write responses.
+function tagServer() {
+    const state = { ref: null, annotations: new Map(), mutations: [], readFailure: null, referenceFailure: null };
+    state.github = { rest: { git: {
+        getRef: async request => {
+            assert.equal(request.ref, `tags/${tag}`);
+            if (state.readFailure) throw state.readFailure;
+            if (!state.ref) throw notFound();
+            return { data: structuredClone(state.ref) };
+        },
+        getTag: async ({ tag_sha }) => {
+            const annotation = state.annotations.get(tag_sha);
+            if (!annotation) throw notFound();
+            return { data: structuredClone(annotation) };
+        },
+        createTag: async request => {
+            state.mutations.push('annotation');
+            const sha = `annotation-${state.annotations.size + 1}`;
+            const annotation = { sha, tag: request.tag, message: request.message, tagger: request.tagger,
+                object: { type: request.type, sha: request.object } };
+            state.annotations.set(sha, annotation);
+            return { data: structuredClone(annotation) };
+        },
+        createRef: async request => {
+            state.mutations.push('reference');
+            assert.equal(request.ref, `refs/tags/${tag}`);
+            if (state.ref) throw Object.assign(new Error('Reference already exists'), { status: 422 });
+            if (state.referenceFailure === 'before') throw new Error('connection lost');
+            state.ref = { object: { type: 'tag', sha: request.sha } };
+            if (state.referenceFailure === 'after') throw new Error('connection lost');
+            return { data: structuredClone(state.ref) };
+        },
+        updateRef: async () => assert.fail('release tags must never be replaced'),
+        deleteRef: async () => assert.fail('release tags must never be deleted'),
+    } } };
+    return state;
+}
+
+const ensureTag = state => ensureReleaseTag(state.github, repo, { tag, commit, runID });
 
 test('candidate source yields the unreleased tag from the project version', async () => {
     assert.equal(await checkCandidateSource(api(state => { state.existingTags = ['tags/v0.0.1']; }).github, repo, source), tag);
@@ -133,11 +173,82 @@ test('tag and trailer problems reject publication', async () => {
         [state => { state.tag.message = 'Candidate-Run: latest'; }, /Invalid candidate run ID/],
         [state => { state.tag.message = 'Candidate-Run: 1234'; }, /names candidate run 1234, not this run 4242/],
     ];
-    for (const [change, message] of cases) await assert.rejects(verify(api(change)), message);
+    for (const [change, message] of cases) {
+        await assert.rejects(verify(api(change)), message);
+        await assert.rejects(ensureTag(api(change)), message);
+    }
     await assert.rejects(verifyReleaseTag(api().github, repo, { tag: 'release-3.2.2', commit, runID }),
         /Unexpected release tag/);
     await assert.rejects(verifyReleaseTag(api(state => { state.existingTags = ['tags/v0.0.1']; }).github, repo,
         { tag, commit, runID }), /Not Found/);
+});
+
+test('approval creates an annotated tag and reuses only this run and commit', async () => {
+    const state = tagServer();
+    await ensureTag(state);
+    const annotation = state.annotations.get(state.ref.object.sha);
+    assert.equal(annotation.tag, tag);
+    assert.deepEqual(annotation.object, { type: 'commit', sha: commit });
+    assert.equal(candidateRunID(annotation.message), runID);
+    assert.match(annotation.message, /^HeadsetControl-MacOSTray 3\.2\.2\n/);
+    assert.equal(annotation.tagger.name, 'github-actions[bot]');
+    const ref = structuredClone(state.ref);
+    await ensureTag(state);
+    assert.deepEqual(state.ref, ref);
+    assert.deepEqual(state.mutations, ['annotation', 'reference']);
+});
+
+for (const failure of ['before', 'after']) {
+    test(`tag reference failure (${failure}) resumes without deleting or replacing a tag`, async () => {
+        const state = tagServer();
+        state.referenceFailure = failure;
+        await assert.rejects(ensureTag(state), /connection lost/);
+        const ref = structuredClone(state.ref);
+        state.referenceFailure = null;
+        await ensureTag(state);
+        await verify(state);
+        if (failure === 'after') {
+            assert.deepEqual(state.ref, ref);
+            assert.deepEqual(state.mutations, ['annotation', 'reference']);
+        } else {
+            assert.deepEqual(state.mutations, ['annotation', 'reference', 'annotation', 'reference']);
+        }
+    });
+}
+
+test('tag lookup errors never create a release tag', async () => {
+    for (const status of [403, 429, 503]) {
+        const state = tagServer();
+        state.readFailure = Object.assign(new Error('lookup failed'), { status });
+        await assert.rejects(ensureTag(state), /lookup failed/);
+        assert.deepEqual(state.mutations, []);
+    }
+});
+
+test('a competing tag created during approval is not replaced', async () => {
+    const state = tagServer();
+    const create = state.github.rest.git.createRef;
+    state.github.rest.git.createRef = async request => {
+        state.annotations.set('competing', { tag, object: { type: 'commit', sha: commit },
+            message: 'Candidate-Run: 1234' });
+        state.ref = { object: { type: 'tag', sha: 'competing' } };
+        return create(request);
+    };
+    await assert.rejects(ensureTag(state), /Reference already exists/);
+    const ref = structuredClone(state.ref);
+    await assert.rejects(ensureTag(state), /names candidate run 1234/);
+    assert.deepEqual(state.ref, ref);
+    assert.deepEqual(state.mutations, ['annotation', 'reference']);
+});
+
+test('invalid tagging inputs fail before tag creation', async () => {
+    for (const change of [{ tag: 'v3.2' }, { commit: 'HEAD' }, { runID: 0 }, { runID: 'bad' },
+        { runID: '0x10' }, { runID: '01' }, { runID: Number.MAX_SAFE_INTEGER + 1 }]) {
+        const state = tagServer();
+        await assert.rejects(ensureReleaseTag(state.github, repo, { tag, commit, runID, ...change }),
+            /Unexpected release tag|full commit SHA/);
+        assert.deepEqual(state.mutations, []);
+    }
 });
 
 const expected = { tag, commit, runID, repository };
