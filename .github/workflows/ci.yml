@@ -8,6 +8,8 @@ on:
       - "**/*.md"
       - "LICENSE"
   workflow_dispatch:
+  schedule:
+    - cron: '0 0 1 * *'
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
