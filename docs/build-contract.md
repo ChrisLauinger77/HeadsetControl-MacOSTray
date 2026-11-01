@@ -143,6 +143,11 @@ The runner currently has a different 27.2 build than the local final release
 GitHub provides it; a runner update must never silently change the pinned build.
 Local 27B52 checks use `--audit-toolchain` and produce no publishable artifacts.
 
+The helper resolves the macOS SDK explicitly from the selected Xcode, uses it
+for CMake, SwiftPM and Xcode builds, and records that SDK’s version in provenance.
+It overrides an inherited `SDKROOT`, so a runner’s Command Line Tools SDK cannot
+silently replace the build SDK or break provenance recording.
+
 The helper verifies its version **and build number**, failing instead of falling
 back to whatever Xcode is the runner default. CMake remains a build tool supplied
 by the environment; it does not resolve native source versions. This contract

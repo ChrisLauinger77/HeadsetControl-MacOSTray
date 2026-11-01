@@ -43,6 +43,7 @@ def test_triple(arch):
 
 def swift_tests(swift, work, prefix, arch, configuration, environment, *, skip_build=False, filter=None):
     settings = ["--configuration", configuration, "--triple", test_triple(arch),
+                "--sdk", run("xcrun", "--sdk", "macosx", "--show-sdk-path"),
                 "--scratch-path", work / ("swift-" + arch)]
     linking = ["-Xcc", f"-I{prefix}/include",
                "-Xlinker", prefix / "lib/libheadsetcontrol.a",
@@ -108,7 +109,7 @@ int main(void) {
     return 0;
 }
 ''')
-    command(compiler, "-isysroot", run("xcrun", "--show-sdk-path"),
+    command(compiler, "-isysroot", run("xcrun", "--sdk", "macosx", "--show-sdk-path"),
             "-arch", arch, f"-mmacosx-version-min={CONTRACT['macos']}",
             f"-I{prefix}/include", code, prefix / "lib/libheadsetcontrol.a",
             prefix / "lib/libhidapi.a", "-lc++", "-framework", "IOKit",
@@ -133,6 +134,11 @@ def build(args):
              "build": xcode_lines[1].removeprefix("Build version ")}
     if xcode != CONTRACT["xcode"] and not args.audit_toolchain:
         raise ValueError(f"Expected Xcode {CONTRACT['xcode']}; selected {xcode}")
+    sdk = run("xcrun", "--sdk", "macosx", "--show-sdk-path")
+    sdk_version = run("xcrun", "--sdk", "macosx", "--show-sdk-version")
+    # Runner images may export a Command Line Tools SDKROOT. All child tools,
+    # including xcrun tool discovery, must use the selected Xcode's macOS SDK.
+    os.environ["SDKROOT"] = sdk
     if run("git", "-C", ROOT, "status", "--porcelain", "--untracked-files=all") and not args.audit_toolchain:
         raise ValueError("Release provenance requires a clean application checkout")
     revision = run("git", "-C", ROOT, "rev-parse", "HEAD")
@@ -143,6 +149,7 @@ def build(args):
     compiler = run("xcrun", "--find", "clang")
     cxx = run("xcrun", "--find", "clang++")
     common = ["-DCMAKE_BUILD_TYPE=Release", f"-DCMAKE_OSX_ARCHITECTURES={arch}",
+              f"-DCMAKE_OSX_SYSROOT={sdk}",
               f"-DCMAKE_OSX_DEPLOYMENT_TARGET={CONTRACT['macos']}",
               f"-DCMAKE_C_COMPILER={compiler}", "-DCMAKE_C_FLAGS=-Werror=unguarded-availability-new"]
     hid_build = work / ("hid-" + arch)
@@ -182,6 +189,7 @@ def build(args):
     if args.build_number is not None:
         xcode_settings.append(f"CURRENT_PROJECT_VERSION={args.build_number}")
     command("xcodebuild", "-scheme", "HeadsetControl-MacOSTray",
+            "-sdk", "macosx",
             "-project", ROOT / "HeadsetControl-MacOSTray.xcodeproj", "-configuration", "Release",
             "-destination", "platform=macOS", "-derivedDataPath", derived,
             *xcode_settings, "build")
@@ -196,7 +204,7 @@ def build(args):
         "schema": PROVENANCE_SCHEMA, "application_revision": revision,
         **{key: CONTRACT[key] for key in ("headsetcontrol", "hidapi", "macos")},
         "xcode": xcode, "swift": run("xcrun", "swift", "--version").splitlines()[0],
-        "clang": run("xcrun", "clang", "--version").splitlines()[0], "sdk": run("xcrun", "--show-sdk-version"),
+        "clang": run("xcrun", "clang", "--version").splitlines()[0], "sdk": sdk_version,
         "bundle": {key: plist[key] for key in keys},
         "slices": {arch: {"native": native,
                          "application": inspect(app / "Contents/MacOS/HeadsetControl-MacOSTray", arch, "app")}},
