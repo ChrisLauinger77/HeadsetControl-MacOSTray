@@ -1,12 +1,21 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    "helpers:pinGitHubActionDigests"
+  ],
   "labels": ["dependencies"],
   "assignees": ["ChrisLauinger77"],
   "reviewers": ["ChrisLauinger77"],
-  "dependencyDashboard": true,
   "prConcurrentLimit": 5,
-  "schedule": ["* * 1-7 * 6"],
+  "timezone": "Europe/Berlin",
+  "schedule": ["* * * * 6"],
+  "minimumReleaseAge": "3 days",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["* * 1-7 * 6"]
+  },
   "packageRules": [
     {
       "description": "Group non-major dependency updates",
@@ -21,6 +30,11 @@
     {
       "matchUpdateTypes": ["major"],
       "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Pinning only locks the commit already in use; no need to wait",
+      "matchUpdateTypes": ["pinDigest"],
+      "minimumReleaseAge": null
     }
   ]
 }

@@ -12,9 +12,7 @@ const tools = process.env.DEPENDENCY_TOOLS;
 const manager = config.customManagers.find(item => item.datasourceTemplate === 'github-releases');
 
 test('HeadsetControl uses official releases and retains digest pinning without automerge', () => {
-    assert.equal(config.automerge, false);
     assert.ok(config.extends.includes('github>ChrisLauinger77/ChrisLauinger77//renovate-config/default'));
-    assert.ok(config.extends.includes('helpers:pinGitHubActionDigests'));
     assert.equal(manager.versioningTemplate, 'semver');
     assert.deepEqual(manager.managerFilePatterns, ['/^build-contract\\.json$/']);
     const pinRule = config.packageRules.find(rule => rule.pinDigests);
@@ -75,7 +73,7 @@ function loadRenovate() {
         // Resolve the actual inherited preset chain offline, using a captured shared preset.
         // Built-in presets, config merging, extraction and rule matching come from CI's Renovate.
         // Source: ChrisLauinger77/ChrisLauinger77, renovate-config/default.json,
-        // Git blob 32f66217ea3d886281a7886c9bcb81c63b94f6fa (2026-09-06).
+        // Git blob bab8014ea1d5660faad2ae227712635ccbc1dfa7 (2026-10-30).
         const inherited = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/renovate-shared-preset.json'), 'utf8'));
         memory.init();
         memory.set('preset:github>ChrisLauinger77/ChrisLauinger77//renovate-config/default', inherited);
@@ -113,6 +111,7 @@ test('Renovate with inherited presets extracts only HeadsetControl from the cont
 
 test('Renovate rules allow only HeadsetControl release updates in the contract', { skip: !tools }, async () => {
     const { effective, applyPackageRules } = await loadRenovate();
+    assert.equal(effective.automerge, false);
     const apply = dep => applyPackageRules({ ...effective, packageFile: 'build-contract.json',
         manager: 'regex', datasource: 'github-releases', packageName: dep.depName, ...dep });
     for (const updateType of ['major', 'minor', 'patch']) {
