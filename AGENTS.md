@@ -67,8 +67,8 @@ approval of the `release` environment. Approval makes the same run create the
 annotated `vX.Y.Z` tag naming that run and publish the candidate's exact bytes
 without rebuilding.
 
-When asked to create release `X.Y.Z`, update both `MARKETING_VERSION` entries in
-`HeadsetControl-MacOSTray.xcodeproj/project.pbxproj` to `X.Y.Z`. Do not manually
+When asked to create release `X.Y.Z`, update the shared `MARKETING_VERSION` setting in
+`HeadsetControl-MacOSTray.xcodeproj/project.xcproj` to `X.Y.Z`. Do not manually
 change `CURRENT_PROJECT_VERSION`; the candidate run generates the build number.
 Commit and push the version change to `main`, then start the candidate run:
 

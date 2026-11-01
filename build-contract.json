@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "macos": "14.0",
-  "xcode": {"version": "26.3", "build": "17C529"},
+  "xcode": {"version": "27.2", "build": "27B48"},
   "headsetcontrol": {
     "repository": "https://github.com/Sapd/HeadsetControl.git",
     "revision": "7b760ddb29e4618f4229ab2936a4b009ab2e1fa0",

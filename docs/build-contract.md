@@ -9,7 +9,7 @@ compatibility declaration needs no change.
 
 Compilation and Mach-O inspection are evidence for this floor, **not proof of
 runtime correctness on macOS 14.0**. The local audit machine runs macOS 27 beta;
-neither local tests nor the macOS 15 CI runners execute on the oldest supported OS.
+neither local tests nor the macOS 27 CI build runners execute on the oldest supported OS.
 
 ## Compatibility audit before changing deployment targets
 
@@ -27,8 +27,8 @@ neither local tests nor the macOS 15 CI runners execute on the oldest supported 
 Before editing the project targets, both native libraries and both full Release
 applications were built with compiler deployment target 14.0 using the installed
 Xcode 27 beta. Their Mach-O deployment commands, load paths and defined
-headsetcontrol symbols were inspected. The repeatable release build uses Xcode
-26.3 instead and must pass the same checks in CI. Nothing uses `vtool` or
+headsetcontrol symbols were inspected. The repeatable release build now uses Xcode
+27.2 (build 27B48) and must pass the same checks in CI. Nothing uses `vtool` or
 `install_name_tool` to lower deployment metadata after compilation.
 
 ## Exact inputs and runtime model
@@ -37,11 +37,19 @@ headsetcontrol symbols were inspected. The repeatable release build uses Xcode
 
 | Input | Value |
 | --- | --- |
-| Xcode | 26.3, build 17C529 |
-| headsetcontrol | 4.1.0, commit `a6e15cc8bc701a9c4dab8ae4e33363f3040628e9` |
+| Xcode | 27.2 RC, build 27B48 |
+| headsetcontrol | 4.2.0 baseline, snapshot commit `7b760ddb29e4618f4229ab2936a4b009ab2e1fa0` |
 | HIDAPI | 0.15.0, commit `d6b2a974608dec3b76fb1e36c189f22b9cf3650c` |
 | Deployment target | macOS 14.0 for application, headsetcontrol and HIDAPI |
-| Architectures | arm64 and x86_64, built/tested on their native CI runners |
+| Architectures | arm64 and x86_64, built on Apple Silicon; Intel tests execute through Rosetta 2 |
+
+The `.xcodeproj` bundle stores its configuration in JSON `project.xcproj`.
+Xcode generated this file using `xcodebuild -convert-project "Xcode Project"`.
+Shared Debug/Release values appear once; differing values use `[config=...]`
+keys. The Python release and snapshot helpers share a reader that accepts
+Xcode's trailing commas, validates a consistent version in every configuration,
+and preserves unrelated bytes when incrementing the patch version. Application
+version and build number are unchanged by this format migration.
 
 ### HeadsetControl release and snapshot channels
 
@@ -63,8 +71,8 @@ prepare them using the existing helper's `--fetch-only` option while online.
 To select a snapshot, run **Actions → Update HeadsetControl snapshot → Run workflow**
 from the default branch. The workflow reads the repository URL from this contract,
 resolves HEAD once to a full SHA, and opens a PR changing only `revision` and
-`channel` in the contract while incrementing both project `MARKETING_VERSION`
-settings by one patch version. It also updates `BuildNumber.xcconfig` to the
+`channel` in the contract while incrementing the shared project `MARKETING_VERSION`
+setting by one patch version. It also updates `BuildNumber.xcconfig` to the
 workflow's creation time in `YYMMDD.hhmm` format using the `Europe/Berlin`
 timezone. Rerun attempts therefore reuse the same build number. The
 HeadsetControl baseline version is preserved.
@@ -91,7 +99,7 @@ remain in place. Only the `headsetcontrol` entry for `Sapd/HeadsetControl` is
 recognized by the contract's custom manager; a file-scoped rule also disables
 updates to all other contract entries. The macOS deployment floor, Xcode,
 HIDAPI version/linkage, schema and other metadata require manual changes.
-GitHub Actions runner-image updates (`github-runners`, including `macos-15`)
+GitHub Actions runner-image updates (`github-runners`, including `xcode-27`)
 are disabled separately: runner labels are detected by the built-in Actions
 manager, independently of the deployment floor. SHA-pinned `uses:` action
 references continue to receive normal reviewable updates.
@@ -117,9 +125,29 @@ one-time base comparison never permits a missing channel in a build or proposed
 contract. Channel metadata is copied into provenance and compared across both
 architectures as part of the complete HeadsetControl contract.
 
-Both [Apple Silicon](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md)
-and [Intel](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-Readme.md)
-runner inventories expose Xcode 26.3 at `/Applications/Xcode_26.3.app`.
+The [Xcode 27 Apple Silicon runner](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)
+provides Xcode 27.2 RC (27B48) at `/Applications/Xcode_27.2.app`.
+Both build jobs use `xcode-27`; the Intel job cross-compiles with the same Xcode
+and executes its x86_64 test binaries through Rosetta 2. The workflow ensures
+Rosetta is installed before building. SwiftPM receives an explicit target triple.
+For Intel, `swift build --build-tests`
+builds the XCTest bundle and `/usr/bin/arch -x86_64` launches the selected
+Xcode’s universal `xctest` runner, including the final embedded-provenance test.
+This avoids loading an Intel bundle into Xcode 27’s ARM-only SwiftPM helper.
+The repository’s test suite uses XCTest.
+There is no Xcode 27 Intel-host build job. Packaging and publication still use
+macOS 15 runners to check and assemble the already-built artifacts.
+
+The runner currently has a different 27.2 build than the local final release
+(27B52). Updating to that final release requires changing the contract once
+GitHub provides it; a runner update must never silently change the pinned build.
+Local 27B52 checks use `--audit-toolchain` and produce no publishable artifacts.
+
+The helper resolves the macOS SDK explicitly from the selected Xcode, uses it
+for CMake, SwiftPM and Xcode builds, and records that SDK’s version in provenance.
+It overrides an inherited `SDKROOT`, so a runner’s Command Line Tools SDK cannot
+silently replace the build SDK or break provenance recording.
+
 The helper verifies its version **and build number**, failing instead of falling
 back to whatever Xcode is the runner default. CMake remains a build tool supplied
 by the environment; it does not resolve native source versions. This contract
@@ -182,7 +210,7 @@ without provenance show the runtime versions without an inferred channel/SHA.
 The shared build helper also runs the Swift About reader against the completed
 bundle's provenance using tests linked to the same explicit archives. Missing or
 malformed metadata and runtime/provenance version mismatches fail that check on
-each native architecture, before archive creation. Final executable inspection
+both target architectures, before archive creation. Final executable inspection
 requires both version API symbols to be defined exactly once in each slice.
 
 Before `lipo`, packaging validates both thin inputs and compares all common
@@ -201,7 +229,7 @@ and ad-hoc signing. Final ZIP checksums protect the publication bytes.
 
 ## Building and testing
 
-CI validates both architecture builds and their ZIPs on the native runners, and
+CI validates both architecture builds and their ZIPs on the Xcode 27 runner, and
 executes the synthetic universal-packaging tests. These outputs stay on the
 runner; CI does not upload artifacts. The Release workflow transfers architecture
 archives between jobs, creates and verifies the universal app archive, and
@@ -210,20 +238,22 @@ retains the tested candidate for maintainer approval.
 Use a clean checkout, CMake, and the specified Xcode:
 
 ```sh
-export DEVELOPER_DIR=/Applications/Xcode_26.3.app/Contents/Developer
+export DEVELOPER_DIR=/Applications/Xcode_27.2.app/Contents/Developer
 export PYTHONDONTWRITEBYTECODE=1
 python3 -B scripts/build-native-app.py --workspace /tmp/headset-build --arch arm64
 ```
 
-Use `--arch x86_64` on an Intel runner. The same helper is called by CI and release.
-It stages dependencies in the workspace without modifying Homebrew, runs **Debug
-and Release `swift test`**, builds the Release app, writes provenance, signs, and
+Use `--arch x86_64` on Apple Silicon with Rosetta 2 installed. The same helper
+is called by CI and release.
+It stages dependencies in the workspace without modifying Homebrew, runs the
+**Debug and Release XCTest suites** (`swift test` on ARM, the explicit runner on
+Intel), builds the Release app, writes provenance, signs, and
 validates the architecture ZIP. Tests link the same explicit native archives as
 the application, with inherited `DYLD_*` variables removed. A hardware-free probe
 checks both native API version strings, verifies that HIDAPI resolves to the
 probe executable itself, and rejects any loaded HIDAPI dylib. The helper invokes
-the selected Swift toolchain directly. Existing deterministic and C-library
-profile tests remain intact.
+the selected Swift toolchain directly with the requested architecture’s triple.
+Existing deterministic and C-library profile tests remain intact.
 
 `--build-number` optionally overrides `CURRENT_PROJECT_VERSION` for the Xcode
 build without modifying `BuildNumber.xcconfig`. The release workflow generates

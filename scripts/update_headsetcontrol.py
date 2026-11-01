@@ -12,15 +12,9 @@ from urllib.parse import quote, urlencode
 from zoneinfo import ZoneInfo
 
 from dependency_channels import SHA, git, read_contract, validate_remote
+from xcode_project import PROJECT_PATH, bump_marketing_version
 
-PROJECT_PATH = "HeadsetControl-MacOSTray.xcodeproj/project.pbxproj"
 BUILD_NUMBER_PATH = "HeadsetControl-MacOSTray/BuildNumber.xcconfig"
-MARKETING_VERSION = re.compile(
-    r"^(?P<prefix>\s*MARKETING_VERSION\s*=\s*)"
-    r"(?P<major>0|[1-9][0-9]*)\.(?P<minor>0|[1-9][0-9]*)\.(?P<patch>0|[1-9][0-9]*)"
-    r"(?P<suffix>;\s*)$",
-    re.MULTILINE,
-)
 BUILD_NUMBER = re.compile(r"[0-9]{6}\.[0-9]{4}")
 
 
@@ -69,20 +63,6 @@ def snapshot_content(contents, revision):
     if count != 1 or read_contract(updated) != expected:
         raise ValueError("Snapshot update would change more than revision and channel")
     return updated
-
-
-def bump_marketing_version(contents):
-    matches = list(MARKETING_VERSION.finditer(contents))
-    versions = {(match["major"], match["minor"], match["patch"]) for match in matches}
-    if len(matches) != 2 or len(versions) != 1:
-        raise ValueError("Project must contain exactly two identical major.minor.patch MARKETING_VERSION values")
-    major, minor, patch = matches[0]["major"], matches[0]["minor"], matches[0]["patch"]
-    old_version = f"{major}.{minor}.{patch}"
-    new_version = f"{major}.{minor}.{int(patch) + 1}"
-    updated = MARKETING_VERSION.sub(
-        lambda match: match["prefix"] + new_version + match["suffix"], contents
-    )
-    return updated, old_version, new_version
 
 
 def update_build_number(contents, value):

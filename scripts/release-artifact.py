@@ -11,6 +11,7 @@ from pathlib import Path, PurePosixPath
 import zipfile
 
 from native_contract import ARCHES, ROOT, PROVENANCE, HIDAPI_LICENSE, compare_provenance, validate_executable, validate_provenance
+from xcode_project import marketing_version
 
 APP_NAME = "HeadsetControl-MacOSTray.app"
 EXECUTABLE = "HeadsetControl-MacOSTray"
@@ -111,12 +112,7 @@ def compare(actual, expected):
 
 
 def project_version(path, tag=None):
-    versions = set(re.findall(r'^\s*MARKETING_VERSION = ([^;]+);', Path(path).read_text(), re.MULTILINE))
-    if len(versions) != 1:
-        raise ValueError("Expected one consistent application marketing version in the Xcode project")
-    version = versions.pop().strip('"')
-    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
-        raise ValueError(f"Application marketing version {version!r} is not X.Y.Z")
+    version = marketing_version(Path(path).read_text())
     # Release candidates read the version before a tag exists; publication passes the tag.
     if tag is not None and tag != "v" + version:
         raise ValueError(f"Tag/version mismatch: {tag!r} does not match application version {version!r}")
