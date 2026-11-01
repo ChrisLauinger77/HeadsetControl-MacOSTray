@@ -147,6 +147,14 @@ final class NativeHeadsetResultsTests: XCTestCase {
             XCTAssertEqual(charging?.battery?.successValue?.chargeText, "⚡︎ 50%")
             XCTAssertEqual(charging?.battery?.successValue?.timeToFull, 60)
             XCTAssertNil(charging?.battery?.successValue?.timeToEmpty)
+            let chargingUnknownLevel = service.fetchDevices(testProfile: 8).successValue?.first
+            XCTAssertEqual(chargingUnknownLevel?.target, .test(profile: 8))
+            XCTAssertEqual(chargingUnknownLevel?.battery?.successValue?.status, .charging)
+            XCTAssertEqual(chargingUnknownLevel?.battery?.successValue?.level, -1)
+            XCTAssertNil(chargingUnknownLevel?.battery?.successValue?.percentage)
+            XCTAssertEqual(chargingUnknownLevel?.battery?.successValue?.chargeText, "⚡︎")
+            XCTAssertNil(chargingUnknownLevel?.battery?.successValue?.timeToFull)
+            XCTAssertNil(chargingUnknownLevel?.battery?.successValue?.timeToEmpty)
             let low = service.fetchDevices(testProfile: 7).successValue?.first
             XCTAssertEqual(low?.battery?.successValue?.percentage, 10)
             XCTAssertEqual(low?.battery?.successValue?.status, .available)
