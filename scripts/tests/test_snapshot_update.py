@@ -65,7 +65,7 @@ class FakeGitHub:
                                  "parents": [{"sha": p} for p in data["parents"]]}
             return {"sha": sha}
         if path == "git/refs":
-            assert data["ref"].startswith("refs/heads/codex/headsetcontrol-snapshot-")
+            assert data["ref"].startswith("refs/heads/automation/headsetcontrol-snapshot-")
             self.branch = data["sha"]
             return {}
         if path == "pulls":
@@ -102,7 +102,7 @@ class SnapshotUpdateTests(unittest.TestCase):
             validate.assert_called_once_with(expected, before)
             prs = [data for path, data in api.mutations if path == "pulls"]
             self.assertEqual(len(prs), 1)
-            self.assertEqual(prs[0]["head"], "codex/headsetcontrol-snapshot-" + "b" * 40 + "-v3.1.1")
+            self.assertEqual(prs[0]["head"], "automation/headsetcontrol-snapshot-" + "b" * 40 + "-v3.1.1")
             for text in ("4.1.0", "a" * 40, "b" * 40, f"Previous channel: `{channel}`",
                          "New channel: `snapshot`", "Application version: `3.1.0` → `3.1.1`",
                          "Build number: `260911.0745`", "SHA-pinned"):

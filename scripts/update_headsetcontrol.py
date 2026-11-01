@@ -131,7 +131,7 @@ def update_snapshot(api, resolve=resolve_head, validate=validate_remote, build_n
     project_file = api.call("contents/" + PROJECT_PATH + "?" + urlencode({"ref": base_sha}))
     project_contents = base64.b64decode(project_file["content"]).decode()
     updated_project, old_app_version, new_app_version = bump_marketing_version(project_contents)
-    branch = f"codex/headsetcontrol-snapshot-{revision}-v{new_app_version}"
+    branch = f"automation/headsetcontrol-snapshot-{revision}-v{new_app_version}"
     query = urlencode({"state": "open", "head": api.repository.split('/')[0] + ":" + branch,
                        "per_page": 100})
     prs = api.call("pulls?" + query)
