@@ -306,12 +306,9 @@ final class NativeEqualizerTests: XCTestCase {
     func testTrayUsesSavedCurvesExactTargetsAndOneMenuForAllEQCapabilities() async throws {
         let defaultsName = "EqualizerTray.\(UUID())"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsName))
-        let oldProfile = AppDefaults.standard.object(forKey: "testMode")
         defer {
-            AppDefaults.standard.set(oldProfile, forKey: "testMode")
             defaults.removePersistentDomain(forName: defaultsName)
         }
-        AppDefaults.standard.set(0, forKey: "testMode")
         let store = EqualizerCurveStore(defaults: defaults)
         let model = EqualizerSettingsModel(store: store)
         let a = EqualizerFixtures.device()

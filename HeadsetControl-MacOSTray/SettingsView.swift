@@ -35,6 +35,7 @@ struct SettingsSection<Content: View>: View {
 
 @MainActor struct SettingsView: View {
     @Bindable var equalizer: EqualizerSettingsModel = EqualizerSettingsModel()
+    @Bindable var testMode: TestModeState = TestModeState()
     @State private var nativeVersions: NativeDependencyVersions?
     @State private var requestedNativeVersions = false
     @State private var selectedLanguage = AppDefaults.selectedLanguage(
@@ -64,7 +65,6 @@ struct SettingsSection<Content: View>: View {
     @AppStorage("bluetoothCallVolumeHigh", store: AppDefaults.standard) var bluetoothCallVolumeHigh: Int = AppDefaults.bluetoothCallVolumeValues[3]
     @AppStorage("bluetoothCallVolumeMax", store: AppDefaults.standard) var bluetoothCallVolumeMax: Int = AppDefaults.bluetoothCallVolumeValues[4]
     @AppStorage("updateInterval", store: AppDefaults.standard) var updateInterval: Double = Double(AppDefaults.updateInterval)
-    @AppStorage("testMode", store: AppDefaults.standard) var testMode: Int = AppDefaults.testProfile
     @AppStorage("equalizerPresets", store: AppDefaults.standard) var equalizerPresets: String = AppDefaults.equalizerPresets
     @AppStorage("notifyOnLowBattery", store: AppDefaults.standard) var notifyOnLowBattery: Bool = AppDefaults.notifyOnLowBattery
     @AppStorage("showMicrophoneMuteIcon", store: AppDefaults.standard) var showMicrophoneMuteIcon: Bool = AppDefaults.showMicrophoneMuteIcon
@@ -229,7 +229,7 @@ struct SettingsSection<Content: View>: View {
 
                     HStack(alignment: .center, spacing: 12) {
                         settingsLabel(NSLocalizedString("Test Mode:", comment: "Test mode label"))
-                        Picker("", selection: Binding(get: { AppDefaults.validatedTestProfile(testMode) }, set: { testMode = AppDefaults.validatedTestProfile($0) })) {
+                        Picker("", selection: $testMode.profile) {
                             Text(NSLocalizedString("1 - Error conditions", comment: "Test mode 1"))
                                 .tag(1)
                             Text(NSLocalizedString("2 - Charging battery", comment: "Test mode 2"))
@@ -253,7 +253,7 @@ struct SettingsSection<Content: View>: View {
                         }
                         .pickerStyle(.menu)
                         .frame(maxWidth: 260, alignment: .leading)
-                        .onChange(of: testMode) { _, _ in
+                        .onChange(of: testMode.profile) { _, _ in
                             NotificationCenter.default.post(name: .refreshHeadsetStatus, object: nil)
                         }
                     }

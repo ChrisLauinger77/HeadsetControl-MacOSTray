@@ -129,16 +129,16 @@ import XCTest
 
     func testNativeMenuChecksMatchingPresetAndProfileSixStaysUncheckedAfterWrites() async throws {
         let store = AppDefaults.standard
-        let saved = (AppDefaults.headsetVolumeKeys + ["testMode"]).map { store.object(forKey: $0) }
-        defer { for (key, value) in zip(AppDefaults.headsetVolumeKeys + ["testMode"], saved) { store.set(value, forKey: key) } }
+        let saved = (AppDefaults.headsetVolumeKeys).map { store.object(forKey: $0) }
+        defer { for (key, value) in zip(AppDefaults.headsetVolumeKeys, saved) { store.set(value, forKey: key) } }
         for (key, value) in zip(AppDefaults.headsetVolumeKeys, AppDefaults.headsetVolumeValues) { store.set(value, forKey: key) }
         // The test device reports 77/128 (native step 15/21). Configure an exact
         // match rather than pretending that the default 96 preset is current.
         store.set(77, forKey: "headsetVolumeHigh")
         for profile in [7, 6] {
-            store.set(profile, forKey: "testMode")
             let controller = HeadsetController(provider: HeadsetControlService(), executor: HeadsetIOWorker.shared)
             let delegate = AppDelegate(headsetController: controller, notificationDelivery: RecordingNotificationDelivery())
+            delegate.testMode.profile = profile
             let originalRefresh = controller.onRefresh
             let initial = expectation(description: "initial volume profile \(profile)")
             controller.onRefresh = { result in originalRefresh?(result); initial.fulfill() }
@@ -162,10 +162,10 @@ import XCTest
     }
 
     func testFailedVolumeCommandPreservesFeedbackWithoutSchedulingReadback() async throws {
-        UserDefaults.standard.set(7, forKey: "testMode")
         let provider = RecordingHeadsetProvider()
         let executor = ManualHeadsetExecutor()
         let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor))
+        delegate.testMode.profile = 7
         delegate.latestDevices = [device(nil).menuDictionary]
         let menu = NSMenu()
         delegate.rebuildMenu(menu)

@@ -66,8 +66,10 @@ nonisolated enum AppDefaults {
     }()
 
     static func register(in store: UserDefaults) {
+        // Remove the obsolete preference; test mode now lives only in memory.
+        store.removeObject(forKey: "testMode")
         var values: [String: Any] = [
-            "updateInterval": Double(updateInterval), "testMode": testProfile,
+            "updateInterval": Double(updateInterval),
             "notifyOnLowBattery": notifyOnLowBattery, "lowBatteryThreshold": lowBatteryThreshold,
             "showMicrophoneMuteIcon": showMicrophoneMuteIcon,
             "ancStartupMode": ancStartupMode, "ancButtonModes": ancButtonModes,
@@ -90,7 +92,6 @@ nonisolated enum AppDefaults {
             store.set(notifyOnLowBattery, forKey: "notifyOnLowBattery")
         }
         repair("updateInterval", value: validatedUpdateInterval(store.object(forKey: "updateInterval")), in: store)
-        repair("testMode", value: validatedTestProfile(store.object(forKey: "testMode")), in: store)
         repair("ancStartupMode", value: validatedANCStartupMode(store.object(forKey: "ancStartupMode")), in: store)
         repair("ancButtonModes", value: validatedANCButtonModes(store.object(forKey: "ancButtonModes")).rawValue, in: store)
         repair("lowBatteryThreshold", value: validatedLowBatteryThreshold(store.object(forKey: "lowBatteryThreshold")), in: store)

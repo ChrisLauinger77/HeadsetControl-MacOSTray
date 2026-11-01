@@ -47,6 +47,7 @@ import UserNotifications
 
     private let headsetController: HeadsetController
     let equalizerSettings: EqualizerSettingsModel
+    let testMode = TestModeState()
     private let lifecycleObserver: HeadsetLifecycleObserving
     private weak var trackingMenu: NSMenu?
     private var notificationCenter: UNUserNotificationCenter?
@@ -247,7 +248,7 @@ import UserNotifications
     }
 
     private var currentTestProfile: Int {
-        AppDefaults.validatedTestProfile(AppDefaults.standard.object(forKey: "testMode"))
+        testMode.profile
     }
 
     var updateInterval: Int {
@@ -408,7 +409,7 @@ import UserNotifications
 
     private func applyRefresh(_ result: Result<[HeadsetDevice], HeadsetFailure>) {
         guard !stopping else { return }
-        // A defaults notification can still be queued behind this result.
+        // A profile-change refresh can still be queued behind this result.
         guard currentTestProfile == lastRequestedProfile else { updateStatusItem(); return }
         equalizerSettings.update(devices: headsetController.snapshot.devices ?? [],
                                  isFresh: headsetController.snapshotState == .fresh, testProfile: currentTestProfile)
