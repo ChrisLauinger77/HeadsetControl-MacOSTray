@@ -10,7 +10,7 @@ import re
 import shutil
 import subprocess
 
-from native_contract import CONTRACT, ROOT, PROVENANCE, PROVENANCE_SCHEMA, inspect, inspect_native, run, validate_provenance
+from native_contract import CONTRACT, ROOT, PROVENANCE, PROVENANCE_SCHEMA, architectures, inspect, inspect_native, run, validate_provenance
 from dependency_channels import validate_contract, verify_release_tag
 
 
@@ -27,6 +27,44 @@ def build_number(value):
 def command(*args, **kwargs):
     print("+ " + " ".join(map(str, args)), flush=True)
     subprocess.run([str(arg) for arg in args], check=True, **kwargs)
+
+
+def test_triple(arch):
+    """Run Intel test executables through Rosetta on Apple Silicon build hosts."""
+    if platform.machine() != arch:
+        if platform.machine() != "arm64" or arch != "x86_64":
+            raise ValueError("Unsupported test host/target architecture")
+        try:
+            run("/usr/bin/arch", "-x86_64", "/usr/bin/true")
+        except subprocess.CalledProcessError as error:
+            raise ValueError("Intel tests on Apple Silicon require Rosetta 2") from error
+    return f"{arch}-apple-macosx{CONTRACT['macos']}"
+
+
+def swift_tests(swift, work, prefix, arch, configuration, environment, *, skip_build=False, filter=None):
+    settings = ["--configuration", configuration, "--triple", test_triple(arch),
+                "--scratch-path", work / ("swift-" + arch)]
+    linking = ["-Xcc", f"-I{prefix}/include",
+               "-Xlinker", prefix / "lib/libheadsetcontrol.a",
+               "-Xlinker", prefix / "lib/libhidapi.a", "-Xlinker", "-lc++",
+               "-Xlinker", "-framework", "-Xlinker", "IOKit",
+               "-Xlinker", "-framework", "-Xlinker", "CoreFoundation"]
+    if platform.machine() == arch:
+        options = (["--skip-build"] if skip_build else []) + (["--filter", filter] if filter else [])
+        command(swift, "test", *settings, *linking, *options, env=environment, cwd=ROOT)
+        return
+    # Xcode 27's SwiftPM testing helper is ARM-only. Build with the selected
+    # compiler, then launch the universal XCTest runner's Intel slice explicitly.
+    if not skip_build:
+        command(swift, "build", "--build-tests", *settings, *linking,
+                "-Xswiftc", "-enable-testing", env=environment, cwd=ROOT)
+    products = Path(run(swift, "build", "--show-bin-path", *settings, env=environment, cwd=ROOT))
+    bundle = products / "HeadsetControl-MacOSTrayTests.xctest"
+    if architectures(bundle / "Contents/MacOS/HeadsetControl-MacOSTrayTests") != {arch}:
+        raise ValueError("Unexpected XCTest bundle architecture")
+    options = ["-XCTest", "HeadsetControl_MacOSTrayTests." + filter] if filter else []
+    command("/usr/bin/arch", "-x86_64", run("xcrun", "--find", "xctest"),
+            *options, bundle, env=environment, cwd=ROOT)
 
 
 def source(work, name, offline):
@@ -125,21 +163,13 @@ def build(args):
     native = inspect_native(prefix, arch)
 
     if not args.skip_tests:
-        if platform.machine() != arch:
-            raise ValueError("Run native integration tests on a runner of the requested architecture")
+        test_triple(arch)
         environment = {key: value for key, value in os.environ.items() if not key.startswith("DYLD_")}
         verify_test_runtime(work, prefix, compiler, arch, environment)
         # Use the selected toolchain and the same explicit native archives as the app.
         swift = run("xcrun", "--find", "swift")
         for configuration in ("debug", "release"):
-            command(swift, "test", "--configuration", configuration,
-                    "--scratch-path", work / ("swift-" + arch),
-                    "-Xcc", f"-I{prefix}/include",
-                    "-Xlinker", prefix / "lib/libheadsetcontrol.a",
-                    "-Xlinker", prefix / "lib/libhidapi.a", "-Xlinker", "-lc++",
-                    "-Xlinker", "-framework", "-Xlinker", "IOKit",
-                    "-Xlinker", "-framework", "-Xlinker", "CoreFoundation",
-                    env=environment, cwd=ROOT)
+            swift_tests(swift, work, prefix, arch, configuration, environment)
 
     derived = work / ("app-" + arch)
     xcode_settings = [
@@ -182,10 +212,9 @@ def build(args):
     if not args.skip_tests:
         # Exercise the About reader against the provenance actually embedded in this
         # bundle, using the already-built tests linked to the app's exact archives.
-        command(swift, "test", "--skip-build", "--configuration", "release",
-                "--scratch-path", work / ("swift-" + arch),
-                "--filter", "NativeDependencyVersionsTests/testLinkedVersionsMatchEmbeddedProvenance",
-                env={**environment, "HEADSETCONTROL_PROVENANCE_PATH": str(app / PROVENANCE)}, cwd=ROOT)
+        swift_tests(swift, work, prefix, arch, "release",
+                    {**environment, "HEADSETCONTROL_PROVENANCE_PATH": str(app / PROVENANCE)},
+                    skip_build=True, filter="NativeDependencyVersionsTests/testLinkedVersionsMatchEmbeddedProvenance")
     archive = work / f"HeadsetControl-MacOSTray-{arch}.zip"
     command("ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", app, archive)
     if not args.audit_toolchain:
@@ -202,7 +231,7 @@ if __name__ == "__main__":
                         help="Override CURRENT_PROJECT_VERSION without changing BuildNumber.xcconfig")
     parser.add_argument("--fetch-only", action="store_true")
     parser.add_argument("--offline", action="store_true")
-    parser.add_argument("--skip-tests", action="store_true", help="Local cross-compilation only; CI runs tests on each architecture")
+    parser.add_argument("--skip-tests", action="store_true", help="Local cross-compilation only; CI executes tests for both architectures")
     parser.add_argument("--audit-toolchain", action="store_true", help="Local audit only; output cannot pass release validation")
     try:
         build(parser.parse_args())

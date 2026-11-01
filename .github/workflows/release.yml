@@ -16,7 +16,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
   PYTHONDONTWRITEBYTECODE: '1'
 
 jobs:
@@ -42,7 +41,7 @@ jobs:
       - name: Read consistent application version
         id: version
         run: |
-          version="$(python3 -B scripts/release-artifact.py project HeadsetControl-MacOSTray.xcodeproj/project.pbxproj \
+          version="$(python3 -B scripts/release-artifact.py project HeadsetControl-MacOSTray.xcodeproj/project.xcproj \
             | python3 -c 'import json, sys; print(json.load(sys.stdin)["CFBundleShortVersionString"])')"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
@@ -71,9 +70,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-15
+          - runner: xcode-27
             arch: arm64
-          - runner: macos-15-intel
+          - runner: xcode-27
             arch: x86_64
 
     runs-on: ${{ matrix.runner }}
@@ -84,9 +83,15 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Ensure Rosetta is available for Intel tests
+        if: matrix.arch == 'x86_64'
+        run: |
+          if ! /usr/bin/arch -x86_64 /usr/bin/true; then
+            sudo softwareupdate --install-rosetta --agree-to-license
+          fi
       - name: Build and test pinned native contract
         env:
-          DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+          DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
           python3 -B scripts/build-native-app.py \
@@ -213,7 +218,7 @@ jobs:
       - name: Check tag matches application version
         env:
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-        run: python3 -B scripts/release-artifact.py project HeadsetControl-MacOSTray.xcodeproj/project.pbxproj --tag "$RELEASE_TAG"
+        run: python3 -B scripts/release-artifact.py project HeadsetControl-MacOSTray.xcodeproj/project.xcproj --tag "$RELEASE_TAG"
 
       - name: Verify annotated release tag
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9

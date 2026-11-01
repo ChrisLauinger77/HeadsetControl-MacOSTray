@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import native_contract as native
+from xcode_project import PROJECT_PATH, read_project
 from test_release_artifact import PLIST, provenance_fixture
 spec = importlib.util.spec_from_file_location("native_builder", Path(native.__file__).with_name("build-native-app.py"))
 builder = importlib.util.module_from_spec(spec)
@@ -29,6 +30,20 @@ Load command 1
 
 
 class NativeContractTests(unittest.TestCase):
+    def test_intel_tests_require_a_working_rosetta_runtime_on_arm_hosts(self):
+        with patch.object(builder.platform, "machine", return_value="arm64"):
+            with patch.object(builder, "run") as run:
+                self.assertEqual(builder.test_triple("arm64"), "arm64-apple-macosx14.0")
+                run.assert_not_called()
+                self.assertEqual(builder.test_triple("x86_64"), "x86_64-apple-macosx14.0")
+                run.assert_called_once_with("/usr/bin/arch", "-x86_64", "/usr/bin/true")
+            with patch.object(builder, "run", side_effect=subprocess.CalledProcessError(1, "arch")):
+                with self.assertRaisesRegex(ValueError, "Rosetta 2"):
+                    builder.test_triple("x86_64")
+        with patch.object(builder.platform, "machine", return_value="x86_64"):
+            with self.assertRaisesRegex(ValueError, "Unsupported"):
+                builder.test_triple("arm64")
+
     def test_build_number_validation(self):
         for value in ("260906.1700", "1", "1.2.3"):
             with self.subTest(value=value):
@@ -191,9 +206,9 @@ class NativeContractTests(unittest.TestCase):
             self.assertNotIn("--HEAD", workflow)
             self.assertNotIn("--skip-tests", workflow)
             self.assertNotIn("--audit-toolchain", workflow)
-        project = (root / "HeadsetControl-MacOSTray.xcodeproj/project.pbxproj").read_text()
-        import re
-        self.assertEqual(set(re.findall(r"MACOSX_DEPLOYMENT_TARGET = ([^;]+);", project)), {native.CONTRACT["macos"]})
+        project = read_project((root / PROJECT_PATH).read_text())
+        for settings in (project["build-settings"], project["targets"][0]["build-settings"]):
+            self.assertEqual(settings["MACOSX_DEPLOYMENT_TARGET"], native.CONTRACT["macos"])
         release = (root / ".github/workflows/release.yml").read_text()
         self.assertIn("build_number: ${{ steps.build-number.outputs.value }}", release)
         self.assertIn('TZ: Europe/Berlin', release)

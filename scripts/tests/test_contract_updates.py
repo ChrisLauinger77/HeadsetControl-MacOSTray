@@ -14,7 +14,7 @@ SIMULATED_UPDATE = {
     "hidapi": {"revision": "fedcba9876543210" * 2 + "fedcba98", "version": "0.99.0"},
 }
 # Repository files the script tests read; scripts run as subprocesses must see the updated contract too.
-INPUTS = ("scripts", ".github/workflows", "HeadsetControl-MacOSTray.xcodeproj/project.pbxproj",
+INPUTS = ("scripts", ".github/workflows", "HeadsetControl-MacOSTray.xcodeproj/project.xcproj",
           "HeadsetControl-MacOSTray/HIDAPI-LICENSE.txt")
 
 

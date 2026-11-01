@@ -68,16 +68,21 @@ class ArtifactTests(unittest.TestCase):
 
     def test_project_version_gate(self):
         with tempfile.TemporaryDirectory() as directory:
-            project = Path(directory) / "project.pbxproj"
-            project.write_text("MARKETING_VERSION = 3.1.0;\nMARKETING_VERSION = 3.1.0;\n")
+            from test_xcode_project import project_fixture
+            project = Path(directory) / "project.xcproj"
+            project.write_text(project_fixture("3.1.0"))
             self.assertEqual(artifact.project_version(project, "v3.1.0"), {"CFBundleShortVersionString": "3.1.0"})
             with self.assertRaisesRegex(ValueError, "Tag/version mismatch"):
                 artifact.project_version(project, "v3.1.1")
             self.assertEqual(artifact.project_version(project), {"CFBundleShortVersionString": "3.1.0"})
-            project.write_text("MARKETING_VERSION = 3.1;\nMARKETING_VERSION = 3.1;\n")
+            project.write_text(project_fixture("3.1"))
             with self.assertRaisesRegex(ValueError, "not X.Y.Z"):
                 artifact.project_version(project)
-            project.write_text("MARKETING_VERSION = 3.1.0;\nMARKETING_VERSION = 3.2.0;\n")
+            contents = project_fixture(settings={
+                "MARKETING_VERSION[config=Debug]": "3.1.0",
+                "MARKETING_VERSION[config=Release]": "3.2.0",
+            })
+            project.write_text(contents)
             with self.assertRaisesRegex(ValueError, "consistent"):
                 artifact.project_version(project, "v3.1.0")
 
