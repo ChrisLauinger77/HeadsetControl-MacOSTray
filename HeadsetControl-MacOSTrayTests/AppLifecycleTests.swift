@@ -21,13 +21,13 @@ import XCTest
         let controller: HeadsetController
         let delegate: AppDelegate
         init(refreshInterval: Int = 60) {
-            AppDefaults.standard.set(7, forKey: "testMode")
             AppDefaults.standard.set(false, forKey: "notifyOnLowBattery")
             AppDefaults.standard.set(refreshInterval, forKey: "updateInterval")
             scheduler = ManualHeadsetScheduler(clock: clock)
             let clock = self.clock
             controller = HeadsetController(provider: provider, executor: executor, scheduler: scheduler, now: { clock.now })
             delegate = AppDelegate(headsetController: controller, notificationDelivery: delivery, lifecycleObserver: observer)
+            delegate.testMode.profile = 7
             provider.devices = [HeadsetDevice(usbID: .testDevice, name: "Fake", vendor: "Vendor", product: "Product", capabilities: [],
                                               battery: .success(.init(level: 80, status: .available)), target: .test(profile: 7))]
         }
@@ -41,7 +41,6 @@ import XCTest
     }
 
     override func tearDown() {
-        AppDefaults.standard.removeObject(forKey: "testMode")
         AppDefaults.standard.removeObject(forKey: "notifyOnLowBattery")
         AppDefaults.standard.removeObject(forKey: "updateInterval")
         super.tearDown()
@@ -270,7 +269,7 @@ import XCTest
         for event in [HeadsetLifecycleEvent.resume, .usbChanged] {
             let f = Fixture(refreshInterval: 900)
             defer { f.stop() }
-            AppDefaults.standard.set(0, forKey: "testMode")
+            f.delegate.testMode.profile = 0
             f.delegate.startLifecycleObservation()
             f.delegate.updateStatusItem()
             await f.finishRefresh()

@@ -41,12 +41,12 @@ import XCTest
     }
 
     func testMuteIconPreferenceAndFreshnessUseCachedReadingsWithoutMenuQueries() async {
-        UserDefaults.standard.set(7, forKey: "testMode")
         UserDefaults.standard.set(true, forKey: "showMicrophoneMuteIcon")
         let provider = RecordingHeadsetProvider()
         let executor = ManualHeadsetExecutor()
         let controller = HeadsetController(provider: provider, executor: executor)
         let delegate = AppDelegate(headsetController: controller)
+        delegate.testMode.profile = 7
         provider.devices = [microphoneDevice(muted: nil, attached: nil), microphoneDevice(muted: .success(true), attached: .success(true))]
         delegate.updateStatusItem()
         executor.runNext()
@@ -134,9 +134,9 @@ import XCTest
     }
 
     func testNativeANCMenuCommandsSucceedInTestMode() async throws {
-        UserDefaults.standard.set(7, forKey: "testMode")
         let controller = HeadsetController(provider: HeadsetControlService(), executor: HeadsetIOWorker.shared)
         let delegate = AppDelegate(headsetController: controller, notificationDelivery: RecordingNotificationDelivery())
+        delegate.testMode.profile = 7
         let refreshed = expectation(description: "native ANC device discovered")
         let originalRefresh = controller.onRefresh
         controller.onRefresh = { result in originalRefresh?(result); refreshed.fulfill() }
@@ -160,7 +160,6 @@ import XCTest
     }
 
     func testANCSettingsSelectOneSupportingTargetAndUseQueuedCommands() async throws {
-        UserDefaults.standard.set(0, forKey: "testMode")
         let provider = RecordingHeadsetProvider()
         let executor = ManualHeadsetExecutor()
         let controller = HeadsetController(provider: provider, executor: executor)
@@ -211,19 +210,17 @@ import XCTest
         let store = AppDefaults.standard
         let savedStartup = store.object(forKey: "ancStartupMode")
         let savedCycle = store.object(forKey: "ancButtonModes")
-        let savedProfile = store.object(forKey: "testMode")
         defer {
             store.set(savedStartup, forKey: "ancStartupMode")
             store.set(savedCycle, forKey: "ancButtonModes")
-            store.set(savedProfile, forKey: "testMode")
         }
-        store.set(7, forKey: "testMode")
         store.set(3, forKey: "ancStartupMode")
         store.set(HeadsetANCButtonModes.all.rawValue, forKey: "ancButtonModes")
         let provider = RecordingHeadsetProvider()
         let executor = ManualHeadsetExecutor()
         let controller = HeadsetController(provider: provider, executor: executor)
         let delegate = AppDelegate(headsetController: controller)
+        delegate.testMode.profile = 7
         delegate.updateStatusItem() // Successfully discover no connected headset.
         executor.runNext()
         await drainResults()
@@ -274,11 +271,11 @@ import XCTest
     }
 
     func testANCSettingsRejectMissingCapabilitiesProfileChangesAndShutdown() async {
-        UserDefaults.standard.set(7, forKey: "testMode")
         let provider = RecordingHeadsetProvider()
         let executor = ManualHeadsetExecutor()
         let controller = HeadsetController(provider: provider, executor: executor)
         let delegate = AppDelegate(headsetController: controller)
+        delegate.testMode.profile = 7
         provider.devices = [microphoneDevice(muted: nil, attached: nil)]
         delegate.updateStatusItem()
         executor.runNext()
@@ -291,7 +288,7 @@ import XCTest
         delegate.updateStatusItem()
         executor.runNext()
         await drainResults()
-        UserDefaults.standard.set(0, forKey: "testMode")
+        delegate.testMode.profile = 0
         delegate.performANCSettingsCommand(.ancStartupMode(1))
         XCTAssertTrue(executor.jobs.isEmpty)
         delegate.stop()
@@ -321,7 +318,6 @@ import XCTest
     }
 
     private func verifyWriteOnlyControl(_ capability: HeadsetCapability, title: String, values: [Int], commands: [HeadsetCommand]) async throws {
-        UserDefaults.standard.set(7, forKey: "testMode")
         let service = HeadsetControlService()
         let result = await withCheckedContinuation { continuation in
             HeadsetIOWorker.shared.enqueue { continuation.resume(returning: service.fetchDevices(testProfile: 7)) }
@@ -331,6 +327,7 @@ import XCTest
         let provider = RecordingHeadsetProvider()
         let executor = ManualHeadsetExecutor()
         let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor))
+        delegate.testMode.profile = 7
         delegate.latestDevices = [device.menuDictionary]
         let menu = NSMenu()
         delegate.rebuildMenu(menu)
@@ -383,7 +380,6 @@ import XCTest
         UserDefaults.standard.removeObject(forKey: "sidetoneMax")
         UserDefaults.standard.removeObject(forKey: "inactiveTimeOptions")
         UserDefaults.standard.removeObject(forKey: "equalizerPresets")
-        UserDefaults.standard.removeObject(forKey: "testMode")
         UserDefaults.standard.removeObject(forKey: "notifyOnLowBattery")
         UserDefaults.standard.removeObject(forKey: "showMicrophoneMuteIcon")
         super.tearDown()
@@ -653,11 +649,11 @@ import XCTest
     }
 
     func testSidetoneCommandRefreshesMenuFromObservedLevel() async throws {
-        UserDefaults.standard.set(7, forKey: "testMode")
         let provider = RecordingHeadsetProvider()
         let executor = ManualHeadsetExecutor()
         let controller = HeadsetController(provider: provider, executor: executor)
         let delegate = AppDelegate(headsetController: controller)
+        delegate.testMode.profile = 7
         let device = HeadsetDevice(usbID: .testDevice, name: "Fake", vendor: "Vendor", product: "Product", capabilities: ["CAP_SIDETONE"],
                                    sidetone: .success(.init(level: 64, deviceLevel: 2, deviceMin: 0, deviceMax: 4, levelName: nil)), target: .test(profile: 7))
         provider.devices = [device]
@@ -700,7 +696,6 @@ import XCTest
     }
 
     func testEveryMenuControlKeepsItsOwnDeviceAfterSnapshotChanges() async throws {
-        UserDefaults.standard.set(0, forKey: "testMode")
         let provider = RecordingHeadsetProvider()
         let executor = ManualHeadsetExecutor()
         let controller = HeadsetController(provider: provider, executor: executor)
@@ -742,10 +737,10 @@ import XCTest
         delegate.latestDevices = [menuDevice(target: .test(profile: 7))]
         delegate.rebuildMenu(menu)
         let testItem = try XCTUnwrap(menu.items.first { $0.title == localized("Lights") }?.submenu?.items.first)
-        UserDefaults.standard.set(0, forKey: "testMode")
+        delegate.testMode.profile = 0
         delegate.setLights(testItem)
         XCTAssertTrue(executor.jobs.isEmpty)
-        UserDefaults.standard.set(7, forKey: "testMode")
+        delegate.testMode.profile = 7
         delegate.setLights(testItem)
         executor.runNext()
         XCTAssertEqual(provider.commands.first?.1, .test(profile: 7))
@@ -779,14 +774,13 @@ import XCTest
     }
 
     func testModeChangeBeforeResultDeliveryDiscardsTheOldSnapshot() async {
-        UserDefaults.standard.set(0, forKey: "testMode")
         let provider = RecordingHeadsetProvider()
         provider.devices = [HeadsetDevice(usbID: .init(vendor: 1, product: 2), name: "Physical", vendor: "Vendor", product: "Product", capabilities: [])]
         let executor = ManualHeadsetExecutor()
         let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor))
         delegate.updateStatusItem()
         executor.runNext()
-        UserDefaults.standard.set(7, forKey: "testMode")
+        delegate.testMode.profile = 7
         await withCheckedContinuation { continuation in
             HeadsetMainRunLoop.perform { continuation.resume() }
         }
@@ -824,7 +818,6 @@ import XCTest
     }
 
     func testCommandFailureIsVisibleAndSuccessClearsIt() async throws {
-        UserDefaults.standard.set(0, forKey: "testMode")
         let provider = RecordingHeadsetProvider()
         let executor = ManualHeadsetExecutor()
         let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor))
@@ -893,7 +886,6 @@ import XCTest
     }
 
     func testNotificationPreferenceIsRecheckedBeforeAsyncSubmission() async {
-        UserDefaults.standard.set(7, forKey: "testMode")
         UserDefaults.standard.set(true, forKey: "notifyOnLowBattery")
         let provider = RecordingHeadsetProvider()
         provider.devices = [HeadsetDevice(usbID: .testDevice, name: "Fake", vendor: "Vendor", product: "Product", capabilities: [],
@@ -901,6 +893,7 @@ import XCTest
         let executor = ManualHeadsetExecutor()
         let delivery = RecordingNotificationDelivery()
         let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor), notificationDelivery: delivery)
+        delegate.testMode.profile = 7
         delegate.updateStatusItem()
         executor.runNext()
         await drainResults()
@@ -911,7 +904,6 @@ import XCTest
     }
 
     func testPendingAuthorizationChecksLatestBatteryAgainstChangedThreshold() async throws {
-        UserDefaults.standard.set(7, forKey: "testMode")
         UserDefaults.standard.set(true, forKey: "notifyOnLowBattery")
         UserDefaults.standard.set(25, forKey: "lowBatteryThreshold")
         let provider = RecordingHeadsetProvider()
@@ -920,6 +912,7 @@ import XCTest
         let executor = ManualHeadsetExecutor()
         let delivery = RecordingNotificationDelivery()
         let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor), notificationDelivery: delivery)
+        delegate.testMode.profile = 7
         delegate.updateStatusItem()
         executor.runNext()
         await drainResults()
@@ -953,7 +946,6 @@ import XCTest
 
     func testDisablingAlertsClearsFailuresBeforeRefreshAndRejectsLateWarnings() async {
         for failure in [NotificationFailure.denied, .system(domain: "Test", code: 1, description: "Rejected")] {
-            UserDefaults.standard.set(7, forKey: "testMode")
             UserDefaults.standard.set(true, forKey: "notifyOnLowBattery")
             let provider = RecordingHeadsetProvider()
             provider.devices = [HeadsetDevice(usbID: .testDevice, name: "Fake", vendor: "Vendor", product: "Product", capabilities: [],
@@ -961,6 +953,7 @@ import XCTest
             let executor = ManualHeadsetExecutor()
             let delivery = RecordingNotificationDelivery()
             let delegate = AppDelegate(headsetController: HeadsetController(provider: provider, executor: executor), notificationDelivery: delivery)
+            delegate.testMode.profile = 7
             delegate.updateStatusItem()
             executor.runNext()
             await drainResults()
@@ -1007,7 +1000,6 @@ import XCTest
     func testNotificationWarningClearsOnlyAfterItsOwnDeviceSucceeds() async throws {
         for failsAuthorization in [true, false] {
             for retryCompletesWhileEligible in [true, false] {
-                UserDefaults.standard.set(0, forKey: "testMode")
                 UserDefaults.standard.set(true, forKey: "notifyOnLowBattery")
                 UserDefaults.standard.set(25, forKey: "lowBatteryThreshold")
                 let a = HeadsetDevice(usbID: .init(vendor: 1, product: 2), name: "A", vendor: "Vendor", product: "Product", capabilities: [],

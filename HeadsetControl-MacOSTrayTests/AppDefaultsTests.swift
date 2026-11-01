@@ -2,6 +2,26 @@ import XCTest
 @testable import HeadsetControl_MacOSTray
 
 final class AppDefaultsTests: XCTestCase {
+    func testRegistrationRemovesLegacyTestModeWhilePreservingOtherSettings() throws {
+        let name = "TestModeLaunchDefaults.\(UUID())"
+        let store = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { store.removePersistentDomain(forName: name) }
+        store.set(900, forKey: "updateInterval")
+        store.set(false, forKey: "notifyOnLowBattery")
+
+        for profile in AppDefaults.testProfiles + [Int.max] {
+            store.set(profile, forKey: "testMode")
+            AppDefaults.register(in: store)
+            XCTAssertNil(store.persistentDomain(forName: name)?["testMode"])
+            XCTAssertNil(store.object(forKey: "testMode"))
+            XCTAssertEqual(store.integer(forKey: "updateInterval"), 900)
+            XCTAssertFalse(store.bool(forKey: "notifyOnLowBattery"))
+
+            AppDefaults.validate(in: store)
+            XCTAssertNil(store.object(forKey: "testMode"))
+        }
+    }
+
     func testMicrophoneMuteIconDefaultsOnAndPreservesOptOut() throws {
         let name = "MicrophoneIconDefaults.\(UUID())"
         let store = try XCTUnwrap(UserDefaults(suiteName: name))
@@ -89,15 +109,13 @@ final class AppDefaultsTests: XCTestCase {
         XCTAssertEqual(store.integer(forKey: "sidetoneLow"), 12)
     }
 
-    func testPersistedIntervalsAndProfilesAreRepairedWithoutUnsafeConversions() throws {
+    func testIntervalsAndProfilesAreValidatedWithoutUnsafeConversions() throws {
         let name = "HeadsetDefaultsTests.\(UUID())"
         let store = try XCTUnwrap(UserDefaults(suiteName: name))
         defer { store.removePersistentDomain(forName: name) }
         store.set(-5, forKey: "updateInterval")
-        store.set(Int.max, forKey: "testMode")
         AppDefaults.register(in: store)
         XCTAssertEqual(store.integer(forKey: "updateInterval"), 60)
-        XCTAssertEqual(store.integer(forKey: "testMode"), 0)
         XCTAssertEqual(AppDefaults.validatedUpdateInterval(Int.max), 3600)
         XCTAssertEqual(AppDefaults.validatedUpdateInterval(Double.nan), 600)
         XCTAssertEqual(AppDefaults.validatedUpdateInterval(Double.infinity), 600)
@@ -107,9 +125,6 @@ final class AppDefaultsTests: XCTestCase {
         XCTAssertEqual(AppDefaults.testProfiles, [0, 1, 2, 3, 4, 5, 6, 7, 8, 10])
         for profile in AppDefaults.testProfiles {
             XCTAssertEqual(AppDefaults.validatedTestProfile(profile), profile)
-            store.set(profile, forKey: "testMode")
-            AppDefaults.register(in: store)
-            XCTAssertEqual(store.integer(forKey: "testMode"), profile)
         }
         XCTAssertEqual(AppDefaults.validatedTestProfile(8.0), 8)
         XCTAssertEqual(AppDefaults.validatedTestProfile(10.0), 10)
