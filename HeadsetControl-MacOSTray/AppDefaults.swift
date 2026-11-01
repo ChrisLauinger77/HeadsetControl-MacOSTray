@@ -30,8 +30,8 @@ nonisolated enum AppDefaults {
     static let updateIntervalRange = 60...3600
     static let snapshotFreshnessGrace: TimeInterval = 60
     static let testProfile = 0
-    // Dependency profiles 8 and 9 are reserved; 10 limits the test device's capabilities.
-    static let testProfiles = Array(0...7) + [10]
+    // Dependency profile 9 is reserved; 8 charges without a level, 10 limits capabilities.
+    static let testProfiles = Array(0...8) + [10]
     static let lowBatteryThreshold = 25
     static let lowBatteryThresholdRange = 1...30
     static let notifyOnLowBattery = true

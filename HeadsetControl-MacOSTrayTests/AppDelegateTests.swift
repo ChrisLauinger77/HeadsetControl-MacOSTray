@@ -557,7 +557,8 @@ import XCTest
         for (profile, expected) in [
             (2, "\(localized("Battery")): ⚡︎ 50% (\(String(format: localized("%dh until full"), 1)))"),
             (4, "\(localized("Battery")): \(localized("Device offline")) (-3)"),
-            (5, "\(localized("Battery")): \(localized("Timed out")) (-4)")
+            (5, "\(localized("Battery")): \(localized("Timed out")) (-4)"),
+            (8, "\(localized("Battery")): ⚡︎")
         ] {
             let result = await withCheckedContinuation { continuation in
                 HeadsetIOWorker.shared.enqueue { continuation.resume(returning: service.fetchDevices(testProfile: profile)) }
