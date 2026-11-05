@@ -9,7 +9,7 @@ on:
       - "LICENSE"
   workflow_dispatch:
   schedule:
-    - cron: '0 0 1 * *'
+    - cron: "4 4 1 * *"
 
 env:
   PYTHONDONTWRITEBYTECODE: "1"
