@@ -14,6 +14,11 @@ from test_release_artifact import PLIST, provenance_fixture
 spec = importlib.util.spec_from_file_location("native_builder", Path(native.__file__).with_name("build-native-app.py"))
 builder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(builder)
+spec = importlib.util.spec_from_file_location("xcode_selector", Path(native.__file__).with_name("select-xcode.py"))
+selector = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(selector)
+
+XCODE_FLOOR = {"version": "27.2", "build": "27B52"}
 
 
 def commands(minimum="14.0", platform="1"):
@@ -52,6 +57,49 @@ class NativeContractTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaisesRegex(
                     builder.argparse.ArgumentTypeError, "dot-separated numeric"):
                 builder.build_number(value)
+
+    def test_xcode_floor_applies_to_release_provenance(self):
+        with patch.dict(native.CONTRACT, minimum_xcode=XCODE_FLOOR):
+            baseline = {**provenance_fixture(), "xcode": XCODE_FLOOR}
+            native.validate_provenance(baseline, PLIST)
+            for version, build in (("27.2.0", "27B52"), ("27.2", "27B100"), ("27.2.1", "27B53"),
+                                   ("27.10", "27J10"), ("28.0", "28A25a")):
+                with self.subTest(version=version, build=build):
+                    later = {**baseline, "xcode": {"version": version, "build": build}}
+                    native.validate_provenance(later, PLIST)
+                    with self.assertRaisesRegex(ValueError, "provenance mismatch: xcode"):
+                        native.compare_provenance(baseline, later)
+            for version, build in (("27.1", "27A9275"), ("27.2", "27B48"), ("27.2", "27B5028f"),
+                                   ("27.3", "unknown")):
+                with self.subTest(version=version, build=build), self.assertRaisesRegex(ValueError, "Xcode"):
+                    native.validate_provenance({**baseline, "xcode": {"version": version, "build": build}}, PLIST)
+
+    def test_xcode_selection_keeps_the_floor_when_present_and_falls_forward(self):
+        installations = {
+            "Xcode_27.1.app": "Xcode 27.1\nBuild version 27A9275",
+            "Xcode_27.2_Release_Candidate.app": "Xcode 27.2\nBuild version 27B48",
+            "Xcode_27.2.app": "Xcode 27.2\nBuild version 27B52",
+            "Xcode_27.3.app": "Xcode 27.3\nBuild version 27C10",
+        }
+
+        def probe(*args, env):
+            self.assertEqual(args, ("xcodebuild", "-version"))
+            return installations[Path(env["DEVELOPER_DIR"]).parents[1].name]
+
+        with tempfile.TemporaryDirectory() as directory, patch.dict(native.CONTRACT, minimum_xcode=XCODE_FLOOR), \
+                patch.object(native, "run", side_effect=probe), patch("sys.stderr"):
+            apps = Path(directory).resolve()
+            for name in installations:
+                binary = apps / name / "Contents/Developer/usr/bin/xcodebuild"
+                binary.parent.mkdir(parents=True)
+                binary.touch()
+            (apps / "Xcode.app").symlink_to(apps / "Xcode_27.1.app")
+            self.assertEqual(selector.select_xcode(apps), apps / "Xcode_27.2.app/Contents/Developer")
+            (apps / "Xcode_27.2.app/Contents/Developer/usr/bin/xcodebuild").unlink()
+            self.assertEqual(selector.select_xcode(apps), apps / "Xcode_27.3.app/Contents/Developer")
+            (apps / "Xcode_27.3.app/Contents/Developer/usr/bin/xcodebuild").unlink()
+            with self.assertRaisesRegex(ValueError, "No Xcode 27.2.*27B52"):
+                selector.select_xcode(apps)
 
     def test_deployment_commands(self):
         self.assertEqual(native.load_commands(commands())["minimum_macos"], "14.0")
@@ -202,7 +250,9 @@ class NativeContractTests(unittest.TestCase):
         for name in ("ci.yml", "release.yml"):
             workflow = (root / ".github/workflows" / name).read_text()
             self.assertIn("scripts/build-native-app.py", workflow)
-            self.assertIn(f"/Applications/Xcode_{native.CONTRACT['xcode']['version']}.app", workflow)
+            self.assertIn("scripts/select-xcode.py", workflow)
+            self.assertIn('echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"', workflow)
+            self.assertNotIn("DEVELOPER_DIR: /Applications/", workflow)
             self.assertNotIn("--HEAD", workflow)
             self.assertNotIn("--skip-tests", workflow)
             self.assertNotIn("--audit-toolchain", workflow)

@@ -27,17 +27,17 @@ neither local tests nor the macOS 27 CI build runners execute on the oldest supp
 Before editing the project targets, both native libraries and both full Release
 applications were built with compiler deployment target 14.0 using the installed
 Xcode 27 beta. Their Mach-O deployment commands, load paths and defined
-headsetcontrol symbols were inspected. The repeatable release build now uses Xcode
-27.2 (build 27B52) and must pass the same checks in CI. Nothing uses `vtool` or
+headsetcontrol symbols were inspected. CI and release require Xcode 27.2
+(build 27B52) or newer and must pass the same checks. Nothing uses `vtool` or
 `install_name_tool` to lower deployment metadata after compilation.
 
-## Exact inputs and runtime model
+## Build inputs and runtime model
 
-`build-contract.json` is the authoritative native/toolchain input manifest:
+`build-contract.json` records the native dependency pins and toolchain requirements.
 
 | Input | Value |
 | --- | --- |
-| Xcode | 27.2, build 27B52 |
+| Minimum Xcode | 27.2, build 27B52 |
 | headsetcontrol | 4.2.0 baseline, snapshot commit `7b760ddb29e4618f4229ab2936a4b009ab2e1fa0` |
 | HIDAPI | 0.15.0, commit `d6b2a974608dec3b76fb1e36c189f22b9cf3650c` |
 | Deployment target | macOS 14.0 for application, headsetcontrol and HIDAPI |
@@ -125,11 +125,10 @@ one-time base comparison never permits a missing channel in a build or proposed
 contract. Channel metadata is copied into provenance and compared across both
 architectures as part of the complete HeadsetControl contract.
 
-The [Xcode 27 Apple Silicon runner](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)
-provides Xcode 27.2 (27B52) at `/Applications/Xcode_27.2.app`.
-Both build jobs use `xcode-27`; the Intel job cross-compiles with the same Xcode
-and executes its x86_64 test binaries through Rosetta 2. The workflow ensures
-Rosetta is installed before building. SwiftPM receives an explicit target triple.
+Both build jobs use the [Xcode 27 Apple Silicon runner](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md).
+The Intel job cross-compiles with Xcode and executes its x86_64 test binaries
+through Rosetta 2. The workflow ensures Rosetta is installed before building.
+SwiftPM receives an explicit target triple.
 For Intel, `swift build --build-tests`
 builds the XCTest bundle and `/usr/bin/arch -x86_64` launches the selected
 Xcode’s universal `xctest` runner, including the final embedded-provenance test.
@@ -138,21 +137,19 @@ The repository’s test suite uses XCTest.
 There is no Xcode 27 Intel-host build job. Packaging and publication still use
 macOS 15 runners to check and assemble the already-built artifacts.
 
-The contract pins the final 27.2 release (27B52). During runner-image rollouts,
-jobs that receive the older 27B48 image fail the toolchain check and must run
-on the updated image. A runner update must never silently change the pinned
-build. `--audit-toolchain` checks produce no publishable artifacts.
+CI and release select the lowest installed Xcode that meets the contract. They
+keep using 27.2 (27B52) when it is available and can pick a newer build when it
+is removed from the image. The 27.2 RC (27B48) and 27.2 beta seeds are below
+the minimum. `--audit-toolchain` checks produce no publishable artifacts.
 
 The helper resolves the macOS SDK explicitly from the selected Xcode, uses it
 for CMake, SwiftPM and Xcode builds, and records that SDK’s version in provenance.
 It overrides an inherited `SDKROOT`, so a runner’s Command Line Tools SDK cannot
 silently replace the build SDK or break provenance recording.
 
-The helper verifies its version **and build number**, failing instead of falling
-back to whatever Xcode is the runner default. CMake remains a build tool supplied
-by the environment; it does not resolve native source versions. This contract
-promises identifiable, repeatable native inputs, not bit-for-bit reproducibility
-of ZIPs, signatures or the entire runner image.
+The helper checks the selected Xcode's version and build against the minimum
+before compiling. CMake comes from the build environment. The contract identifies
+the native source revisions, and provenance records the exact toolchain used.
 
 headsetcontrol and HIDAPI are linked by explicit paths to `libheadsetcontrol.a`
 and `libhidapi.a`, so installed dylibs cannot silently take precedence. HIDAPI
@@ -195,7 +192,10 @@ application slice's UUID/deployment/load commands. Release builds require clean
 application and dependency checkouts. The helper verifies fetched Git revisions.
 Schema 2 explicitly records static HIDAPI linkage; old dynamic-HIDAPI provenance
 cannot pass the new packaging gate. Published archives are never migrated or
-replaced automatically.
+replaced automatically. Packaging checks the recorded Xcode against the same
+minimum and requires both slices to report the same actual Xcode build, Swift,
+Clang and SDK. A runner rollout that gives the two jobs different toolchains
+will fail universal packaging.
 
 Settings → About reads `hsc_version()` and `hid_version_str()` from the linked
 libraries on the existing native worker, without device discovery or HID access.
@@ -235,10 +235,11 @@ runner; CI does not upload artifacts. The Release workflow transfers architectur
 archives between jobs, creates and verifies the universal app archive, and
 retains the tested candidate for maintainer approval.
 
-Use a clean checkout, CMake, and the specified Xcode:
+Use a clean checkout, CMake, and an Xcode that meets the minimum. Set
+`DEVELOPER_DIR` to your chosen installation:
 
 ```sh
-export DEVELOPER_DIR=/Applications/Xcode_27.2.app/Contents/Developer
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 export PYTHONDONTWRITEBYTECODE=1
 python3 -B scripts/build-native-app.py --workspace /tmp/headset-build --arch arm64
 ```
@@ -265,7 +266,7 @@ pre-actions that update it for local launch, profile and archive actions.
 
 `--fetch-only` prepares sources; `--offline` requires already verified checkouts.
 For local cross-compilation, `--skip-tests` skips execution on the wrong CPU.
-`--audit-toolchain` permits a different toolchain/dirty application checkout for
+`--audit-toolchain` permits an older toolchain or a dirty application checkout for
 investigation and labels its output audit-only; **release validation rejects it**.
 Neither bypass is used by CI or release workflows.
 

@@ -38,7 +38,7 @@ function contractFixtures() {
         contract,
         { ...contract, headsetcontrol: { ...contract.headsetcontrol, channel: 'snapshot' } },
         // Deliberately version-like metadata and another release-shaped object.
-        { ...contract, schema: '9.8.7', macos: '26.0.0', xcode: { version: '99.0.0', build: '123.4.5' },
+        { ...contract, schema: '9.8.7', macos: '26.0.0', minimum_xcode: { version: '99.0.0', build: '123.4.5' },
             hidapi: { ...lookalike, linkage: '1.2.3' }, metadata: { ...lookalike } },
     ];
 }
@@ -123,7 +123,7 @@ test('Renovate rules allow only HeadsetControl release updates in the contract',
     for (const updateType of ['digest', 'pinDigest', 'pin', 'rollback']) {
         assert.equal((await apply({ depName: 'Sapd/HeadsetControl', updateType })).enabled, false);
     }
-    for (const depName of ['macos', 'xcode', 'libusb/hidapi', 'hidapi', 'linkage', 'schema', 'version', 'revision', 'channel', 'metadata']) {
+    for (const depName of ['macos', 'minimum_xcode', 'libusb/hidapi', 'hidapi', 'linkage', 'schema', 'version', 'revision', 'channel', 'metadata']) {
         assert.equal((await apply({ depName, updateType: 'major' })).enabled, false, depName);
     }
     assert.equal((await apply({ depName: 'Sapd/HeadsetControl', manager: 'jsonata' })).enabled, false);

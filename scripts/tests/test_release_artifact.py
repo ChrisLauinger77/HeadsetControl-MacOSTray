@@ -33,7 +33,8 @@ def provenance_fixture(plist=None, arch="arm64", application=None):
     # Synthetic provenance is for fixtures only; production metadata comes from the build helper.
     return {
         "schema": PROVENANCE_SCHEMA, "application_revision": "a" * 40,
-        **{key: CONTRACT[key] for key in ("headsetcontrol", "hidapi", "xcode", "macos")},
+        **{key: CONTRACT[key] for key in ("headsetcontrol", "hidapi", "macos")},
+        "xcode": CONTRACT["minimum_xcode"],
         "swift": "fixture Swift", "clang": "fixture Clang", "sdk": "26.2",
         "bundle": PLIST if plist is None else plist,
         "slices": {arch: {

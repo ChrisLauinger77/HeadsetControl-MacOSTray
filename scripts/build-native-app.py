@@ -10,7 +10,8 @@ import re
 import shutil
 import subprocess
 
-from native_contract import CONTRACT, ROOT, PROVENANCE, PROVENANCE_SCHEMA, architectures, inspect, inspect_native, run, validate_provenance
+from native_contract import (CONTRACT, ROOT, PROVENANCE, PROVENANCE_SCHEMA, architectures, inspect,
+                             inspect_native, run, selected_xcode, validate_provenance, validate_xcode)
 from dependency_channels import validate_contract, verify_release_tag
 
 
@@ -129,11 +130,9 @@ def build(args):
         for name in ("headsetcontrol", "hidapi"):
             source(work, name, args.offline)
         return
-    xcode_lines = run("xcodebuild", "-version").splitlines()
-    xcode = {"version": xcode_lines[0].removeprefix("Xcode "),
-             "build": xcode_lines[1].removeprefix("Build version ")}
-    if xcode != CONTRACT["xcode"] and not args.audit_toolchain:
-        raise ValueError(f"Expected Xcode {CONTRACT['xcode']}; selected {xcode}")
+    xcode = selected_xcode()
+    if not args.audit_toolchain:
+        validate_xcode(xcode)
     sdk = run("xcrun", "--sdk", "macosx", "--show-sdk-path")
     sdk_version = run("xcrun", "--sdk", "macosx", "--show-sdk-version")
     # Runner images may export a Command Line Tools SDKROOT. All child tools,
@@ -210,7 +209,7 @@ def build(args):
                          "application": inspect(app / "Contents/MacOS/HeadsetControl-MacOSTray", arch, "app")}},
     }
     if args.audit_toolchain:
-        # Deliberately rejected by release validation even when the selected Xcode happens to match.
+        # Release validation rejects audits even when the selected Xcode meets the minimum.
         provenance["audit_only"] = True
     else:
         validate_provenance(provenance, provenance["bundle"], revision)
