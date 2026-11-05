@@ -28,7 +28,7 @@ Before editing the project targets, both native libraries and both full Release
 applications were built with compiler deployment target 14.0 using the installed
 Xcode 27 beta. Their Mach-O deployment commands, load paths and defined
 headsetcontrol symbols were inspected. The repeatable release build now uses Xcode
-27.2 (build 27B48) and must pass the same checks in CI. Nothing uses `vtool` or
+27.2 (build 27B52) and must pass the same checks in CI. Nothing uses `vtool` or
 `install_name_tool` to lower deployment metadata after compilation.
 
 ## Exact inputs and runtime model
@@ -37,7 +37,7 @@ headsetcontrol symbols were inspected. The repeatable release build now uses Xco
 
 | Input | Value |
 | --- | --- |
-| Xcode | 27.2 RC, build 27B48 |
+| Xcode | 27.2, build 27B52 |
 | headsetcontrol | 4.2.0 baseline, snapshot commit `7b760ddb29e4618f4229ab2936a4b009ab2e1fa0` |
 | HIDAPI | 0.15.0, commit `d6b2a974608dec3b76fb1e36c189f22b9cf3650c` |
 | Deployment target | macOS 14.0 for application, headsetcontrol and HIDAPI |
@@ -126,7 +126,7 @@ contract. Channel metadata is copied into provenance and compared across both
 architectures as part of the complete HeadsetControl contract.
 
 The [Xcode 27 Apple Silicon runner](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)
-provides Xcode 27.2 RC (27B48) at `/Applications/Xcode_27.2.app`.
+provides Xcode 27.2 (27B52) at `/Applications/Xcode_27.2.app`.
 Both build jobs use `xcode-27`; the Intel job cross-compiles with the same Xcode
 and executes its x86_64 test binaries through Rosetta 2. The workflow ensures
 Rosetta is installed before building. SwiftPM receives an explicit target triple.
@@ -138,10 +138,10 @@ The repository’s test suite uses XCTest.
 There is no Xcode 27 Intel-host build job. Packaging and publication still use
 macOS 15 runners to check and assemble the already-built artifacts.
 
-The runner currently has a different 27.2 build than the local final release
-(27B52). Updating to that final release requires changing the contract once
-GitHub provides it; a runner update must never silently change the pinned build.
-Local 27B52 checks use `--audit-toolchain` and produce no publishable artifacts.
+The contract pins the final 27.2 release (27B52). During runner-image rollouts,
+jobs that receive the older 27B48 image fail the toolchain check and must run
+on the updated image. A runner update must never silently change the pinned
+build. `--audit-toolchain` checks produce no publishable artifacts.
 
 The helper resolves the macOS SDK explicitly from the selected Xcode, uses it
 for CMake, SwiftPM and Xcode builds, and records that SDK’s version in provenance.

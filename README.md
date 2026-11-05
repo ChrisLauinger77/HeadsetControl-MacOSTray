@@ -140,7 +140,7 @@ If you like my work, please consider supporting me ! <br><br>
    git clone https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray.git
    ```
 2. For the same native inputs as CI and release, install Xcode 27.2
-   (build 27B48, currently the GitHub runner RC) and CMake, then run the [shared build helper](docs/build-contract.md#building-and-testing).
+   (build 27B52) and CMake, then run the [shared build helper](docs/build-contract.md#building-and-testing).
    It fetches the revisions pinned in `build-contract.json`, builds static
    HeadsetControl and HIDAPI archives for the macOS 14.0 floor, runs Debug and
    Release tests, and creates a validated app archive. This path does not use
