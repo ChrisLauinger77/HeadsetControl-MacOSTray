@@ -25,7 +25,7 @@ The focused tests use an injected clock, cancelable scheduler, notification cent
 
 Local validation passed all 91 tests in Debug and optimized Release, the Xcode Release build, and localization syntax checks. The extra SwiftPM Release test run used `-debug-info-format none` after its `dsymutil` step hit a local sandbox `Operation not permitted` error; the normal Xcode Release build passed separately.
 
-Run `swift test` and the Xcode Release build as documented in `AGENTS.md`. On this host the shell commands require `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer` and the Homebrew include/library search paths. Local Homebrew libraries target newer macOS versions than the app; a successful local build does **not** establish minimum-version runtime compatibility. CI builds on macOS 15, checks both architectures, and runs synthetic universal-packaging tests without uploading artifacts. The Release workflow creates and verifies the universal app archive.
+Run `swift test` and the Xcode Release build as documented in `AGENTS.md`. On this host the shell commands require `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer` and the Homebrew include/library search paths. Local Homebrew libraries target newer macOS versions than the app; a successful local build does **not** establish minimum-version runtime compatibility. CI builds both architectures on the Xcode 27 runner (see [the build contract](build-contract.md)) and runs synthetic universal-packaging tests without uploading artifacts. The Release workflow creates and verifies the universal app archive.
 
 ## Physical macOS validation still required
 
@@ -35,7 +35,7 @@ Run `swift test` and the Xcode Release build as documented in `AGENTS.md`. On th
 4. Power a wireless headset off/on while leaving its receiver attached. This may produce no USB registry event; verify stale-menu and periodic recovery and unchanged notification suppression for that receiver attachment.
 5. Lock/unlock with and without display sleep; switch users out/in. Verify resume refresh where the OS posts supported notifications, no cross-session UI regressions, and no new monitoring policy. No private screen-lock notification is used.
 6. Quit during a held-open menu, pending permission prompt, recovery delay, active discovery, and unplug/command races. Confirm the status item disappears immediately, no late UI or commands occur, and native cleanup eventually exits. Inspect IORegistry/Mach port counts or Instruments during repeated observer registration, hotplug and termination.
-7. Run on the oldest supported macOS with compatible native libraries. Check the same behaviors on the currently supported OS versions and architectures; CI's macOS 15 builds alone are insufficient for the minimum OS or actual sleep/wake behavior.
+7. Run on the oldest supported macOS with compatible native libraries. Check the same behaviors on the currently supported OS versions and architectures; CI builds alone are insufficient for the minimum OS or actual sleep/wake behavior.
 
 ## Remaining limitations and decisions
 

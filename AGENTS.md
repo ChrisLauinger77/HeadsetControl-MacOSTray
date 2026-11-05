@@ -119,6 +119,14 @@ For narrow Swift changes, first use Xcode live diagnostics if available. For bro
 swift test
 ```
 
+When touching `scripts/`, workflows, or `build-contract.json`, also run the script tests
+described in `docs/build-contract.md#building-and-testing`:
+
+```sh
+node --test scripts/tests/*.test.cjs
+python3 -B -m unittest discover -s scripts/tests -p 'test_*.py' -v
+```
+
 Hardware behavior may depend on the installed `headsetcontrol` version and connected devices. Prefer test profiles for reproducible checks and note when real-device validation was not performed.
 
 Renovate updates only `build-contract.json`, so script tests must read pinned dependency versions and revisions from the contract instead of hardcoding them. `scripts/tests/test_contract_updates.py` reruns the Python script tests against a simulated dependency update to enforce this.
