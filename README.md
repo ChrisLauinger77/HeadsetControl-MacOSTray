@@ -139,8 +139,8 @@ If you like my work, please consider supporting me ! <br><br>
    ```sh
    git clone https://github.com/ChrisLauinger77/HeadsetControl-MacOSTray.git
    ```
-2. For the same native inputs as CI and release, install Xcode 27.2
-   (build 27B52) and CMake, then run the [shared build helper](docs/build-contract.md#building-and-testing).
+2. For the same native dependency inputs as CI and release, install Xcode 27.2
+   (build 27B52) or newer and CMake, then run the [shared build helper](docs/build-contract.md#building-and-testing).
    It fetches the revisions pinned in `build-contract.json`, builds static
    HeadsetControl and HIDAPI archives for the macOS 14.0 floor, runs Debug and
    Release tests, and creates a validated app archive. This path does not use
@@ -152,7 +152,7 @@ If you like my work, please consider supporting me ! <br><br>
    through Homebrew. Install the official HeadsetControl formula when using this
    path. These direct builds are not release artifacts and do not establish the
    pinned dependency contract. SwiftPM source compilation requires Swift 6.1 or
-   later; the release toolchain is fixed separately.
+   later. CI and release enforce the Xcode minimum separately.
 
 ## Usage
 

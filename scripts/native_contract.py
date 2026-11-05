@@ -36,6 +36,34 @@ def version(value):
     return tuple(map(int, (value + ".0").split(".")[:3]))
 
 
+def xcode_key(xcode):
+    if not isinstance(xcode, dict) or set(xcode) != {"version", "build"}:
+        raise ValueError(f"Invalid Xcode version and build: {xcode!r}")
+    build = xcode["build"]
+    match = re.fullmatch(r"([0-9]+)([A-Z])([0-9]+)([a-z]?)", build) if isinstance(build, str) else None
+    if not match:
+        raise ValueError(f"Invalid Xcode build: {build!r}")
+    generation, train, number, suffix = match.groups()
+    # Within a train, letter-suffixed seeds such as 27B5028f precede the final build.
+    return version(xcode["version"]), int(generation), train, not suffix, int(number), suffix
+
+
+def validate_xcode(xcode):
+    minimum = CONTRACT["minimum_xcode"]
+    selected = xcode_key(xcode)
+    if selected < xcode_key(minimum):
+        raise ValueError(f"Requires Xcode {minimum['version']} ({minimum['build']}) or newer; selected {xcode}")
+    return selected
+
+
+def selected_xcode(**kwargs):
+    output = run("xcodebuild", "-version", **kwargs)
+    match = re.fullmatch(r"Xcode ([^\n]+)\nBuild version ([^\n]+)", output)
+    if not match:
+        raise ValueError(f"Unexpected xcodebuild -version output: {output!r}")
+    return {"version": match[1], "build": match[2]}
+
+
 def load_commands(output):
     """Parse one object's otool -l output. Fail closed on missing deployment data."""
     result = {"dependencies": {}, "rpaths": []}
@@ -145,9 +173,10 @@ def validate_provenance(data, identity, expected_revision=None):
     if data.get("audit_only"):
         raise ValueError("Audit-only build is not eligible for release")
     validate_headsetcontrol(data.get("headsetcontrol"))
-    for key in ("headsetcontrol", "hidapi", "xcode", "macos"):
+    for key in ("headsetcontrol", "hidapi", "macos"):
         if data.get(key) != CONTRACT[key]:
             raise ValueError(f"Build provenance does not match contract: {key}")
+    validate_xcode(data.get("xcode"))
     revision = data.get("application_revision", "")
     if not re.fullmatch(r"[a-f0-9]{40}", revision) or (expected_revision and revision != expected_revision):
         raise ValueError("Missing or mismatched application revision")
