@@ -7,6 +7,7 @@ on:
       - "*.md"
       - "**/*.md"
       - "LICENSE"
+      - ".github/workflows/claude.yml"
   workflow_dispatch:
   schedule:
     - cron: "4 4 1 * *"
