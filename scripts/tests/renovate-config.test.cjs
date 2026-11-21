@@ -9,6 +9,7 @@ const root = path.resolve(__dirname, '../..');
 const config = JSON.parse(fs.readFileSync(path.join(root, 'renovate.json'), 'utf8'));
 const contents = fs.readFileSync(path.join(root, 'build-contract.json'), 'utf8');
 const tools = process.env.DEPENDENCY_TOOLS;
+const claudeAction = 'anthropics/claude-code-action';
 const manager = config.customManagers.find(item => item.datasourceTemplate === 'github-releases');
 
 test('HeadsetControl uses official releases and retains digest pinning without automerge', () => {
@@ -73,7 +74,7 @@ function loadRenovate() {
         // Resolve the actual inherited preset chain offline, using a captured shared preset.
         // Built-in presets, config merging, extraction and rule matching come from CI's Renovate.
         // Source: ChrisLauinger77/ChrisLauinger77, renovate-config/default.json,
-        // Git blob bab8014ea1d5660faad2ae227712635ccbc1dfa7 (2026-10-30).
+        // Git blob 1600842232d026701cc8fbbabf72309adf02467d.
         const inherited = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/renovate-shared-preset.json'), 'utf8'));
         memory.init();
         memory.set('preset:github>ChrisLauinger77/ChrisLauinger77//renovate-config/default', inherited);
@@ -130,10 +131,11 @@ test('Renovate rules allow only HeadsetControl release updates in the contract',
     assert.equal((await apply({ depName: 'Sapd/HeadsetControl', datasource: 'github-tags' })).enabled, false);
 });
 
-test('actual workflow runners are disabled while SHA-pinned Actions remain enabled', { skip: !tools }, async () => {
+test('workflow runner updates are disabled and only Claude Code Action follows its tag', { skip: !tools }, async () => {
     const { effective, getManagerConfig, managers, applyPackageRules } = await loadRenovate();
     let runnerCount = 0;
-    let actionCount = 0;
+    let pinnedActionCount = 0;
+    let claudeActionCount = 0;
     for (const file of fs.readdirSync(path.join(root, '.github/workflows')).filter(file => /\.ya?ml$/.test(file))) {
         const packageFile = '.github/workflows/' + file;
         const result = await managers.extractPackageFile('github-actions', fs.readFileSync(path.join(root, packageFile), 'utf8'), packageFile,
@@ -145,16 +147,24 @@ test('actual workflow runners are disabled while SHA-pinned Actions remain enabl
                 runnerCount++;
                 assert.equal(configured.enabled, false, `${packageFile}: ${dep.depName}`);
             } else if (dep.depType === 'action') {
-                actionCount++;
-                assert.match(dep.currentDigest, /^[a-f0-9]{40}$/);
                 assert.equal(configured.enabled, true, dep.depName);
-                assert.equal(configured.pinDigests, true, dep.depName);
                 assert.equal(configured.automerge, false, dep.depName);
+                if (dep.depName === claudeAction) {
+                    claudeActionCount++;
+                    assert.equal(dep.currentValue, 'v1');
+                    assert.equal(dep.currentDigest, undefined);
+                    assert.equal(configured.pinDigests, false, dep.depName);
+                } else {
+                    pinnedActionCount++;
+                    assert.match(dep.currentDigest, /^[a-f0-9]{40}$/);
+                    assert.equal(configured.pinDigests, true, dep.depName);
+                }
             }
         }
     }
     assert.ok(runnerCount > 0, 'reproduce the macOS runner dependencies shown in the Dashboard');
-    assert.ok(actionCount > 0, 'continue maintaining pinned action references');
+    assert.ok(pinnedActionCount > 0, 'continue maintaining pinned action references');
+    assert.equal(claudeActionCount, 1, 'check the Claude Code Action tag exception');
 });
 
 test('actual RE2 extraction and Handlebars rendering update the release atomically', { skip: !tools }, () => {
@@ -178,7 +188,7 @@ test('actual RE2 extraction and Handlebars rendering update the release atomical
     }
 });
 
-test('workflow YAML is valid, actions are SHA-pinned, and snapshot updates support manual and weekly runs', { skip: !tools }, () => {
+test('workflow YAML, action references, and manual and weekly snapshot triggers are valid', { skip: !tools }, () => {
     const requireTool = createRequire(path.join(tools, 'package.json'));
     const yaml = requireTool('yaml');
     const directory = path.join(root, '.github/workflows');
@@ -190,7 +200,12 @@ test('workflow YAML is valid, actions are SHA-pinned, and snapshot updates suppo
         workflows[file] = parsed.toJS();
         for (const job of Object.values(workflows[file].jobs)) {
             for (const step of job.steps ?? []) {
-                if (step.uses) assert.match(step.uses, /^[\w.-]+\/[\w./-]+@[a-f0-9]{40}$/, file);
+                if (!step.uses) continue;
+                if (step.uses.startsWith(claudeAction + '@')) {
+                    assert.equal(step.uses, claudeAction + '@v1', file);
+                } else {
+                    assert.match(step.uses, /^[\w.-]+\/[\w./-]+@[a-f0-9]{40}$/, file);
+                }
             }
         }
     }
