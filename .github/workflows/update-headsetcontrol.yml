@@ -3,7 +3,7 @@ name: Update HeadsetControl snapshot
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 3 * * 1"
+    - cron: "0 3 * * 0"
 
 permissions:
   actions: read
